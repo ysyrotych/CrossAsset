@@ -1,18 +1,13 @@
 import Sidebar from "./Sidebar";
 import Topbar from "./Topbar";
 
-interface AppShellProps {
-  children: React.ReactNode;
-  isDemo?: boolean;
-}
-
-export default function AppShell({ children, isDemo = true }: AppShellProps) {
+export default function AppShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-black text-zinc-100">
+    <div className="min-h-screen bg-white">
       <Sidebar />
-      <Topbar isDemo={isDemo} />
-      <main className="ml-56 pt-12 min-h-screen">
-        <div className="px-8 py-6">{children}</div>
+      <Topbar />
+      <main className="ml-56 pt-[52px] min-h-screen">
+        <div className="px-12 py-10 max-w-[1100px]">{children}</div>
       </main>
     </div>
   );
