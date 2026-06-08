@@ -1,36 +1,91 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# CrossAsset — AI Macro Desk Brief
 
-## Getting Started
+> **"CrossAsset turns macro events into market implications and actions across equities, rates, FX, commodities, and your personal watchlist."**
 
-First, run the development server:
+An AI-powered daily macro briefing and automation platform for equity research interns, S&T analysts, and finance students. Generates a daily "desk brief" that translates economic data, macro events, and market moves into cross-asset implications, watchlist impact, and analyst tasks.
+
+---
+
+## Running Locally
 
 ```bash
+# 1. Clone and install
+cd crossasset
+npm install
+
+# 2. Configure environment (optional — app runs in demo mode without keys)
+cp .env.local.example .env.local
+# Edit .env.local and add your API keys
+
+# 3. Start dev server
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+# → Open http://localhost:3000
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+**The app runs fully in demo mode with zero API keys configured.** All pages load with realistic demo data.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+---
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## API Keys
 
-## Learn More
+| Key | Required? | Purpose | Free? |
+|-----|-----------|---------|-------|
+| `ANTHROPIC_API_KEY` | For AI generation | Claude generates the structured brief | Yes (credits) |
+| `FRED_API_KEY` | For live macro data | 10Y yield, CPI, unemployment, GDP, etc. | Yes |
+| `BLS_API_KEY` | Optional | BLS labor/inflation data | Yes |
+| `BEA_API_KEY` | Optional | BEA GDP/PCE (FRED covers this) | Yes |
+| `ALPHA_VANTAGE_API_KEY` | Optional | Equity price quotes | Yes (limited) |
+| Supabase env vars | Optional | Persistent cross-session storage | Yes |
 
-To learn more about Next.js, take a look at the following resources:
+- **No keys:** Full demo mode — all pages render with realistic fixture data.
+- **`FRED_API_KEY` only:** Dashboard shows live macro data (10Y yield, CPI, unemployment, etc.).
+- **Both `ANTHROPIC_API_KEY` + `FRED_API_KEY`:** "Generate Brief" button calls Claude with live data for a real AI-generated institutional brief.
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+---
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Pages
 
-## Deploy on Vercel
+| Route | Description |
+|-------|-------------|
+| `/` | Dashboard — macro metrics, charts, regime label, watchlist snapshot |
+| `/issue` | Daily Issue — full AI-generated desk brief |
+| `/watchlist` | 10 default tickers with macro sensitivity tags, localStorage CRUD |
+| `/tasks` | AI-generated + manual tasks with status/priority tracking |
+| `/calendar` | Upcoming CPI, FOMC, payrolls with `.ics` download |
+| `/reaction-tracker` | Prediction vs actual for macro events — a learning log |
+| `/archive` | Past generated issues |
+| `/settings` | API key status, profile, tone preferences |
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+---
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+## Tech Stack
+
+- **Next.js 16** (App Router, TypeScript)
+- **Tailwind CSS** + **shadcn/ui**
+- **Recharts** for macro charts
+- **Claude API** (`claude-opus-4-8`) for structured JSON brief generation
+- **FRED API** for live macro data
+- **localStorage** for persistence (Supabase-ready schema included)
+
+---
+
+## FRED Series Used
+
+| Series | Description |
+|--------|-------------|
+| DGS10 | 10-Year Treasury Yield |
+| DGS2 | 2-Year Treasury Yield |
+| T10Y2Y | 2s10s Yield Curve Spread |
+| FEDFUNDS | Effective Federal Funds Rate |
+| CPIAUCSL | CPI (All Urban Consumers) |
+| CPILFESL | Core CPI (ex Food & Energy) |
+| UNRATE | Unemployment Rate |
+| PAYEMS | Nonfarm Payrolls |
+| GDP | Real GDP |
+| PCEPI | PCE Price Index |
+
+---
+
+## Disclaimer
+
+CrossAsset is for educational and research workflow purposes only. It does not provide investment advice or trading recommendations.
