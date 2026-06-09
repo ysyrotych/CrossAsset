@@ -588,7 +588,7 @@ export default function DashboardPage() {
                       borderRadius: 0,
                       fontSize: 12,
                     }}
-                    formatter={(value: number, name: string) => [
+                    formatter={(value: unknown, name: string) => [
                       `${Number(value).toFixed(2)}%`,
                       name,
                     ]}
@@ -986,7 +986,7 @@ export default function DashboardPage() {
                       borderRadius: 0,
                       fontSize: 12,
                     }}
-                    formatter={(value: number) => [`${value}/100`, "Pressure"]}
+                    formatter={(value: unknown) => [`${value}/100`, "Pressure"]}
                   />
                   <Bar dataKey="value" radius={[0, 0, 0, 0]}>
                     {[88, 67, 61, 38, 45].map((v, i) => (
