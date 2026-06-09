@@ -588,9 +588,9 @@ export default function DashboardPage() {
                       borderRadius: 0,
                       fontSize: 12,
                     }}
-                    formatter={(value: unknown, name: string) => [
+                    formatter={(value: unknown, name: unknown) => [
                       `${Number(value).toFixed(2)}%`,
-                      name,
+                      String(name),
                     ]}
                   />
                   <Line
@@ -986,7 +986,7 @@ export default function DashboardPage() {
                       borderRadius: 0,
                       fontSize: 12,
                     }}
-                    formatter={(value: unknown) => [`${value}/100`, "Pressure"]}
+                    formatter={(value: unknown) => [`${Number(value)}/100`, "Pressure"]}
                   />
                   <Bar dataKey="value" radius={[0, 0, 0, 0]}>
                     {[88, 67, 61, 38, 45].map((v, i) => (
