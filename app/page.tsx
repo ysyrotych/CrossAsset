@@ -1,7 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { DEMO_ISSUE } from "@/lib/data/demoData";
+import type { MacroIssue } from "@/lib/types";
 import {
   Area,
   AreaChart,
@@ -427,7 +429,13 @@ function ToneText({ tone, children }: { tone: Direction; children: React.ReactNo
 }
 
 export default function DashboardPage() {
-  const issue = DEMO_ISSUE;
+  const [issue, setIssue] = useState<MacroIssue>(DEMO_ISSUE);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("crossasset_current_issue");
+    if (stored) { try { setIssue(JSON.parse(stored)); } catch {} }
+  }, []);
+
   const watchlist = issue.watchlistImpact.slice(0, 5);
 
   return (
