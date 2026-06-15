@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
-import { fetchEconomicCalendar } from "@/lib/sources/finnhub";
+import { fetchMarketNews } from "@/lib/sources/finnhub";
 
 export const dynamic = "force-dynamic";
 
@@ -413,21 +413,30 @@ export async function GET(req: NextRequest) {
 
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
-    cpi, coreCpi, unrate, payems, gdp,
+    cpi, coreCpi, pce, unrate, payems, gdp,
     hySpread, sp500, vix, gold, oil, dxy,
+    breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     hist5, hist10,
-    rawNews, rawEvents,
+    rawNews, rawFinnhubNews,
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
     fredLatest("DGS30"), fredLatest("FEDFUNDS"),
-    fredYoY("CPIAUCSL"), fredYoY("CPILFESL"),                     // YoY % computed from index
+    fredYoY("CPIAUCSL"), fredYoY("CPILFESL"), fredYoY("PCEPI"),
     fredLatest("UNRATE"), fredLatest("PAYEMS"),
-    fredLatest("A191RL1Q225SBEA"),                                 // Real GDP growth rate % (not level)
+    fredLatest("A191RL1Q225SBEA"),
     fredLatest("BAMLH0A0HYM2"), fredLatest("SP500"), fredLatest("VIXCLS"),
     fredLatest("GOLDAMGBD228NLBM", 10), fredLatest("DCOILWTICO"), fredLatest("DTWEXBGS"),
+    // Extra FRED series for Global Data Snapshot
+    fredLatest("T10YIE"),        // 10Y breakeven inflation
+    fredLatest("MORTGAGE30US"),  // 30Y fixed mortgage rate
+    fredLatest("UMCSENT"),       // U of Michigan consumer sentiment
+    fredLatest("INDPRO"),        // Industrial production index
+    fredLatest("RSXFS"),         // Advance retail sales
+    fredLatest("T10Y2Y"),        // 2s10s spread (direct from FRED)
+    fredLatest("ICSA"),          // Initial jobless claims
     fredHistory("DGS5", start), fredHistory("DGS10", start),
     fetchFinancialNews().catch(() => []),
-    fetchEconomicCalendar().catch(() => []),
+    fetchMarketNews().catch(() => []),
   ]);
 
   // Build yield history
@@ -455,24 +464,21 @@ export async function GET(req: NextRequest) {
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
     equities: { sp500, vix, gold, oil, dxy },
-    macro:    { cpi, coreCpi, unrate, payems, gdp, hySpread: hySpreadBps },
+    macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
+    extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
     history,
-    upcomingEvents: (rawEvents as UpcomingEvent[]).slice(0, 6),
+    finnhubNews: (rawFinnhubNews as { headline: string; source: string }[]).slice(0, 8),
     topNews: rawNews.slice(0, 4),
-    driverScores:   computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
-    pressureIndex:  computePressure(dgs10, vix, hySpreadBps, dxy, oil),
-    transmission:   computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpreadBps),
-    agreement:      computeAgreement(dgs10, dgs2, dxy, sp500, vix, hySpreadBps, gold),
-    scenarios:      computeScenarios(cpi, fedfunds, hySpreadBps, gdp),
-    edgeInsights:   computeEdgeInsights(cpi, dgs10, hySpreadBps, dxy),
-    regimeLabel:    regime.label,
-    regimeScore:    regime.score,
-    regimeHeadline: regime.headline,
-    regimeBody1:    regime.body1,
-    regimeBody2:    regime.body2,
+    driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
+    pressureIndex: computePressure(dgs10, vix, hySpreadBps, dxy, oil),
+    transmission:  computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpreadBps),
+    agreement:     computeAgreement(dgs10, dgs2, dxy, sp500, vix, hySpreadBps, gold),
+    scenarios:     computeScenarios(cpi, fedfunds, hySpreadBps, gdp),
+    regimeLabel:   regime.label,
+    regimeScore:   regime.score,
     sources: {
       fred:    fredConnected,
-      finnhub: rawEvents.length > 0,
+      finnhub: (rawFinnhubNews as unknown[]).length > 0,
       newsapi: rawNews.length > 0,
     },
   });

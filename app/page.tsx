@@ -15,23 +15,22 @@ type DashData = {
   updatedAt: string;
   tf: string;
   fredConnected: boolean;
-  yields:   { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
-  equities: { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote };
-  macro:    { cpi: LiveQuote; coreCpi: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
-  history:  { date: string; tenYear?: number; fiveYear?: number }[];
-  upcomingEvents: { event: string; date: string; impact: string; estimate?: string; previous?: string }[];
-  topNews:  { title: string; source: string; description: string }[];
-  driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string; explanation: string }[];
+  yields:    { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
+  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote };
+  macro:     { cpi: LiveQuote; coreCpi: LiveQuote; pce: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
+  extraData: { breakeven: LiveQuote; mortgage: LiveQuote; sentiment: LiveQuote; indpro: LiveQuote; retail: LiveQuote; t10y2y: LiveQuote; claims: LiveQuote };
+  history:   { date: string; tenYear?: number; fiveYear?: number }[];
+  finnhubNews: { headline: string; source: string }[];
+  topNews:   { title: string; source: string; description: string }[];
+  driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string }[];
   pressureIndex: { name: string; value: number }[];
-  transmission: { label: string; state: string; pressure: "hawkish" | "dovish" | "neutral"; confidence: number; explanation: string }[];
+  transmission: { label: string; state: string; pressure: "hawkish" | "dovish" | "neutral"; confidence: number }[];
   agreement: {
-    confirming:   { signal: string; asset: string; explanation: string }[];
-    contradicting:{ signal: string; asset: string; explanation: string }[];
+    confirming:    { signal: string; asset: string }[];
+    contradicting: { signal: string; asset: string }[];
   };
-  scenarios: { name: string; probability: number; tone: "positive" | "negative" | "neutral"; trigger: string; market: string }[];
-  edgeInsights: { tag: string; title: string; insight: string; why: string; confidence: number }[];
+  scenarios: { name: string; probability: number; tone: "positive" | "negative" | "neutral" }[];
   regimeLabel: string; regimeScore: number;
-  regimeHeadline: string; regimeBody1: string; regimeBody2: string;
   sources: { fred: boolean; finnhub: boolean; newsapi: boolean };
 };
 
@@ -129,7 +128,9 @@ export default function DashboardPage() {
     try {
       const r = await fetch(`/api/dashboard-data?tf=${t}`);
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
-      setData(await r.json());
+      const d: DashData = await r.json();
+      setData(d);
+      if (d.fredConnected) localStorage.setItem("crossasset_fred_live", "true");
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load");
     } finally {
@@ -366,54 +367,26 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          {/* Upcoming Key Events (live from Finnhub) */}
+          {/* Market Headlines — Finnhub free-tier news */}
           <Card className="p-6">
-            <SectionLabel>Upcoming Key Events</SectionLabel>
+            <SectionLabel>Market Headlines</SectionLabel>
             <p className="mt-1 text-[9.5px] text-[#999]">
-              {data?.sources.finnhub ? "Live · Finnhub economic calendar" : "Finnhub not connected"}
+              {data?.sources.finnhub ? "Live · Finnhub" : "Add FINNHUB_API_KEY to Vercel"}
             </p>
-
-            {loading ? (
-              <p className="mt-6 text-[12px] text-[#bbb]">Loading events…</p>
-            ) : !data?.upcomingEvents.length ? (
-              <div className="mt-6">
-                <p className="text-[12px] text-[#bbb] mb-4">No upcoming events — add FINNHUB_API_KEY to Vercel</p>
-                {/* Fallback: show macro metrics instead */}
-                <div className="space-y-3 border-t border-[#eee9df] pt-4">
-                  <MiniLabel>Key macro levels</MiniLabel>
-                  {[
-                    { label: "CPI",          val: data?.macro.cpi?.price,      suffix: "%" },
-                    { label: "Core CPI",     val: data?.macro.coreCpi?.price,  suffix: "%" },
-                    { label: "Unemployment", val: data?.macro.unrate?.price,   suffix: "%" },
-                    { label: "HY OAS",       val: data?.macro.hySpread?.price, suffix: "bps" },
-                    { label: "GDP",          val: data?.macro.gdp?.price,      suffix: "%" },
-                  ].map(({ label, val, suffix }) => (
-                    <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] pb-2 last:border-0">
-                      <p className="text-[12px] font-bold text-[#0a0a0a]">{label}</p>
-                      <p className="text-[12px] font-bold text-[#0c1b38]">{val != null ? `${val.toFixed(val > 100 ? 0 : 1)}${suffix}` : "—"}</p>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            ) : (
-              <div className="mt-5 space-y-0">
-                {data.upcomingEvents.map((e, i) => (
-                  <div key={i} className="border-b border-[#f1eee8] py-3 last:border-0">
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[12.5px] font-bold text-[#0a0a0a]">{e.event}</p>
-                      <p className="text-[11px] font-bold text-[#0c1b38] shrink-0">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
-                    </div>
-                    <div className="mt-1 flex items-center gap-3">
-                      <span className={`text-[9.5px] font-bold uppercase tracking-[0.12em] ${e.impact === "high" ? "text-[#b42318]" : e.impact === "medium" ? "text-[#b7791f]" : "text-[#777]"}`}>
-                        {e.impact} impact
-                      </span>
-                      {e.estimate && <span className="text-[9.5px] text-[#999]">est: {e.estimate}</span>}
-                      {e.previous && <span className="text-[9.5px] text-[#999]">prev: {e.previous}</span>}
-                    </div>
+            <div className="mt-4 space-y-0">
+              {loading ? (
+                <p className="text-[12px] text-[#bbb]">Loading…</p>
+              ) : (data?.finnhubNews ?? []).length > 0 ? (
+                (data!.finnhubNews).map((item, i) => (
+                  <div key={i} className="border-b border-[#f1eee8] py-2.5 last:border-0">
+                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.source}</p>
+                    <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0a0a0a]">{item.headline}</p>
                   </div>
-                ))}
-              </div>
-            )}
+                ))
+              ) : (
+                <p className="text-[12px] text-[#bbb]">No headlines — FINNHUB_API_KEY not set</p>
+              )}
+            </div>
           </Card>
         </div>
 
@@ -441,7 +414,6 @@ export default function DashboardPage() {
                     </div>
                   </div>
                   <ScoreBar value={d.score} tone={d.direction === "hawkish" ? "negative" : "neutral"} />
-                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">{d.explanation}</p>
                 </div>
               ))}
               {loading && <p className="text-[12px] text-[#bbb]">Computing from FRED…</p>}
@@ -473,7 +445,6 @@ export default function DashboardPage() {
                         </div>
                         <PressurePill pressure={node.pressure} />
                       </div>
-                      <p className="text-[12px] font-medium leading-relaxed text-[#666]">{node.explanation}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <div className="flex-1 h-[4px] bg-[#eee9df]">
                           <div className="h-full bg-[#0c1b38]" style={{ width: `${node.confidence}%` }} />
@@ -498,12 +469,9 @@ export default function DashboardPage() {
                 {(data?.agreement.confirming ?? []).map((s) => (
                   <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
                     <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#147a4f] shrink-0" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
-                        <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#147a4f]">{s.asset}</span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-[#666]">{s.explanation}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
+                      <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#147a4f]">{s.asset}</span>
                     </div>
                   </div>
                 ))}
@@ -513,12 +481,9 @@ export default function DashboardPage() {
                 {(data?.agreement.contradicting ?? []).map((s) => (
                   <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
                     <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#b42318] shrink-0" />
-                    <div className="min-w-0">
-                      <div className="flex items-center gap-2">
-                        <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
-                        <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#b42318]">{s.asset}</span>
-                      </div>
-                      <p className="mt-0.5 text-[11px] font-medium leading-relaxed text-[#666]">{s.explanation}</p>
+                    <div className="flex items-center gap-2">
+                      <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
+                      <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#b42318]">{s.asset}</span>
                     </div>
                   </div>
                 ))}
@@ -531,23 +496,39 @@ export default function DashboardPage() {
         {/* ── Layer 3: Edge · Scenarios · Macro metrics ────────────────── */}
         <div className="mb-5 grid grid-cols-[1.15fr_0.95fr_0.9fr] gap-5">
 
-          {/* CrossAsset Edge — computed */}
+          {/* Global Data Snapshot — extra FRED series */}
           <Card className="p-6">
-            <SectionLabel>CrossAsset Edge</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived algorithmically from live data" : "Awaiting FRED connection"}</p>
-            <div className="mt-5 grid grid-cols-3 gap-5">
-              {(data?.edgeInsights ?? []).map((edge) => (
-                <div key={edge.tag} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
-                  <div className="mb-3 flex items-center justify-between gap-3">
-                    <span className="border border-[#eee9df] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38]">{edge.tag}</span>
-                    <span className="text-[11px] font-bold tabular-nums text-[#0c1b38]">{edge.confidence}%</span>
+            <SectionLabel>Global Data Snapshot</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY to Vercel"}</p>
+            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-0">
+              {[
+                { label: "10Y Breakeven",     val: data?.extraData?.breakeven?.price,  chg: data?.extraData?.breakeven?.change,  sfx: "%",   dec: 2 },
+                { label: "PCE YoY",           val: data?.macro?.pce?.price,            chg: data?.macro?.pce?.change,            sfx: "%",   dec: 2 },
+                { label: "30Y Mortgage",      val: data?.extraData?.mortgage?.price,   chg: data?.extraData?.mortgage?.change,   sfx: "%",   dec: 2 },
+                { label: "2s10s (FRED)",      val: data?.extraData?.t10y2y?.price,     chg: data?.extraData?.t10y2y?.change,     sfx: "%",   dec: 2 },
+                { label: "Retail Sales MoM",  val: data?.extraData?.retail?.pct,       chg: null,                                sfx: "%",   dec: 2 },
+                { label: "Initial Claims",    val: data?.extraData?.claims?.price,     chg: data?.extraData?.claims?.change,     sfx: "K",   dec: 0 },
+                { label: "Indus. Production", val: data?.extraData?.indpro?.pct,       chg: null,                                sfx: "%",   dec: 2 },
+                { label: "Consumer Sentiment",val: data?.extraData?.sentiment?.price,  chg: data?.extraData?.sentiment?.change,  sfx: "",    dec: 1 },
+              ].map(({ label, val, chg, sfx, dec }) => {
+                const up = (chg ?? 0) > 0;
+                const chgColor = chg == null || chg === 0 ? "#bbb" : up ? NEGATIVE : POSITIVE;
+                return (
+                  <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] py-2.5">
+                    <p className="text-[11px] font-semibold text-[#555]">{label}</p>
+                    <div className="text-right">
+                      <span className="text-[13px] font-bold tabular-nums text-[#0a0a0a]">
+                        {val != null ? `${val.toFixed(dec)}${sfx}` : "—"}
+                      </span>
+                      {chg != null && chg !== 0 && (
+                        <span className="ml-2 text-[10px] font-bold tabular-nums" style={{ color: chgColor }}>
+                          {chg > 0 ? "+" : ""}{chg.toFixed(dec)}{sfx}
+                        </span>
+                      )}
+                    </div>
                   </div>
-                  <p className="text-[13px] font-bold leading-snug text-[#0a0a0a]">{edge.title}</p>
-                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">{edge.insight}</p>
-                  <p className="mt-3 text-[11.5px] font-semibold leading-relaxed text-[#0c1b38]">{edge.why}</p>
-                </div>
-              ))}
-              {loading && <p className="text-[12px] text-[#bbb]">Computing edge insights…</p>}
+                );
+              })}
             </div>
           </Card>
 
@@ -567,12 +548,6 @@ export default function DashboardPage() {
                     <div className="h-[6px] bg-[#eee9df]">
                       <div className="h-full" style={{ width: `${s.probability}%`, backgroundColor: color }} />
                     </div>
-                    <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                      <span className="font-bold text-[#0a0a0a]">Trigger: </span>{s.trigger}
-                    </p>
-                    <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                      <span className="font-bold text-[#0a0a0a]">Market: </span>{s.market}
-                    </p>
                   </div>
                 );
               })}

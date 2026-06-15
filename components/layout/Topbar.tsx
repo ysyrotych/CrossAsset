@@ -6,8 +6,10 @@ export default function Topbar() {
   const [isLive, setIsLive] = useState(false);
 
   useEffect(() => {
-    const source = localStorage.getItem("crossasset_issue_source");
-    setIsLive(!!source && source !== "demo");
+    const fredLive  = localStorage.getItem("crossasset_fred_live") === "true";
+    const source    = localStorage.getItem("crossasset_issue_source");
+    const issueLive = !!source && source !== "demo";
+    setIsLive(fredLive || issueLive);
   }, []);
 
   const today = new Date().toLocaleDateString("en-US", {
@@ -22,7 +24,7 @@ export default function Topbar() {
         {isLive ? (
           <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold tracking-[0.08em] uppercase text-emerald-700 bg-emerald-50 border border-emerald-200 px-2.5 py-1 rounded-full">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />
-            Live · Claude
+            Live · FRED
           </span>
         ) : (
           <span className="inline-flex items-center gap-1.5 text-[10.5px] font-semibold tracking-[0.08em] uppercase text-amber-700 bg-amber-50 border border-amber-200 px-2.5 py-1 rounded-full">
