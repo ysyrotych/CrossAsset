@@ -16,12 +16,14 @@ type DashData = {
   tf: string;
   fredConnected: boolean;
   yields:    { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
-  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote };
+  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote };
   macro:     { cpi: LiveQuote; coreCpi: LiveQuote; pce: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
   extraData: { breakeven: LiveQuote; mortgage: LiveQuote; sentiment: LiveQuote; indpro: LiveQuote; retail: LiveQuote; t10y2y: LiveQuote; claims: LiveQuote };
   history:   { date: string; tenYear?: number; fiveYear?: number }[];
-  finnhubNews: { headline: string; source: string }[];
-  topNews:   { title: string; source: string; description: string }[];
+  historySP500: { date: string; value: number }[];
+  sectors:   { symbol: string; name: string; price: number; change: number; pct: number }[];
+  finnhubNews: { headline: string; source: string; url?: string }[];
+  topNews:   { title: string; source: string; description: string; url?: string }[];
   driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string }[];
   pressureIndex: { name: string; value: number }[];
   transmission: { label: string; state: string; pressure: "hawkish" | "dovish" | "neutral"; confidence: number }[];
@@ -380,7 +382,11 @@ export default function DashboardPage() {
                 (data!.finnhubNews).map((item, i) => (
                   <div key={i} className="border-b border-[#f1eee8] py-2.5 last:border-0">
                     <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.source}</p>
-                    <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0a0a0a]">{item.headline}</p>
+                    {item.url ? (
+                      <a href={item.url} target="_blank" rel="noreferrer" className="mt-0.5 block text-[12px] font-semibold leading-snug text-[#0a0a0a] hover:text-[#0c1b38] hover:underline cursor-pointer">{item.headline}</a>
+                    ) : (
+                      <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0a0a0a]">{item.headline}</p>
+                    )}
                   </div>
                 ))
               ) : (
@@ -389,6 +395,99 @@ export default function DashboardPage() {
             </div>
           </Card>
         </div>
+
+        {/* ── Equities Command Center ──────────────────────────────────── */}
+        <div className="mb-5">
+          <Card className="p-6">
+            <div className="mb-5 flex items-start justify-between gap-6">
+              <div>
+                <SectionLabel>Equities Command Center</SectionLabel>
+                <h3 className="mt-3 text-[21px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
+                  {data?.equities.sp500 ? `S&P 500 at ${data.equities.sp500.price.toFixed(0)} — live via Finnhub` : "Connecting…"}
+                </h3>
+              </div>
+              <div className="text-right shrink-0">
+                <p className="text-[9.5px] text-[#999]">{data?.sources.finnhub ? "Real-time · Finnhub" : "FRED delayed data"}</p>
+              </div>
+            </div>
+
+            {/* 4 equity metric tiles */}
+            <div className="mb-5 grid grid-cols-4 gap-3">
+              <MetricTile label="S&P 500"  quote={data?.equities.sp500  ?? null} note="Large-cap US"     dec={0} />
+              <MetricTile label="NASDAQ"   quote={data?.equities.nasdaq ?? null} note="Tech-heavy"       dec={0} />
+              <MetricTile label="VIX"      quote={data?.equities.vix    ?? null} note="Fear gauge"       dec={1} invertColor />
+              <MetricTile label="Gold"     quote={data?.equities.gold   ?? null} note="Safe haven / USD hedge" dec={2} prefix="$" />
+            </div>
+
+            {/* S&P 500 history chart */}
+            <div className="h-[200px]">
+              {loading ? (
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading…</span>
+                </div>
+              ) : !data?.historySP500?.length ? (
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-[11px] text-[#bbb]">SP500 history unavailable</span>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={data.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
+                    <CartesianGrid stroke="#eee9df" vertical={false} />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" />
+                    <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v)/1000).toFixed(1)}K` : String(v)} width={48} />
+                    <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [Number(v).toFixed(0), "S&P 500"]} />
+                    <Line type="monotone" dataKey="value" name="S&P 500" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+
+            {/* 52W stats + sector performance */}
+            {data?.historySP500?.length ? (() => {
+              const vals = data.historySP500.map((p) => p.value);
+              const hi = Math.max(...vals); const lo = Math.min(...vals);
+              const cur = data.equities.sp500?.price ?? vals[vals.length - 1];
+              const fromLo = ((cur - lo) / lo * 100).toFixed(1);
+              const fromHi = ((cur - hi) / hi * 100).toFixed(1);
+              return (
+                <div className="mt-4 grid grid-cols-4 gap-4 border-t border-[#eee9df] pt-4">
+                  <div><MiniLabel>Period High</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#147a4f]">{hi.toFixed(0)}</p></div>
+                  <div><MiniLabel>Period Low</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#b42318]">{lo.toFixed(0)}</p></div>
+                  <div><MiniLabel>From Low</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#147a4f]">+{fromLo}%</p></div>
+                  <div><MiniLabel>From High</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#b42318]">{fromHi}%</p></div>
+                </div>
+              );
+            })() : null}
+          </Card>
+        </div>
+
+        {/* ── Sector Performance ───────────────────────────────────────── */}
+        {(data?.sectors?.length ?? 0) > 0 && (
+          <div className="mb-5">
+            <Card className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <SectionLabel>Sector Performance</SectionLabel>
+                <p className="text-[9.5px] text-[#999]">Live · Finnhub · S&P 500 sector ETFs</p>
+              </div>
+              <div className="grid grid-cols-8 gap-3">
+                {(data?.sectors ?? []).map((s) => {
+                  const up = s.pct >= 0;
+                  const color = up ? POSITIVE : NEGATIVE;
+                  return (
+                    <div key={s.symbol} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">{s.symbol}</p>
+                      <p className="mt-0.5 text-[9px] font-semibold text-[#999]">{s.name}</p>
+                      <p className="mt-2 text-[14px] font-bold tabular-nums text-[#0a0a0a]">${s.price.toFixed(2)}</p>
+                      <p className="mt-0.5 text-[11px] font-bold tabular-nums" style={{ color }}>
+                        {up ? "+" : ""}{s.pct.toFixed(2)}%
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            </Card>
+          </div>
+        )}
 
         {/* ── Layer 2: Drivers · Transmission · Agreement ─────────────── */}
         <div className="mb-5 grid grid-cols-[0.9fr_1.2fr_0.9fr] gap-5">
@@ -681,7 +780,11 @@ export default function DashboardPage() {
               {data!.topNews.slice(0, 4).map((story, i) => (
                 <div key={i} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-1">{story.source}</p>
-                  <p className="text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3">{story.title}</p>
+                  {story.url ? (
+                    <a href={story.url} target="_blank" rel="noreferrer" className="block text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3 hover:text-[#0c1b38] hover:underline cursor-pointer">{story.title}</a>
+                  ) : (
+                    <p className="text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3">{story.title}</p>
+                  )}
                   <p className="text-[11.5px] font-medium leading-relaxed text-[#666]">{story.description}</p>
                 </div>
               ))}

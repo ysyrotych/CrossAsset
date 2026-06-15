@@ -22,6 +22,12 @@ export type MarketNewsItem = {
   source: string;
   summary: string;
   datetime: number;
+  url: string;
+};
+
+export type FinnhubQuote = {
+  price: number; change: number; pct: number;
+  high: number; low: number; open: number; prevClose: number;
 };
 
 async function fhGet(path: string): Promise<unknown> {
@@ -88,5 +94,20 @@ export async function fetchMarketNews(): Promise<MarketNewsItem[]> {
     source:   String(n.source ?? ""),
     summary:  String(n.summary ?? "").slice(0, 200),
     datetime: Number(n.datetime ?? 0),
+    url:      String(n.url ?? ""),
   }));
+}
+
+export async function fetchQuote(symbol: string): Promise<FinnhubQuote | null> {
+  const data = (await fhGet(`/quote?symbol=${encodeURIComponent(symbol)}`)) as Record<string, number> | null;
+  if (!data || !data.c) return null;
+  return {
+    price:     data.c,
+    change:    data.d ?? 0,
+    pct:       data.dp ?? 0,
+    high:      data.h ?? data.c,
+    low:       data.l ?? data.c,
+    open:      data.o ?? data.c,
+    prevClose: data.pc ?? data.c,
+  };
 }

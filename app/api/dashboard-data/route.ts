@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
-import { fetchMarketNews } from "@/lib/sources/finnhub";
+import { fetchMarketNews, fetchQuote } from "@/lib/sources/finnhub";
 
 export const dynamic = "force-dynamic";
 
@@ -21,12 +21,7 @@ export type Scenario = {
   name: string; probability: number; tone: "positive" | "negative" | "neutral";
   trigger: string; market: string;
 };
-export type EdgeInsight = {
-  tag: string; title: string; insight: string; why: string; confidence: number;
-};
-export type UpcomingEvent = {
-  event: string; date: string; impact: string; estimate?: string; previous?: string;
-};
+export type SectorQuote = { symbol: string; name: string; price: number; change: number; pct: number };
 
 async function fredLatest(id: string, limit = 5): Promise<LiveQuote | null> {
   if (!KEY) return null;
@@ -93,6 +88,12 @@ async function fredHistory(id: string, start: string): Promise<{ date: string; v
   }
 }
 
+// Convert Finnhub quote to LiveQuote shape
+function fhToLive(fh: { price: number; change: number; pct: number } | null): LiveQuote | null {
+  if (!fh || !fh.price) return null;
+  return { price: fh.price, change: fh.change, pct: fh.pct };
+}
+
 function startDate(tf: string): string {
   const d = new Date();
   if (tf === "1M") d.setDate(d.getDate() - 35);
@@ -126,9 +127,7 @@ function computeDrivers(
       direction: cpiVal > 2.7 ? "hawkish" : "dovish",
       trend: cpi?.change != null ? (cpi.change >= 0 ? `+${cpi.change.toFixed(1)}` : cpi.change.toFixed(1)) : "0",
       sensitivity: "High",
-      explanation: coreVal > 0
-        ? `Core CPI at ${coreVal.toFixed(1)}% — services inflation ${coreVal > 3 ? "remains too sticky for a clean easing cycle" : "is decelerating toward target"}.`
-        : `Headline CPI at ${cpiVal.toFixed(1)}% — ${cpiVal > 3 ? "above the Fed's 2% target, keeping policy tight" : "approaching the Fed's objective"}.`,
+      explanation: `Core CPI at ${coreVal.toFixed(1)}% — services inflation ${coreVal > 3 ? "remains too sticky for a clean easing cycle" : "is decelerating toward target"}.`,
     },
     {
       driver: "Labor",
@@ -136,7 +135,7 @@ function computeDrivers(
       direction: urVal < 4.2 ? "hawkish" : "neutral",
       trend: payems?.change != null ? (payems.change > 0 ? `+${payems.change.toFixed(0)}K` : `${payems.change.toFixed(0)}K`) : "0",
       sensitivity: "High",
-      explanation: `Unemployment at ${urVal.toFixed(1)}% — ${urVal < 4 ? "labor remains tight, giving the Fed room to hold rates" : "gradual softening is visible but not yet forcing an easing pivot"}.`,
+      explanation: `Unemployment at ${urVal.toFixed(1)}%.`,
     },
     {
       driver: "Growth",
@@ -144,7 +143,7 @@ function computeDrivers(
       direction: gdpVal > 1.5 ? "neutral" : "dovish",
       trend: gdp?.change != null ? (gdp.change >= 0 ? `+${gdp.change.toFixed(1)}` : gdp.change.toFixed(1)) : "0",
       sensitivity: "Medium",
-      explanation: `GDP at ${gdpVal.toFixed(1)}% — ${gdpVal > 2 ? "growth holding above stall speed; credit not yet signaling a break" : "growth is slowing enough to put recession risk back on the table"}.`,
+      explanation: `GDP at ${gdpVal.toFixed(1)}%.`,
     },
     {
       driver: "Fed communication",
@@ -152,7 +151,7 @@ function computeDrivers(
       direction: ffVal > 4.5 ? "hawkish" : "neutral",
       trend: twoYVal > 0 ? `${(ffVal - twoYVal).toFixed(2)}` : "0",
       sensitivity: "High",
-      explanation: `Fed Funds at ${ffVal.toFixed(2)}% vs 2Y at ${twoYVal.toFixed(2)}% — ${Math.abs(ffVal - twoYVal) < 0.3 ? "2Y closely tracks the policy rate, confirming market conviction in a patient Fed" : "the gap implies markets are pricing significant rate moves ahead"}.`,
+      explanation: `Fed Funds at ${ffVal.toFixed(2)}% vs 2Y at ${twoYVal.toFixed(2)}%.`,
     },
     {
       driver: "Energy",
@@ -160,7 +159,7 @@ function computeDrivers(
       direction: oilVal > 80 ? "hawkish" : "neutral",
       trend: oil?.pct != null ? (oil.pct >= 0 ? `+${oil.pct.toFixed(1)}%` : `${oil.pct.toFixed(1)}%`) : "0",
       sensitivity: "Medium",
-      explanation: `WTI at $${oilVal.toFixed(0)} — ${oilVal > 80 ? "elevated energy prices keep headline inflation risk alive" : "energy is not the dominant inflation impulse at current levels"}.`,
+      explanation: `WTI at $${oilVal.toFixed(0)}.`,
     },
     {
       driver: "Credit conditions",
@@ -168,7 +167,7 @@ function computeDrivers(
       direction: hyVal > 500 ? "dovish" : "neutral",
       trend: hySpread?.change != null ? (hySpread.change >= 0 ? `+${hySpread.change.toFixed(0)}` : `${hySpread.change.toFixed(0)}`) : "0",
       sensitivity: "Medium",
-      explanation: `HY OAS at ${hyVal.toFixed(0)}bps — ${hyVal > 500 ? "credit stress is materializing, confirming macro risk-off" : "spreads are contained, not yet confirming a recessionary shock"}.`,
+      explanation: `HY OAS at ${hyVal.toFixed(0)}bps.`,
     },
   ];
 }
@@ -206,35 +205,35 @@ function computeTransmission(
       state: cpiVal > 3.5 ? "Very sticky" : cpiVal > 3 ? "Sticky" : cpiVal > 2.5 ? "Moderating" : "Near target",
       pressure: cpiVal > 3 ? "hawkish" : "neutral",
       confidence: Math.round(cpiVal > 3.5 ? 86 : cpiVal > 3 ? 74 : 58),
-      explanation: `CPI ${cpiVal.toFixed(1)}%, core ${coreVal.toFixed(1)}% — ${cpiVal > 3 ? "services inflation remains the binding macro constraint" : "inflation is decelerating toward the 2% objective"}.`,
+      explanation: `CPI ${cpiVal.toFixed(1)}%, core ${coreVal.toFixed(1)}%.`,
     },
     {
       label: "Fed Path",
       state: ffVal > 5 ? "Firmly restrictive" : ffVal > 4.5 ? "Restrictive" : ffVal > 4 ? "Mildly restrictive" : "Neutral",
       pressure: ffVal > 4.5 ? "hawkish" : "neutral",
       confidence: fedfunds ? 78 : 50,
-      explanation: `Fed Funds at ${ffVal.toFixed(2)}% — ${ffVal > 4.5 ? "policy is clearly restrictive; cuts require sustained disinflation progress" : "Fed is near neutral and data-dependent"}.`,
+      explanation: `Fed Funds at ${ffVal.toFixed(2)}%.`,
     },
     {
       label: "Rates",
       state: tnxVal > 4.5 ? "Long end very elevated" : tnxVal > 4 ? "Long end higher" : "Contained",
       pressure: tnxVal > 4.2 ? "hawkish" : "neutral",
       confidence: dgs10 ? 80 : 50,
-      explanation: `10Y at ${tnxVal.toFixed(2)}% — ${tnxVal > 4.2 ? "the long end becomes the main equity valuation pressure point" : "the long end is not yet the dominant macro stress channel"}.`,
+      explanation: `10Y at ${tnxVal.toFixed(2)}%.`,
     },
     {
       label: "Equities",
       state: sp500Pct > 0.5 ? "Momentum intact" : sp500Pct < -0.5 ? "Multiple pressure" : "Consolidating",
       pressure: "neutral",
       confidence: sp500 ? 65 : 50,
-      explanation: `S&P 500 ${sp500Pct >= 0 ? "+" : ""}${sp500Pct.toFixed(2)}% — ${sp500Pct < -0.5 ? "weakness concentrated in rate-sensitive and expensive assets" : "equities are absorbing the rates pressure"}.`,
+      explanation: `S&P 500 ${sp500Pct >= 0 ? "+" : ""}${sp500Pct.toFixed(2)}%.`,
     },
     {
       label: "FX / Credit",
       state: dxyPct > 0 && hyVal < 450 ? "USD firm; credit calm" : hyVal > 500 ? "Credit stress building" : "Mixed signals",
       pressure: "neutral",
       confidence: dxy && hySpread ? 62 : 45,
-      explanation: `DXY ${dxyPct >= 0 ? "+" : ""}${dxyPct.toFixed(2)}%; HY OAS ${hyVal.toFixed(0)}bps — ${hyVal < 450 ? "credit resists full risk-off, confirming this is repricing not crisis" : "credit stress is beginning to broaden beyond rates"}.`,
+      explanation: `DXY ${dxyPct >= 0 ? "+" : ""}${dxyPct.toFixed(2)}%; HY OAS ${hyVal.toFixed(0)}bps.`,
     },
   ];
 }
@@ -248,27 +247,27 @@ function computeAgreement(
   const contradicting: AgreementSignal[] = [];
 
   if (dgs10?.change != null && dgs10.change > 0.02)
-    confirming.push({ signal: `10Y +${dgs10.change.toFixed(2)}%`, asset: "Rates", explanation: "The long end confirms higher-for-longer repricing narrative." });
+    confirming.push({ signal: `10Y +${dgs10.change.toFixed(2)}%`, asset: "Rates", explanation: "" });
   if (dxy?.pct != null && dxy.pct > 0.1)
-    confirming.push({ signal: `USD +${dxy.pct.toFixed(2)}%`, asset: "FX", explanation: "Rate differentials continue to support the dollar." });
+    confirming.push({ signal: `USD +${dxy.pct.toFixed(2)}%`, asset: "FX", explanation: "" });
   if (sp500?.pct != null && sp500.pct < -0.3)
-    confirming.push({ signal: `S&P ${sp500.pct.toFixed(2)}%`, asset: "Equities", explanation: "Rate-sensitive sectors reacting to discount-rate pressure." });
+    confirming.push({ signal: `S&P ${sp500.pct.toFixed(2)}%`, asset: "Equities", explanation: "" });
   if (dgs2?.price != null && dgs2.price > 4)
-    confirming.push({ signal: `2Y at ${dgs2.price.toFixed(2)}%`, asset: "Rates", explanation: "Front end anchored by a patient Fed." });
+    confirming.push({ signal: `2Y at ${dgs2.price.toFixed(2)}%`, asset: "Rates", explanation: "" });
   if (gold?.pct != null && gold.pct > 0.3)
-    confirming.push({ signal: `Gold +${gold.pct.toFixed(2)}%`, asset: "Safe Haven", explanation: "Safe haven demand confirms underlying macro anxiety." });
+    confirming.push({ signal: `Gold +${gold.pct.toFixed(2)}%`, asset: "Safe Haven", explanation: "" });
 
   if (hySpread?.price != null && hySpread.price < 450)
-    contradicting.push({ signal: `HY OAS ${hySpread.price.toFixed(0)}bps`, asset: "Credit", explanation: "Credit does not yet confirm a broad recessionary regime." });
+    contradicting.push({ signal: `HY OAS ${hySpread.price.toFixed(0)}bps`, asset: "Credit", explanation: "" });
   if (sp500?.pct != null && sp500.pct > 0.3)
-    contradicting.push({ signal: `S&P +${sp500.pct.toFixed(2)}%`, asset: "Equities", explanation: "Equity momentum offsetting part of the rates pressure." });
+    contradicting.push({ signal: `S&P +${sp500.pct.toFixed(2)}%`, asset: "Equities", explanation: "" });
   if (vix?.price != null && vix.price < 20)
-    contradicting.push({ signal: `VIX ${vix.price.toFixed(1)}`, asset: "Risk", explanation: "Market is repricing rates, not yet pricing panic." });
+    contradicting.push({ signal: `VIX ${vix.price.toFixed(1)}`, asset: "Risk", explanation: "" });
   if (dxy?.pct != null && dxy.pct < -0.1)
-    contradicting.push({ signal: `USD ${dxy.pct.toFixed(2)}%`, asset: "FX", explanation: "Dollar weakness contradicts pure hawkish repricing narrative." });
+    contradicting.push({ signal: `USD ${dxy.pct.toFixed(2)}%`, asset: "FX", explanation: "" });
 
-  if (!confirming.length) confirming.push({ signal: "Await data", asset: "–", explanation: "Signals populate once live FRED data loads." });
-  if (!contradicting.length) contradicting.push({ signal: "No divergence", asset: "–", explanation: "Cross-asset signals are currently aligned." });
+  if (!confirming.length) confirming.push({ signal: "Await data", asset: "–", explanation: "" });
+  if (!contradicting.length) contradicting.push({ signal: "No divergence", asset: "–", explanation: "" });
 
   return { confirming: confirming.slice(0, 4), contradicting: contradicting.slice(0, 3) };
 }
@@ -292,120 +291,44 @@ function computeScenarios(
   hawkish = 100 - base - dovish;
 
   return [
-    {
-      name: "Base case",
-      probability: base,
-      tone: "neutral",
-      trigger: `Sticky inflation at ${cpiVal.toFixed(1)}%, patient Fed at ${ffVal.toFixed(2)}%, elevated long end.`,
-      market: "Selective equity pressure; USD supported; credit stable.",
-    },
-    {
-      name: "Dovish break",
-      probability: dovish,
-      tone: "positive",
-      trigger: "Core services inflation surprises lower vs consensus.",
-      market: "Yields fall; duration rallies; USD softens; equity multiples expand.",
-    },
-    {
-      name: "Hawkish shock",
-      probability: hawkish,
-      tone: "negative",
-      trigger: `Hot CPI or re-acceleration forces hikes back into distribution.`,
-      market: "10Y higher; broad multiple pressure; credit widens.",
-    },
-  ];
-}
-
-function computeEdgeInsights(
-  cpi: LiveQuote | null, dgs10: LiveQuote | null,
-  hySpread: LiveQuote | null, dxy: LiveQuote | null,
-): EdgeInsight[] {
-  const cpiVal = n(cpi); const tnxVal = n(dgs10);
-  const hyVal = n(hySpread) || 380; const dxyPct = dxy?.pct ?? 0;
-
-  return [
-    {
-      tag: "Regime",
-      title: cpiVal > 3 && hyVal < 450 ? "This is a discount-rate market, not a recession market." : cpiVal > 3.5 ? "Inflation is still the dominant market regime driver." : "The macro regime is in transition.",
-      insight: hyVal < 450
-        ? `Rates and FX confirm hawkish repricing, but HY spreads at ${hyVal.toFixed(0)}bps are not yet pricing a growth shock.`
-        : `Rising credit spreads at ${hyVal.toFixed(0)}bps are beginning to confirm broader macro stress.`,
-      why: hyVal < 450
-        ? "Equity weakness should stay concentrated in duration-sensitive assets unless credit confirms stress."
-        : "If spreads continue widening, the selloff could broaden well beyond rate-sensitive sectors.",
-      confidence: Math.min(90, Math.round(58 + (cpiVal - 2.5) * 10)),
-    },
-    {
-      tag: "Rates",
-      title: tnxVal > 0 ? `The 10Y at ${tnxVal.toFixed(2)}% is the real equity pressure point.` : "The 10Y yield is the key macro variable to watch.",
-      insight: tnxVal > 4
-        ? `The 2Y reflects Fed patience, but the 10Y at ${tnxVal.toFixed(2)}% determines how much valuation pain reaches equities.`
-        : `With the 10Y at ${tnxVal.toFixed(2)}%, equity multiple pressure is moderate and duration assets are finding a footing.`,
-      why: tnxVal > 4.5
-        ? "If the long end stabilizes, equities can absorb a hold; if it rises again, multiple pressure broadens."
-        : "A break higher in yields remains the key signal for escalating equity stress.",
-      confidence: Math.min(90, Math.round(68 + (tnxVal - 4) * 10)),
-    },
-    {
-      tag: "FX",
-      title: Math.abs(dxyPct) > 0.3 ? (dxyPct > 0 ? "The dollar is a hidden earnings headwind." : "Dollar weakness is a tailwind for multinationals.") : "The dollar is a neutral factor today.",
-      insight: dxyPct > 0.3
-        ? `USD strength of +${dxyPct.toFixed(2)}% tightens global financial conditions and pressures multinational revenue translation.`
-        : dxyPct < -0.3
-        ? `USD softness of ${dxyPct.toFixed(2)}% supports S&P 500 international revenue — a tailwind that may not be priced.`
-        : "DXY is range-bound. FX is not the primary driver of cross-asset moves today.",
-      why: "The FX impact on earnings appears in company guidance before it shows up in sell-side estimates.",
-      confidence: 69,
-    },
+    { name: "Base case",    probability: base,    tone: "neutral",  trigger: "", market: "" },
+    { name: "Dovish break", probability: dovish,  tone: "positive", trigger: "", market: "" },
+    { name: "Hawkish shock",probability: hawkish, tone: "negative", trigger: "", market: "" },
   ];
 }
 
 function computeRegime(
   cpi: LiveQuote | null, dgs10: LiveQuote | null,
   hySpread: LiveQuote | null, gdp: LiveQuote | null,
-): { label: string; score: number; headline: string; body1: string; body2: string } {
+): { label: string; score: number } {
   const cpiVal = n(cpi); const tnxVal = n(dgs10);
   const hyVal = n(hySpread) || 380; const gdpVal = n(gdp) || 2;
 
-  let label = "Balanced"; let score = 50;
-  let headline = "Market is in a balanced, data-dependent regime.";
-  let body1 = "No single macro force is dominant enough to drive a clear directional trade.";
-  let body2 = "Watch for inflation or labor data surprises to establish a clearer regime.";
-
-  if (cpiVal > 3 && tnxVal > 4 && hyVal < 500) {
-    label = "Higher-for-Longer Repricing"; score = 73;
-    headline = "Higher-for-longer is back in control.";
-    body1 = `Sticky inflation at ${cpiVal.toFixed(1)}% and resilient labor data keep the Fed patient, anchoring the front end and pushing the burden of repricing into the 10Y at ${tnxVal.toFixed(2)}%.`;
-    body2 = `Equities are not in full risk-off, but discount-rate pressure is real. The decisive question is whether credit — currently ${hyVal.toFixed(0)}bps — begins to confirm the rates signal.`;
-  } else if (cpiVal > 3.5 && hyVal > 500) {
-    label = "Stagflation Risk"; score = 58;
-    headline = "Stagflation risk is rising.";
-    body1 = `Inflation at ${cpiVal.toFixed(1)}% with growth at ${gdpVal.toFixed(1)}% creates a challenging environment — the Fed cannot cut to support growth without risking re-acceleration.`;
-    body2 = `HY spreads at ${hyVal.toFixed(0)}bps are beginning to confirm broader stress. Credit is the key variable to monitor.`;
-  } else if (cpiVal < 2.5 && gdpVal < 1) {
-    label = "Growth Scare"; score = 36;
-    headline = "Growth is decelerating faster than inflation.";
-    body1 = `GDP at ${gdpVal.toFixed(1)}% with CPI at ${cpiVal.toFixed(1)}% opens the door to easing, but the Fed must balance disinflation progress against labor market signals.`;
-    body2 = "Duration assets should outperform in this environment as rate cut expectations re-price.";
-  } else if (cpiVal < 2.5 && tnxVal < 4.2) {
-    label = "Soft Landing / Risk-On"; score = 80;
-    headline = "A soft landing narrative is taking hold.";
-    body1 = `CPI at ${cpiVal.toFixed(1)}% approaching target with growth intact creates the ideal backdrop for risk assets and a gradual Fed easing cycle.`;
-    body2 = "Equities can expand multiples in this environment. Watch for any inflation re-acceleration as the key invalidation.";
-  } else if (hyVal > 600) {
-    label = "Risk-Off / Credit Stress"; score = 28;
-    headline = "Credit is pricing a genuine stress event.";
-    body1 = `HY OAS at ${hyVal.toFixed(0)}bps signals that markets are moving beyond repricing toward a genuine risk-off regime. This is no longer just a rates story.`;
-    body2 = "Defensive positioning and duration make sense until credit stabilizes. Watch for a reversal in spreads as the all-clear signal.";
-  } else if (cpiVal > 3) {
-    label = "Sticky Inflation"; score = 62;
-    headline = "Sticky inflation is keeping the Fed's hands tied.";
-    body1 = `CPI at ${cpiVal.toFixed(1)}% — well above the 2% target — continues to constrain the Fed's ability to pivot. The market is caught between inflation risk and slowing growth.`;
-    body2 = "Sector rotation into real assets, energy, and financials makes sense. Duration remains vulnerable until inflation data breaks lower.";
-  }
-
-  return { label, score, headline, body1, body2 };
+  if (cpiVal > 3 && tnxVal > 4 && hyVal < 500)
+    return { label: "Higher-for-Longer Repricing", score: 73 };
+  if (cpiVal > 3.5 && hyVal > 500)
+    return { label: "Stagflation Risk", score: 58 };
+  if (cpiVal < 2.5 && gdpVal < 1)
+    return { label: "Growth Scare", score: 36 };
+  if (cpiVal < 2.5 && tnxVal < 4.2)
+    return { label: "Soft Landing / Risk-On", score: 80 };
+  if (hyVal > 600)
+    return { label: "Risk-Off / Credit Stress", score: 28 };
+  if (cpiVal > 3)
+    return { label: "Sticky Inflation", score: 62 };
+  return { label: "Balanced", score: 50 };
 }
+
+const SECTORS: { symbol: string; name: string }[] = [
+  { symbol: "XLK", name: "Technology" },
+  { symbol: "XLF", name: "Financials" },
+  { symbol: "XLE", name: "Energy" },
+  { symbol: "XLV", name: "Healthcare" },
+  { symbol: "XLI", name: "Industrials" },
+  { symbol: "XLU", name: "Utilities" },
+  { symbol: "XLY", name: "Cons. Disc." },
+  { symbol: "XLP", name: "Cons. Staples" },
+];
 
 export async function GET(req: NextRequest) {
   const tf = req.nextUrl.searchParams.get("tf") ?? "6M";
@@ -414,10 +337,13 @@ export async function GET(req: NextRequest) {
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
     cpi, coreCpi, pce, unrate, payems, gdp,
-    hySpread, sp500, vix, gold, oil, dxy,
+    hySpread, fredSP500, fredVix, fredGold, fredOil, dxy,
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
-    hist5, hist10,
+    nasdaq,
+    hist5, hist10, histSP500,
     rawNews, rawFinnhubNews,
+    fhSPY, fhGLD, fhUSO, fhVIX,
+    ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
     fredLatest("DGS30"), fredLatest("FEDFUNDS"),
@@ -427,16 +353,27 @@ export async function GET(req: NextRequest) {
     fredLatest("BAMLH0A0HYM2"), fredLatest("SP500"), fredLatest("VIXCLS"),
     fredLatest("GOLDAMGBD228NLBM", 10), fredLatest("DCOILWTICO"), fredLatest("DTWEXBGS"),
     // Extra FRED series for Global Data Snapshot
-    fredLatest("T10YIE"),        // 10Y breakeven inflation
-    fredLatest("MORTGAGE30US"),  // 30Y fixed mortgage rate
-    fredLatest("UMCSENT"),       // U of Michigan consumer sentiment
-    fredLatest("INDPRO"),        // Industrial production index
-    fredLatest("RSXFS"),         // Advance retail sales
-    fredLatest("T10Y2Y"),        // 2s10s spread (direct from FRED)
-    fredLatest("ICSA"),          // Initial jobless claims
-    fredHistory("DGS5", start), fredHistory("DGS10", start),
+    fredLatest("T10YIE"),
+    fredLatest("MORTGAGE30US"),
+    fredLatest("UMCSENT"),
+    fredLatest("INDPRO"),
+    fredLatest("RSXFS"),
+    fredLatest("T10Y2Y"),
+    fredLatest("ICSA"),
+    // Nasdaq
+    fredLatest("NASDAQCOM", 5),
+    // History
+    fredHistory("DGS5", start), fredHistory("DGS10", start), fredHistory("SP500", start),
+    // News
     fetchFinancialNews().catch(() => []),
     fetchMarketNews().catch(() => []),
+    // Real-time Finnhub quotes
+    fetchQuote("SPY").catch(() => null),
+    fetchQuote("GLD").catch(() => null),
+    fetchQuote("USO").catch(() => null),
+    fetchQuote("VIXY").catch(() => null),
+    // Sector ETFs
+    ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
 
   // Build yield history
@@ -450,10 +387,33 @@ export async function GET(req: NextRequest) {
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
-  // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps for all downstream logic
+  // SP500 history (for equities chart)
+  const historySP500 = (histSP500 as { date: string; value: number }[]).sort(
+    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
+  );
+
+  // Prefer Finnhub real-time over FRED for equities (fresher data)
+  const sp500  = fhToLive(fhSPY)  ?? fredSP500;
+  const gold   = fhToLive(fhGLD)  ?? fredGold;
+  const oil    = fhToLive(fhUSO)  ?? fredOil;
+  const vix    = fhToLive(fhVIX)  ?? fredVix;
+
+  // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
     ? { price: hySpread.price * 100, change: hySpread.change * 100, pct: hySpread.pct }
     : null;
+
+  // Build sector array
+  const sectors: SectorQuote[] = SECTORS.map((s, i) => {
+    const q = sectorQuotes[i] as { price: number; change: number; pct: number } | null;
+    return {
+      symbol: s.symbol,
+      name:   s.name,
+      price:  q?.price ?? 0,
+      change: q?.change ?? 0,
+      pct:    q?.pct ?? 0,
+    };
+  }).filter((s) => s.price > 0);
 
   const fredConnected = !!(dgs10 || dgs2);
   const regime = computeRegime(cpi, dgs10, hySpreadBps, gdp);
@@ -463,12 +423,14 @@ export async function GET(req: NextRequest) {
     tf,
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
-    equities: { sp500, vix, gold, oil, dxy },
+    equities: { sp500, vix, gold, oil, dxy, nasdaq },
     macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
     extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
     history,
-    finnhubNews: (rawFinnhubNews as { headline: string; source: string }[]).slice(0, 8),
-    topNews: rawNews.slice(0, 4),
+    historySP500,
+    sectors,
+    finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
+    topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 4),
     driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
     pressureIndex: computePressure(dgs10, vix, hySpreadBps, dxy, oil),
     transmission:  computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpreadBps),
@@ -479,7 +441,7 @@ export async function GET(req: NextRequest) {
     sources: {
       fred:    fredConnected,
       finnhub: (rawFinnhubNews as unknown[]).length > 0,
-      newsapi: rawNews.length > 0,
+      newsapi: (rawNews as unknown[]).length > 0,
     },
   });
 }
