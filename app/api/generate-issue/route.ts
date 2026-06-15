@@ -1,26 +1,58 @@
 import { NextResponse } from "next/server";
 import { fetchMacroData } from "@/lib/sources/fred";
 import { generateMacroIssue } from "@/lib/ai/claude";
-import { DEMO_ISSUE, DEMO_CALENDAR } from "@/lib/data/demoData";
+import { fetchFinancialNews } from "@/lib/sources/newsapi";
+import { fetchEconomicCalendar, fetchEarningsCalendar } from "@/lib/sources/finnhub";
+import { fetchBeaContext } from "@/lib/sources/bea";
+import { fetchBlsData } from "@/lib/sources/bls";
+import { DEMO_ISSUE } from "@/lib/data/demoData";
+
+export const dynamic = "force-dynamic";
 
 export async function POST() {
   try {
-    const macroData = await fetchMacroData();
-
     if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({ issue: DEMO_ISSUE, source: "demo", warning: "ANTHROPIC_API_KEY not set on server — returning demo data" });
+      return NextResponse.json({
+        issue: DEMO_ISSUE,
+        source: "demo",
+        warning: "ANTHROPIC_API_KEY not set — returning demo data",
+      });
     }
 
-    const calendarContext = DEMO_CALENDAR.slice(0, 4)
-      .map((e) => `${e.date}: ${e.eventName} — ${e.whyItMatters}`)
-      .join("\n");
+    // Fetch all sources in parallel
+    const [macroData, news, econCalendar, earningsCalendar, bea, bls] =
+      await Promise.all([
+        fetchMacroData(),
+        fetchFinancialNews(),
+        fetchEconomicCalendar(),
+        fetchEarningsCalendar(),
+        fetchBeaContext(),
+        fetchBlsData(),
+      ]);
 
-    const defaultTickers = ["WMT", "TGT", "COST", "KR", "AMZN", "JPM", "BAC", "XOM", "AAPL", "NVDA"];
+    const issue = await generateMacroIssue(macroData, {
+      news,
+      econCalendar,
+      earningsCalendar,
+      bea,
+      bls,
+    });
 
-    const issue = await generateMacroIssue(macroData, defaultTickers, calendarContext);
-    return NextResponse.json({ issue, source: macroData.isDemo ? "demo-data" : "live-data" });
-  } catch (err: any) {
-    console.error("generate-issue error:", err);
-    return NextResponse.json({ error: err.message }, { status: 500 });
+    return NextResponse.json({
+      issue,
+      source: macroData.isDemo ? "demo-data" : "live-data",
+      dataSources: {
+        fred: !macroData.isDemo,
+        newsapi: news.length > 0,
+        finnhubEcon: econCalendar.length > 0,
+        finnhubEarnings: earningsCalendar.length > 0,
+        bea: bea.gdp.length > 0 || bea.income.length > 0,
+        bls: Object.keys(bls).length > 0,
+      },
+    });
+  } catch (err: unknown) {
+    const message = err instanceof Error ? err.message : String(err);
+    console.error("generate-issue error:", message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
