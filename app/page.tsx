@@ -573,19 +573,23 @@ export default function DashboardPage() {
             </div>
 
             <div className="mb-5 grid grid-cols-4 gap-3">
-              {[
-                { label: "5Y", val: mkt?.yields.fvx?.price, chg: mkt?.yields.fvx?.change, note: "Mid-curve", suffix: "%" },
-                { label: "10Y", val: mkt?.yields.tnx?.price, chg: mkt?.yields.tnx?.change, note: "Equity pressure", suffix: "%" },
-                { label: "30Y", val: mkt?.yields.tyx?.price, chg: mkt?.yields.tyx?.change, note: "Long-end inflation", suffix: "%" },
-                { label: "S&P 500", val: mkt?.equities.sp500?.price, chg: mkt?.equities.sp500?.change, note: mkt?.equities.vix ? `VIX ${mkt.equities.vix.price.toFixed(1)}` : "Equity risk", suffix: "" },
-              ].map(({ label, val, chg, note, suffix }) => (
+              {((): { label: string; val: number | undefined; chg: number | undefined; note: string; dec: number; prefix?: string; suffix: string; chgSuffix: string }[] => [
+                { label: "5Y Yield",  val: mkt?.yields.fvx?.price,       chg: mkt?.yields.fvx?.change,      note: "Mid-curve",           dec: 2, suffix: "%",  chgSuffix: "%" },
+                { label: "10Y Yield", val: mkt?.yields.tnx?.price,       chg: mkt?.yields.tnx?.change,      note: "Equity pressure",     dec: 2, suffix: "%",  chgSuffix: "%" },
+                { label: "30Y Yield", val: mkt?.yields.tyx?.price,       chg: mkt?.yields.tyx?.change,      note: "Long-end inflation",  dec: 2, suffix: "%",  chgSuffix: "%" },
+                { label: "S&P 500",   val: mkt?.equities.sp500?.price,   chg: mkt?.equities.sp500?.pct,     note: "US equities",         dec: 0, suffix: "",    chgSuffix: "%" },
+                { label: "Gold",      val: mkt?.equities.gold?.price,     chg: mkt?.equities.gold?.pct,      note: "Safe haven",          dec: 0, prefix: "$", suffix: "",    chgSuffix: "%" },
+                { label: "WTI Oil",   val: mkt?.equities.oil?.price,      chg: mkt?.equities.oil?.pct,       note: "Energy / inflation",  dec: 2, prefix: "$", suffix: "",    chgSuffix: "%" },
+                { label: "VIX",       val: mkt?.equities.vix?.price,      chg: mkt?.equities.vix?.pct,       note: "Risk gauge",          dec: 1, suffix: "",    chgSuffix: "%" },
+                { label: "USD Index", val: (mkt?.equities as any)?.dxy?.price, chg: (mkt?.equities as any)?.dxy?.pct, note: "FX / global liquidity", dec: 2, suffix: "", chgSuffix: "%" },
+              ])().map(({ label, val, chg, note, dec, prefix = "", suffix, chgSuffix }) => (
                 <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
                   <MiniLabel>{label}</MiniLabel>
-                  <p className="mt-1 text-[20px] font-bold tabular-nums text-[#0a0a0a]">
-                    {mktLoading ? "—" : val != null ? `${val.toFixed(suffix === "%" ? 2 : 0)}${suffix}` : "N/A"}
+                  <p className="mt-1 text-[18px] font-bold tabular-nums text-[#0a0a0a]">
+                    {mktLoading ? "—" : val != null ? `${prefix}${val.toFixed(dec)}${suffix}` : "N/A"}
                   </p>
-                  <p className={`mt-1 text-[10.5px] font-semibold ${chg != null && chg !== 0 ? (chg > 0 ? "text-[#b42318]" : "text-[#147a4f]") : "text-[#777]"}`}>
-                    {!mktLoading && chg != null ? `${chg > 0 ? "+" : ""}${chg.toFixed(suffix === "%" ? 2 : 1)}${suffix} · ` : ""}{note}
+                  <p className={`mt-1 text-[10px] font-semibold ${chg != null && chg !== 0 ? (chg > 0 ? "text-[#b42318]" : "text-[#147a4f]") : "text-[#777]"}`}>
+                    {!mktLoading && chg != null ? `${chg > 0 ? "+" : ""}${chg.toFixed(2)}${chgSuffix} · ` : ""}{note}
                   </p>
                 </div>
               ))}

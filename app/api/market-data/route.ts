@@ -15,7 +15,7 @@ export async function GET(req: NextRequest) {
   const tf = req.nextUrl.searchParams.get("tf") ?? "6M";
   const range = TF_MAP[tf] ?? "6mo";
 
-  const [tnx, fvx, tyx, sp500, gold, oil, vix, tnxHist, fvxHist] =
+  const [tnx, fvx, tyx, sp500, gold, oil, vix, dxy, tnxHist, fvxHist] =
     await Promise.all([
       fetchQuote("^TNX"),
       fetchQuote("^FVX"),
@@ -24,6 +24,7 @@ export async function GET(req: NextRequest) {
       fetchQuote("GC=F"),
       fetchQuote("CL=F"),
       fetchQuote("^VIX"),
+      fetchQuote("DX-Y.NYB"),
       fetchHistory("^TNX", range),
       fetchHistory("^FVX", range),
     ]);
@@ -41,7 +42,7 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     yields: { tnx, fvx, tyx },
-    equities: { sp500, gold, oil, vix },
+    equities: { sp500, gold, oil, vix, dxy },
     history,
     live: !!tnx,
   });

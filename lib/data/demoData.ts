@@ -32,6 +32,11 @@ export const DEMO_MACRO_DATA: MacroData = {
     oil: { label: "WTI Crude", value: "$81.40", change: "-0.85", direction: "down", context: "Demand concerns" },
     gold: { label: "Gold", value: "$2,335", change: "+12", direction: "up", context: "Safe haven bid" },
   },
+  equities: {
+    sp500: { label: "S&P 500", value: "5,234", change: "-0.42%", direction: "down", context: "Demo data" },
+    vix: { label: "VIX", value: "14.2", change: "+0.8%", direction: "up", context: "Demo data" },
+    dxy: { label: "USD Index", value: "104.8", change: "+0.12%", direction: "up", context: "Demo data" },
+  },
   isDemo: true,
 };
 

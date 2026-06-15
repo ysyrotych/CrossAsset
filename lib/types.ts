@@ -142,6 +142,11 @@ export type MacroData = {
     oil: MacroMetric;
     gold: MacroMetric;
   };
+  equities?: {
+    sp500?: MacroMetric;
+    vix?: MacroMetric;
+    dxy?: MacroMetric;
+  };
   isDemo: boolean;
 };
 

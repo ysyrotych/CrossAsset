@@ -41,18 +41,14 @@ export async function generateMacroIssue(
 }
 
 function buildPrompt(macroData: MacroData, tickers: string[], calendarCtx: string): string {
-  const dataNote = macroData.isDemo
-    ? "Note: macro data below is DEMO/FALLBACK data. Acknowledge this clearly in dataQualityNote."
-    : "Note: macro data below is LIVE from FRED API.";
+  return `You are CrossAsset, an institutional macro desk analyst writing a pre-market morning brief for a junior equity research analyst. Generate today's macro desk brief based on the live market data below.
 
-  return `You are CrossAsset, an institutional macro desk analyst writing a pre-market morning brief for a junior equity research analyst. Generate today's macro desk brief using the provided macro data and context.
+STYLE: Concise, sharp, institutional. Write as if briefing a sell-side desk before market open. Always explain the "so what" and connect every data point to an asset implication. Finance-native language — no disclaimers, no hedging language about data quality.
 
-STYLE: Concise, sharp, institutional. No hype. No vague statements. Always explain the "so what." Always connect macro to asset implications. Finance-native language. Write as if briefing a desk before market open. Do NOT include any disclaimer about data quality in the output.
-
-MACRO DATA:
+LIVE MARKET DATA (sourced from Yahoo Finance, US Treasury, FRED):
 ${JSON.stringify(macroData, null, 2)}
 
-UPCOMING CALENDAR:
+UPCOMING CALENDAR EVENTS:
 ${calendarCtx}
 
 TODAY'S DATE: ${new Date().toISOString().split("T")[0]}
