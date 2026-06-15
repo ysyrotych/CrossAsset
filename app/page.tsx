@@ -155,11 +155,33 @@ export default function DashboardPage() {
             <div className="flex-1">
               <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">CrossAsset Command Center</p>
               <h1 className="mt-3 text-[38px] font-light leading-[1.05] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-                {loading ? "Loading live market data…" : data?.regimeHeadline ?? "Connecting to data sources…"}
+                {loading ? "Connecting to FRED…" : data?.regimeLabel ?? "CrossAsset Dashboard"}
               </h1>
-              <p className="mt-4 max-w-3xl text-[13.5px] font-medium leading-[1.75] text-[#555]">
-                {loading ? "Fetching FRED, Finnhub, and NewsAPI in real time." : data?.regimeBody1 ?? ""}
-              </p>
+              <div className="mt-4 flex flex-wrap gap-6">
+                {[
+                  { label: "10Y", val: data?.yields.dgs10?.price,     sfx: "%",   dec: 2, inv: true,  chg: data?.yields.dgs10?.change },
+                  { label: "S&P", val: data?.equities.sp500?.price,   sfx: "",    dec: 0, inv: false, chg: data?.equities.sp500?.pct },
+                  { label: "VIX", val: data?.equities.vix?.price,     sfx: "",    dec: 1, inv: true,  chg: data?.equities.vix?.pct },
+                  { label: "CPI", val: data?.macro.cpi?.price,        sfx: "%",   dec: 2, inv: true,  chg: data?.macro.cpi?.change },
+                  { label: "HY OAS", val: data?.macro.hySpread?.price,sfx: "bps", dec: 0, inv: true,  chg: data?.macro.hySpread?.change },
+                ].map(({ label, val, sfx, dec, inv, chg }) => {
+                  const up = (chg ?? 0) > 0;
+                  const color = val == null ? "#bbb" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
+                  return (
+                    <div key={label}>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{label}</p>
+                      <p className="mt-0.5 text-[16px] font-bold tabular-nums text-[#0a0a0a]">
+                        {val != null ? `${val.toFixed(dec)}${sfx}` : "—"}
+                        {chg != null && chg !== 0 && (
+                          <span className="ml-1 text-[11px] font-semibold" style={{ color }}>
+                            {chg > 0 ? "+" : ""}{chg.toFixed(dec)}{sfx}
+                          </span>
+                        )}
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
             </div>
 
             <div className="min-w-[260px] flex flex-col items-end gap-3">
@@ -222,38 +244,39 @@ export default function DashboardPage() {
               )}
             </div>
 
-            <h2 className="text-[22px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-              {loading ? "—" : data?.regimeHeadline ?? "—"}
+            <h2 className="text-[20px] font-bold leading-[1.2] tracking-tight text-[#0a0a0a]">
+              {loading ? "—" : data?.regimeLabel ?? "—"}
             </h2>
 
-            <div className="mt-5 space-y-4 text-[13px] font-medium leading-[1.75] text-[#4b4b4b]">
-              <p>{loading ? "Loading…" : data?.regimeBody1 ?? ""}</p>
-              <p>{loading ? "" : data?.regimeBody2 ?? ""}</p>
-            </div>
-
-            <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#eee9df] pt-5">
-              <div>
-                <MiniLabel>Regime</MiniLabel>
-                <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">{data?.regimeLabel ?? "—"}</p>
-              </div>
-              <div>
-                <MiniLabel>10Y Yield</MiniLabel>
-                <p className={`mt-1 text-[12px] font-bold ${(data?.yields.dgs10?.change ?? 0) > 0 ? "text-[#b42318]" : "text-[#147a4f]"}`}>
-                  {data?.yields.dgs10 ? `${data.yields.dgs10.price.toFixed(2)}% (${data.yields.dgs10.change >= 0 ? "+" : ""}${data.yields.dgs10.change.toFixed(2)}%)` : "—"}
-                </p>
-              </div>
-              <div>
-                <MiniLabel>HY Spread</MiniLabel>
-                <p className="mt-1 text-[12px] font-semibold text-[#555]">
-                  {data?.macro.hySpread ? `${data.macro.hySpread.price.toFixed(0)}bps` : "—"}
-                </p>
-              </div>
-              <div>
-                <MiniLabel>Market state</MiniLabel>
-                <p className="mt-1 text-[12px] font-semibold text-[#555]">
-                  {data?.regimeLabel ?? "—"}
-                </p>
-              </div>
+            <div className="mt-5 space-y-0">
+              {[
+                { label: "10Y Yield",    val: data?.yields.dgs10?.price,        chg: data?.yields.dgs10?.change,      sfx: "%",   dec: 2, inv: true },
+                { label: "2Y Yield",     val: data?.yields.dgs2?.price,         chg: data?.yields.dgs2?.change,       sfx: "%",   dec: 2, inv: true },
+                { label: "Fed Funds",    val: data?.yields.fedfunds?.price,     chg: data?.yields.fedfunds?.change,   sfx: "%",   dec: 2, inv: false },
+                { label: "CPI YoY",      val: data?.macro.cpi?.price,           chg: data?.macro.cpi?.change,         sfx: "%",   dec: 2, inv: true },
+                { label: "Core CPI",     val: data?.macro.coreCpi?.price,       chg: data?.macro.coreCpi?.change,     sfx: "%",   dec: 2, inv: true },
+                { label: "Unemployment", val: data?.macro.unrate?.price,        chg: data?.macro.unrate?.change,      sfx: "%",   dec: 1, inv: true },
+                { label: "GDP growth",   val: data?.macro.gdp?.price,           chg: data?.macro.gdp?.change,         sfx: "%",   dec: 1, inv: false },
+                { label: "HY OAS",       val: data?.macro.hySpread?.price,      chg: data?.macro.hySpread?.change,    sfx: "bps", dec: 0, inv: true },
+              ].map(({ label, val, chg, sfx, dec, inv }) => {
+                const up = (chg ?? 0) > 0;
+                const color = val == null ? "#bbb" : chg == null || chg === 0 ? "#999" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
+                return (
+                  <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] py-2.5 last:border-0">
+                    <p className="text-[12px] font-semibold text-[#555]">{label}</p>
+                    <div className="flex items-center gap-3">
+                      {chg != null && chg !== 0 && (
+                        <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
+                          {chg > 0 ? "+" : ""}{chg.toFixed(dec)}{sfx}
+                        </span>
+                      )}
+                      <p className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
+                        {val != null ? `${val.toFixed(dec)}${sfx}` : "—"}
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           </Card>
 
@@ -567,7 +590,7 @@ export default function DashboardPage() {
                 { label: "Core CPI",          val: data?.macro.coreCpi?.price,  chg: data?.macro.coreCpi?.pct,  suffix: "%" },
                 { label: "Unemployment",      val: data?.macro.unrate?.price,   chg: data?.macro.unrate?.pct,   suffix: "%" },
                 { label: "GDP growth",        val: data?.macro.gdp?.price,      chg: data?.macro.gdp?.pct,      suffix: "%" },
-                { label: "HY OAS",            val: data?.macro.hySpread?.price, chg: data?.macro.hySpread?.pct, suffix: "bps", dec: 0 },
+                { label: "HY OAS",            val: data?.macro.hySpread?.price, chg: data?.macro.hySpread?.change, suffix: "bps", dec: 0 },
                 { label: "Fed Funds",         val: data?.yields.fedfunds?.price, chg: 0,                        suffix: "%" },
                 { label: "2Y Treasury",       val: data?.yields.dgs2?.price,    chg: data?.yields.dgs2?.pct,    suffix: "%" },
                 { label: "30Y Treasury",      val: data?.yields.dgs30?.price,   chg: data?.yields.dgs30?.pct,   suffix: "%" },

@@ -28,11 +28,11 @@ export type UpcomingEvent = {
   event: string; date: string; impact: string; estimate?: string; previous?: string;
 };
 
-async function fredLatest(id: string): Promise<LiveQuote | null> {
+async function fredLatest(id: string, limit = 5): Promise<LiveQuote | null> {
   if (!KEY) return null;
   try {
     const r = await fetch(
-      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=5`,
+      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=${limit}`,
       { cache: "no-store" }
     );
     if (!r.ok) return null;
@@ -44,6 +44,31 @@ async function fredLatest(id: string): Promise<LiveQuote | null> {
     const prev = obs.length > 1 ? parseFloat(obs[1].value) : null;
     const change = prev != null ? price - prev : 0;
     return { price, change, pct: prev ? (change / prev) * 100 : 0 };
+  } catch {
+    return null;
+  }
+}
+
+// For index-level series (CPI, PCE) — compute proper YoY % from 13 monthly observations
+async function fredYoY(id: string): Promise<LiveQuote | null> {
+  if (!KEY) return null;
+  try {
+    const r = await fetch(
+      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=15`,
+      { cache: "no-store" }
+    );
+    if (!r.ok) return null;
+    const obs: { value: string }[] = ((await r.json()).observations ?? []).filter(
+      (o: { value: string }) => o.value !== "."
+    );
+    if (obs.length < 13) return null;
+    const cur  = parseFloat(obs[0].value);
+    const prev = parseFloat(obs[1].value);
+    const yr   = parseFloat(obs[12].value);
+    const yrP  = obs[13] ? parseFloat(obs[13].value) : yr;
+    const yoy     = ((cur  / yr)  - 1) * 100;
+    const prevYoy = ((prev / yrP) - 1) * 100;
+    return { price: yoy, change: yoy - prevYoy, pct: yoy - prevYoy };
   } catch {
     return null;
   }
@@ -395,10 +420,11 @@ export async function GET(req: NextRequest) {
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
     fredLatest("DGS30"), fredLatest("FEDFUNDS"),
-    fredLatest("CPIAUCSL"), fredLatest("CPILFESL"),
-    fredLatest("UNRATE"), fredLatest("PAYEMS"), fredLatest("GDP"),
+    fredYoY("CPIAUCSL"), fredYoY("CPILFESL"),                     // YoY % computed from index
+    fredLatest("UNRATE"), fredLatest("PAYEMS"),
+    fredLatest("A191RL1Q225SBEA"),                                 // Real GDP growth rate % (not level)
     fredLatest("BAMLH0A0HYM2"), fredLatest("SP500"), fredLatest("VIXCLS"),
-    fredLatest("GOLDAMGBD228NLBM"), fredLatest("DCOILWTICO"), fredLatest("DTWEXBGS"),
+    fredLatest("GOLDAMGBD228NLBM", 10), fredLatest("DCOILWTICO"), fredLatest("DTWEXBGS"),
     fredHistory("DGS5", start), fredHistory("DGS10", start),
     fetchFinancialNews().catch(() => []),
     fetchEconomicCalendar().catch(() => []),
@@ -415,8 +441,13 @@ export async function GET(req: NextRequest) {
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
 
+  // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps for all downstream logic
+  const hySpreadBps: typeof hySpread = hySpread
+    ? { price: hySpread.price * 100, change: hySpread.change * 100, pct: hySpread.pct }
+    : null;
+
   const fredConnected = !!(dgs10 || dgs2);
-  const regime = computeRegime(cpi, dgs10, hySpread, gdp);
+  const regime = computeRegime(cpi, dgs10, hySpreadBps, gdp);
 
   return NextResponse.json({
     updatedAt: new Date().toISOString(),
@@ -424,16 +455,16 @@ export async function GET(req: NextRequest) {
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
     equities: { sp500, vix, gold, oil, dxy },
-    macro:    { cpi, coreCpi, unrate, payems, gdp, hySpread },
+    macro:    { cpi, coreCpi, unrate, payems, gdp, hySpread: hySpreadBps },
     history,
     upcomingEvents: (rawEvents as UpcomingEvent[]).slice(0, 6),
     topNews: rawNews.slice(0, 4),
-    driverScores:   computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpread, fedfunds, dgs2, oil),
-    pressureIndex:  computePressure(dgs10, vix, hySpread, dxy, oil),
-    transmission:   computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpread),
-    agreement:      computeAgreement(dgs10, dgs2, dxy, sp500, vix, hySpread, gold),
-    scenarios:      computeScenarios(cpi, fedfunds, hySpread, gdp),
-    edgeInsights:   computeEdgeInsights(cpi, dgs10, hySpread, dxy),
+    driverScores:   computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
+    pressureIndex:  computePressure(dgs10, vix, hySpreadBps, dxy, oil),
+    transmission:   computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpreadBps),
+    agreement:      computeAgreement(dgs10, dgs2, dxy, sp500, vix, hySpreadBps, gold),
+    scenarios:      computeScenarios(cpi, fedfunds, hySpreadBps, gdp),
+    edgeInsights:   computeEdgeInsights(cpi, dgs10, hySpreadBps, dxy),
     regimeLabel:    regime.label,
     regimeScore:    regime.score,
     regimeHeadline: regime.headline,
