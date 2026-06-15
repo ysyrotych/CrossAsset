@@ -34,7 +34,7 @@ const WARNING = "#b7791f";
 
 type MktData = {
   yields: { tnx: { price: number; change: number; pct: number } | null; fvx: { price: number; change: number } | null; tyx: { price: number; change: number } | null };
-  equities: { sp500: { price: number; change: number; pct: number } | null; gold: { price: number; pct: number } | null; oil: { price: number; pct: number } | null; vix: { price: number } | null };
+  equities: { sp500: { price: number; change: number; pct: number } | null; gold: { price: number; change: number; pct: number } | null; oil: { price: number; change: number; pct: number } | null; vix: { price: number; change: number; pct: number } | null; dxy?: { price: number; change: number; pct: number } | null };
   history: { date: string; tenYear?: number; fiveYear?: number }[];
   live: boolean;
 } | null;
@@ -581,7 +581,7 @@ export default function DashboardPage() {
                 { label: "Gold",      val: mkt?.equities.gold?.price,     chg: mkt?.equities.gold?.pct,      note: "Safe haven",          dec: 0, prefix: "$", suffix: "",    chgSuffix: "%" },
                 { label: "WTI Oil",   val: mkt?.equities.oil?.price,      chg: mkt?.equities.oil?.pct,       note: "Energy / inflation",  dec: 2, prefix: "$", suffix: "",    chgSuffix: "%" },
                 { label: "VIX",       val: mkt?.equities.vix?.price,      chg: mkt?.equities.vix?.pct,       note: "Risk gauge",          dec: 1, suffix: "",    chgSuffix: "%" },
-                { label: "USD Index", val: (mkt?.equities as any)?.dxy?.price, chg: (mkt?.equities as any)?.dxy?.pct, note: "FX / global liquidity", dec: 2, suffix: "", chgSuffix: "%" },
+                { label: "USD Index", val: mkt?.equities.dxy?.price, chg: mkt?.equities.dxy?.pct, note: "FX / global liquidity", dec: 2, suffix: "", chgSuffix: "%" },
               ])().map(({ label, val, chg, note, dec, prefix = "", suffix, chgSuffix }) => (
                 <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
                   <MiniLabel>{label}</MiniLabel>
