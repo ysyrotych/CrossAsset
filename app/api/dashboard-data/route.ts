@@ -2,6 +2,9 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
 import { fetchMarketNews, fetchQuote } from "@/lib/sources/finnhub";
 
+// Finnhub ETF proxies (SPY, GLD, USO) are NOT index values — only use for sectors.
+// All main equities quotes come from FRED which has the actual index/commodity levels.
+
 export const dynamic = "force-dynamic";
 
 const FRED = "https://api.stlouisfed.org/fred/series/observations";
@@ -86,12 +89,6 @@ async function fredHistory(id: string, start: string): Promise<{ date: string; v
   } catch {
     return [];
   }
-}
-
-// Convert Finnhub quote to LiveQuote shape
-function fhToLive(fh: { price: number; change: number; pct: number } | null): LiveQuote | null {
-  if (!fh || !fh.price) return null;
-  return { price: fh.price, change: fh.change, pct: fh.pct };
 }
 
 function startDate(tf: string): string {
@@ -337,12 +334,11 @@ export async function GET(req: NextRequest) {
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
     cpi, coreCpi, pce, unrate, payems, gdp,
-    hySpread, fredSP500, fredVix, fredGold, fredOil, dxy,
+    hySpread, sp500, vix, gold, oil, dxy,
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     nasdaq,
     hist5, hist10, histSP500,
     rawNews, rawFinnhubNews,
-    fhSPY, fhGLD, fhUSO, fhVIX,
     ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
@@ -350,8 +346,12 @@ export async function GET(req: NextRequest) {
     fredYoY("CPIAUCSL"), fredYoY("CPILFESL"), fredYoY("PCEPI"),
     fredLatest("UNRATE"), fredLatest("PAYEMS"),
     fredLatest("A191RL1Q225SBEA"),
-    fredLatest("BAMLH0A0HYM2"), fredLatest("SP500"), fredLatest("VIXCLS"),
-    fredLatest("GOLDAMGBD228NLBM", 10), fredLatest("DCOILWTICO"), fredLatest("DTWEXBGS"),
+    fredLatest("BAMLH0A0HYM2"),
+    fredLatest("SP500"),
+    fredLatest("VIXCLS"),
+    fredLatest("GOLDAMGBD228NLBM", 10),
+    fredLatest("DCOILWTICO"),
+    fredLatest("DTWEXBGS"),
     // Extra FRED series for Global Data Snapshot
     fredLatest("T10YIE"),
     fredLatest("MORTGAGE30US"),
@@ -367,12 +367,7 @@ export async function GET(req: NextRequest) {
     // News
     fetchFinancialNews().catch(() => []),
     fetchMarketNews().catch(() => []),
-    // Real-time Finnhub quotes
-    fetchQuote("SPY").catch(() => null),
-    fetchQuote("GLD").catch(() => null),
-    fetchQuote("USO").catch(() => null),
-    fetchQuote("VIXY").catch(() => null),
-    // Sector ETFs
+    // Sector ETFs only from Finnhub (no FRED equivalent)
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
 
@@ -391,12 +386,6 @@ export async function GET(req: NextRequest) {
   const historySP500 = (histSP500 as { date: string; value: number }[]).sort(
     (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
   );
-
-  // Prefer Finnhub real-time over FRED for equities (fresher data)
-  const sp500  = fhToLive(fhSPY)  ?? fredSP500;
-  const gold   = fhToLive(fhGLD)  ?? fredGold;
-  const oil    = fhToLive(fhUSO)  ?? fredOil;
-  const vix    = fhToLive(fhVIX)  ?? fredVix;
 
   // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
@@ -430,7 +419,7 @@ export async function GET(req: NextRequest) {
     historySP500,
     sectors,
     finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
-    topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 4),
+    topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 8),
     driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
     pressureIndex: computePressure(dgs10, vix, hySpreadBps, dxy, oil),
     transmission:  computeTransmission(cpi, coreCpi, fedfunds, dgs10, sp500, dxy, hySpreadBps),

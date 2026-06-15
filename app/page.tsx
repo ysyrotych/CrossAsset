@@ -777,8 +777,8 @@ export default function DashboardPage() {
               <p className="text-[10px] text-[#9ca3af]">Live · NewsAPI · {updatedTime}</p>
             </div>
             <div className="grid grid-cols-4 gap-5">
-              {data!.topNews.slice(0, 4).map((story, i) => (
-                <div key={i} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
+              {data!.topNews.slice(0, 8).map((story, i) => (
+                <div key={i} className={`${i % 4 !== 0 ? "border-l border-[#e8e3da] pl-4" : ""} ${i >= 4 ? "mt-5 pt-5 border-t border-[#e8e3da]" : ""}`}>
                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-1">{story.source}</p>
                   {story.url ? (
                     <a href={story.url} target="_blank" rel="noreferrer" className="block text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3 hover:text-[#0c1b38] hover:underline cursor-pointer">{story.title}</a>

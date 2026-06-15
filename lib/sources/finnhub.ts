@@ -86,16 +86,36 @@ export async function fetchEarningsCalendar(): Promise<EarningsEvent[]> {
 }
 
 export async function fetchMarketNews(): Promise<MarketNewsItem[]> {
-  const data = (await fhGet("/news?category=general")) as Record<string, unknown>[] | null;
-  if (!Array.isArray(data)) return [];
+  // Fetch multiple Finnhub categories for source diversity
+  const [general, forex, merger] = await Promise.all([
+    fhGet("/news?category=general") as Promise<Record<string, unknown>[] | null>,
+    fhGet("/news?category=forex")   as Promise<Record<string, unknown>[] | null>,
+    fhGet("/news?category=merger")  as Promise<Record<string, unknown>[] | null>,
+  ]);
 
-  return data.slice(0, 20).map((n) => ({
-    headline: String(n.headline ?? ""),
-    source:   String(n.source ?? ""),
-    summary:  String(n.summary ?? "").slice(0, 200),
-    datetime: Number(n.datetime ?? 0),
-    url:      String(n.url ?? ""),
-  }));
+  const all = [
+    ...(Array.isArray(general) ? general : []),
+    ...(Array.isArray(forex)   ? forex   : []),
+    ...(Array.isArray(merger)  ? merger  : []),
+  ];
+
+  const seen = new Set<string>();
+  const out: MarketNewsItem[] = [];
+  for (const n of all) {
+    const h = String(n.headline ?? "");
+    if (h && !seen.has(h)) {
+      seen.add(h);
+      out.push({
+        headline: h,
+        source:   String(n.source ?? ""),
+        summary:  String(n.summary ?? "").slice(0, 200),
+        datetime: Number(n.datetime ?? 0),
+        url:      String(n.url ?? ""),
+      });
+    }
+  }
+  // Sort by newest first
+  return out.sort((a, b) => b.datetime - a.datetime).slice(0, 20);
 }
 
 export async function fetchQuote(symbol: string): Promise<FinnhubQuote | null> {
