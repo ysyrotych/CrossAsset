@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import { DEMO_ISSUE } from "@/lib/data/demoData";
 import type { MacroIssue } from "@/lib/types";
@@ -32,14 +32,15 @@ const POSITIVE = "#147a4f";
 const NEGATIVE = "#b42318";
 const WARNING = "#b7791f";
 
-const ratesData = [
-  { date: "Jan", fedFunds: 5.33, twoYear: 4.31, tenYear: 3.89, realRate: 1.74 },
-  { date: "Feb", fedFunds: 5.33, twoYear: 4.55, tenYear: 4.12, realRate: 1.92 },
-  { date: "Mar", fedFunds: 5.33, twoYear: 4.62, tenYear: 4.21, realRate: 2.01 },
-  { date: "Apr", fedFunds: 5.33, twoYear: 4.78, tenYear: 4.43, realRate: 2.18 },
-  { date: "May", fedFunds: 5.33, twoYear: 4.91, tenYear: 4.61, realRate: 2.27 },
-  { date: "Jun", fedFunds: 5.33, twoYear: 4.97, tenYear: 4.68, realRate: 2.32 },
-];
+type MktData = {
+  yields: { tnx: { price: number; change: number; pct: number } | null; fvx: { price: number; change: number } | null; tyx: { price: number; change: number } | null };
+  equities: { sp500: { price: number; change: number; pct: number } | null; gold: { price: number; pct: number } | null; oil: { price: number; pct: number } | null; vix: { price: number } | null };
+  history: { date: string; tenYear?: number; fiveYear?: number }[];
+  live: boolean;
+} | null;
+
+const TF_LABELS = ["1M", "3M", "6M", "1Y", "FOMC"] as const;
+type TF = typeof TF_LABELS[number];
 
 const fedPath = [
   { meeting: "Jun", cut: 8, hold: 86, hike: 6, bias: "Hold", delta: "Cuts -4" },
@@ -430,13 +431,27 @@ function ToneText({ tone, children }: { tone: Direction; children: React.ReactNo
 
 export default function DashboardPage() {
   const [issue, setIssue] = useState<MacroIssue>(DEMO_ISSUE);
+  const [tf, setTf] = useState<TF>("6M");
+  const [mkt, setMkt] = useState<MktData>(null);
+  const [mktLoading, setMktLoading] = useState(true);
 
   useEffect(() => {
     const stored = localStorage.getItem("crossasset_current_issue");
     if (stored) { try { setIssue(JSON.parse(stored)); } catch {} }
   }, []);
 
-  const watchlist = issue.watchlistImpact.slice(0, 5);
+  const fetchMkt = useCallback(async (t: TF) => {
+    setMktLoading(true);
+    try {
+      const r = await fetch(`/api/market-data?tf=${t}`);
+      if (r.ok) setMkt(await r.json());
+    } catch {}
+    setMktLoading(false);
+  }, []);
+
+  useEffect(() => { fetchMkt(tf); }, [tf, fetchMkt]);
+
+  const ratesData = mkt?.history ?? [];
 
   return (
     <AppShell>
@@ -541,105 +556,95 @@ export default function DashboardPage() {
               </div>
 
               <div className="flex gap-1">
-                {["1M", "3M", "6M", "1Y", "FOMC"].map((r, i) => (
-                  <span
+                {TF_LABELS.map((r) => (
+                  <button
                     key={r}
-                    className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase ${
-                      i === 4
+                    onClick={() => setTf(r)}
+                    className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
+                      tf === r
                         ? "border-[#0c1b38] bg-[#0c1b38] text-white"
-                        : "border-[#e8e3da] text-[#777]"
+                        : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
                     }`}
                   >
                     {r}
-                  </span>
+                  </button>
                 ))}
               </div>
             </div>
 
             <div className="mb-5 grid grid-cols-4 gap-3">
               {[
-                ["Fed Funds", "5.33%", "Policy anchor"],
-                ["2Y", "4.97%", "Fed path proxy"],
-                ["10Y", "4.68%", "Equity pressure"],
-                ["2s10s", "-29bps", "Still inverted"],
-              ].map(([label, value, note]) => (
+                { label: "5Y", val: mkt?.yields.fvx?.price, chg: mkt?.yields.fvx?.change, note: "Mid-curve", suffix: "%" },
+                { label: "10Y", val: mkt?.yields.tnx?.price, chg: mkt?.yields.tnx?.change, note: "Equity pressure", suffix: "%" },
+                { label: "30Y", val: mkt?.yields.tyx?.price, chg: mkt?.yields.tyx?.change, note: "Long-end inflation", suffix: "%" },
+                { label: "S&P 500", val: mkt?.equities.sp500?.price, chg: mkt?.equities.sp500?.change, note: mkt?.equities.vix ? `VIX ${mkt.equities.vix.price.toFixed(1)}` : "Equity risk", suffix: "" },
+              ].map(({ label, val, chg, note, suffix }) => (
                 <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
                   <MiniLabel>{label}</MiniLabel>
                   <p className="mt-1 text-[20px] font-bold tabular-nums text-[#0a0a0a]">
-                    {value}
+                    {mktLoading ? "—" : val != null ? `${val.toFixed(suffix === "%" ? 2 : 0)}${suffix}` : "N/A"}
                   </p>
-                  <p className="mt-1 text-[10.5px] font-semibold text-[#777]">{note}</p>
+                  <p className={`mt-1 text-[10.5px] font-semibold ${chg != null && chg !== 0 ? (chg > 0 ? "text-[#b42318]" : "text-[#147a4f]") : "text-[#777]"}`}>
+                    {!mktLoading && chg != null ? `${chg > 0 ? "+" : ""}${chg.toFixed(suffix === "%" ? 2 : 1)}${suffix} · ` : ""}{note}
+                  </p>
                 </div>
               ))}
             </div>
 
             <div className="h-[235px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <LineChart data={ratesData} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
-                  <CartesianGrid stroke="#eee9df" vertical={false} />
-                  <XAxis
-                    dataKey="date"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: "#777" }}
-                  />
-                  <YAxis
-                    domain={[3.5, 5.6]}
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{ fontSize: 11, fill: "#777" }}
-                    tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
-                  />
-                  <Tooltip
-                    contentStyle={{
-                      border: "1px solid #e8e3da",
-                      borderRadius: 0,
-                      fontSize: 12,
-                    }}
-                    formatter={(value: unknown, name: unknown) => [
-                      `${Number(value).toFixed(2)}%`,
-                      String(name),
-                    ]}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="fedFunds"
-                    name="Fed Funds"
-                    stroke={NAVY}
-                    strokeWidth={2.4}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="twoYear"
-                    name="2Y Treasury"
-                    stroke="#6b7280"
-                    strokeWidth={2}
-                    dot={false}
-                  />
-                  <Line
-                    type="monotone"
-                    dataKey="tenYear"
-                    name="10Y Treasury"
-                    stroke={NEGATIVE}
-                    strokeWidth={2.2}
-                    dot={false}
-                  />
-                </LineChart>
-              </ResponsiveContainer>
+              {mktLoading ? (
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading live data…</span>
+                </div>
+              ) : ratesData.length === 0 ? (
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-[11px] text-[#bbb]">No data available</span>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ratesData} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+                    <CartesianGrid stroke="#eee9df" vertical={false} />
+                    <XAxis
+                      dataKey="date"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "#777" }}
+                      interval="preserveStartEnd"
+                    />
+                    <YAxis
+                      domain={["auto", "auto"]}
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{ fontSize: 11, fill: "#777" }}
+                      tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
+                    />
+                    <Tooltip
+                      contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }}
+                      formatter={(value: unknown, name: unknown) => [
+                        `${Number(value).toFixed(2)}%`,
+                        String(name),
+                      ]}
+                    />
+                    <Line type="monotone" dataKey="fiveYear" name="5Y Treasury" stroke="#6b7280" strokeWidth={2} dot={false} connectNulls />
+                    <Line type="monotone" dataKey="tenYear" name="10Y Treasury" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
+                  </LineChart>
+                </ResponsiveContainer>
+              )}
             </div>
 
             <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[#eee9df] pt-4">
               <div>
-                <MiniLabel>Policy gap</MiniLabel>
+                <MiniLabel>5Y–10Y spread</MiniLabel>
                 <p className="mt-1 text-[13px] font-bold text-[#0c1b38]">
-                  Easing path losing confidence
+                  {mkt?.yields.fvx && mkt?.yields.tnx
+                    ? `${((mkt.yields.tnx.price - mkt.yields.fvx.price) * 100).toFixed(0)}bps`
+                    : "Easing path losing confidence"}
                 </p>
               </div>
               <div>
-                <MiniLabel>Duration stress</MiniLabel>
-                <p className="mt-1 text-[13px] font-bold text-[#b42318]">
-                  10Y repricing remains active
+                <MiniLabel>Data source</MiniLabel>
+                <p className={`mt-1 text-[13px] font-bold ${mkt?.live ? "text-[#147a4f]" : "text-[#b7791f]"}`}>
+                  {mkt?.live ? "Live · Yahoo Finance" : "Demo data"}
                 </p>
               </div>
             </div>
@@ -1011,87 +1016,35 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* Bottom */}
-        <div className="grid grid-cols-[1.1fr_0.9fr] gap-5">
-          {/* Watchlist sensitivity */}
+        {/* Today's Stories */}
+        {issue.frontPage && issue.frontPage.length > 0 && (
           <Card className="p-6">
-            <SectionLabel>Watchlist Sensitivity</SectionLabel>
-            <div className="mt-5 overflow-hidden border border-[#eee9df]">
-              <table className="w-full text-left">
-                <thead className="bg-[#fbfaf7]">
-                  <tr className="border-b border-[#eee9df]">
-                    {["Ticker", "Exposure", "Sensitivity", "Why now"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {watchlist.map((w) => {
-                    const tone =
-                      w.impactLevel === "High"
-                        ? "text-[#b42318]"
-                        : w.impactLevel === "Medium"
-                          ? "text-[#b7791f]"
-                          : "text-[#147a4f]";
-
-                    return (
-                      <tr key={w.ticker} className="border-b border-[#f1eee8] last:border-0">
-                        <td className="px-3 py-3">
-                          <p className="text-[12.5px] font-bold text-[#0a0a0a]">{w.ticker}</p>
-                          <p className="mt-0.5 text-[10.5px] font-medium text-[#999]">
-                            {w.companyName}
-                          </p>
-                        </td>
-                        <td className="px-3 py-3 text-[11.5px] font-semibold text-[#0c1b38]">
-                          {w.ticker === "WMT"
-                            ? "Defensive consumer"
-                            : w.ticker === "TGT"
-                              ? "Inflation / discretionary"
-                              : w.ticker === "COST"
-                                ? "Quality / valuation"
-                                : w.ticker === "KR"
-                                  ? "Defensive grocery"
-                                  : "Rates / consumer / FX"}
-                        </td>
-                        <td className={`px-3 py-3 text-[11.5px] font-bold ${tone}`}>
-                          {w.impactLevel}
-                        </td>
-                        <td className="px-3 py-3 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                          {w.explanation}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="flex items-center justify-between mb-6">
+              <SectionLabel>Today's Top Stories</SectionLabel>
+              <p className="text-[10px] text-[#9ca3af]">{issue.date} · {issue.regimeLabel}</p>
             </div>
-          </Card>
-
-          {/* Desk read */}
-          <Card className="p-6">
-            <SectionLabel>Five Things Before the Open</SectionLabel>
-            <div className="mt-5 space-y-4">
-              {issue.talkingPoints.slice(0, 5).map((point, index) => (
-                <div key={index} className="grid grid-cols-[34px_1fr] gap-3 border-b border-[#f1eee8] pb-4 last:border-0 last:pb-0">
-                  <p
-                    className="text-[22px] font-light leading-none text-[#0c1b38]"
-                    style={{ fontFamily: "var(--font-serif)" }}
-                  >
-                    {String(index + 1).padStart(2, "0")}
-                  </p>
-                  <p className="line-clamp-3 text-[12.2px] font-medium leading-relaxed text-[#555]">
-                    {point}
-                  </p>
+            <div className="grid grid-cols-4 gap-5">
+              {issue.frontPage.slice(0, 4).map((story, i) => (
+                <div key={i} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-2">Story {i + 1}</p>
+                  <p className="text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3">{story.headline}</p>
+                  <p className="text-[11.5px] font-medium leading-relaxed text-[#666] mb-3">{story.whyItMatters}</p>
+                  <div className="bg-[#fbfaf7] border border-[#eee9df] p-2.5">
+                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-1">Market Implication</p>
+                    <p className="text-[11.5px] font-medium leading-relaxed text-[#444]">{story.marketImplication}</p>
+                  </div>
+                  {story.affectedAssets?.length > 0 && (
+                    <div className="flex flex-wrap gap-1 mt-2.5">
+                      {story.affectedAssets.map((a) => (
+                        <span key={a} className="text-[9.5px] px-2 py-0.5 border border-[#e8e3da] text-[#777]">{a}</span>
+                      ))}
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
           </Card>
-        </div>
+        )}
       </main>
     </AppShell>
   );

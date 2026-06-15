@@ -23,14 +23,14 @@ export type MacroIssue = {
     implication: string;
     tickers?: string[];
   }[];
-  watchlistImpact: {
+  watchlistImpact?: {
     ticker: string;
     companyName: string;
     impactLevel: "High" | "Medium" | "Low";
     explanation: string;
     suggestedAction: string;
   }[];
-  talkingPoints: string[];
+  talkingPoints?: string[];
   actionItems: {
     title: string;
     priority: "High" | "Medium" | "Low";

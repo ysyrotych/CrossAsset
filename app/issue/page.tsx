@@ -152,72 +152,22 @@ export default function IssuePage() {
 
       <Divider />
 
-      {/* Watchlist Impact */}
-      <Label>Watchlist Impact</Label>
-      <div className="border border-[#ebebeb] rounded-md overflow-hidden mb-2">
-        <table className="w-full text-[12px]">
-          <thead>
-            <tr className="border-b border-[#ebebeb] bg-[#fafafa]">
-              {["Ticker", "Company", "Impact", "Analysis", "Suggested Action"].map((h) => (
-                <th key={h} className="text-left px-5 py-3 text-[10px] font-semibold uppercase tracking-wider text-[#9ca3af]">{h}</th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {issue.watchlistImpact.map((w) => (
-              <tr key={w.ticker} className="border-b border-[#f5f5f5] last:border-0 hover:bg-[#fafafa] transition-colors">
-                <td className="px-5 py-3.5 font-mono font-semibold text-[#0a0a0a]">{w.ticker}</td>
-                <td className="px-5 py-3.5 text-[#374151]">{w.companyName}</td>
-                <td className="px-5 py-3.5">
-                  <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
-                    w.impactLevel === "High" ? "bg-red-50 text-red-600 border border-red-100"
-                    : w.impactLevel === "Medium" ? "bg-amber-50 text-amber-600 border border-amber-100"
-                    : "bg-[#f5f5f5] text-[#9ca3af] border border-[#e5e5e5]"
-                  }`}>{w.impactLevel}</span>
-                </td>
-                <td className="px-5 py-3.5 text-[#6b7280] leading-relaxed max-w-sm">{w.explanation}</td>
-                <td className="px-5 py-3.5 text-[#6b7280] italic">{w.suggestedAction}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      {/* Action Items */}
+      <Label>Action Items</Label>
+      <div className="grid grid-cols-2 gap-3 mb-2">
+        {issue.actionItems.map((item, i) => (
+          <div key={i} className="flex gap-3 p-3 border border-[#ebebeb] rounded-md">
+            <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
+              item.priority === "High" ? "bg-red-400" : item.priority === "Medium" ? "bg-amber-400" : "bg-[#d1d5db]"
+            }`} />
+            <div>
+              <p className="text-[12px] text-[#0a0a0a] font-medium">{item.title}</p>
+              <p className="text-[11px] text-[#9ca3af] mt-0.5">{item.category.replace("_", " ")}{item.dueDate && ` · Due ${item.dueDate}`}</p>
+            </div>
+          </div>
+        ))}
       </div>
 
-      <Divider />
-
-      {/* Talking Points + Action Items */}
-      <div className="grid grid-cols-2 gap-10">
-        <div>
-          <Label>Desk Talking Points</Label>
-          <div className="space-y-4">
-            {issue.talkingPoints.map((pt, i) => (
-              <div key={i} className="flex gap-4">
-                <span className="text-[11px] text-[#0f2044] font-semibold mt-0.5 w-4 shrink-0">{i + 1}.</span>
-                <p className="text-[12.5px] text-[#4b5563] leading-relaxed">{pt}</p>
-              </div>
-            ))}
-          </div>
-        </div>
-        <div>
-          <Label>Action Items</Label>
-          <div className="space-y-2">
-            {issue.actionItems.map((item, i) => (
-              <div key={i} className="flex gap-3 p-3 border border-[#ebebeb] rounded-md">
-                <span className={`mt-1 w-1.5 h-1.5 rounded-full shrink-0 ${
-                  item.priority === "High" ? "bg-red-400" : item.priority === "Medium" ? "bg-amber-400" : "bg-[#d1d5db]"
-                }`} />
-                <div>
-                  <p className="text-[12px] text-[#0a0a0a] font-medium">{item.title}</p>
-                  <p className="text-[11px] text-[#9ca3af] mt-0.5">{item.category.replace("_", " ")}{item.dueDate && ` · Due ${item.dueDate}`}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      </div>
-
-      <Divider />
-      <p className="text-[11px] text-[#9ca3af] leading-relaxed">{issue.dataQualityNote}</p>
     </AppShell>
   );
 }

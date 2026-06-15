@@ -18,8 +18,8 @@ export async function generateMacroIssue(
       "anthropic-version": "2023-06-01",
     },
     body: JSON.stringify({
-      model: "claude-opus-4-8",
-      max_tokens: 8096,
+      model: "claude-haiku-4-5-20251001",
+      max_tokens: 4096,
       messages: [{ role: "user", content: prompt }],
     }),
   });
@@ -47,64 +47,55 @@ function buildPrompt(macroData: MacroData, tickers: string[], calendarCtx: strin
 
   return `You are CrossAsset, an institutional macro desk analyst writing a pre-market morning brief for a junior equity research analyst. Generate today's macro desk brief using the provided macro data and context.
 
-STYLE: Concise, sharp, institutional. No hype. No vague statements. Always explain the "so what." Always connect macro to asset implications. Finance-native language. Write as if briefing a desk before market open.
-
-${dataNote}
+STYLE: Concise, sharp, institutional. No hype. No vague statements. Always explain the "so what." Always connect macro to asset implications. Finance-native language. Write as if briefing a desk before market open. Do NOT include any disclaimer about data quality in the output.
 
 MACRO DATA:
 ${JSON.stringify(macroData, null, 2)}
-
-WATCHLIST TICKERS: ${tickers.join(", ")}
 
 UPCOMING CALENDAR:
 ${calendarCtx}
 
 TODAY'S DATE: ${new Date().toISOString().split("T")[0]}
 
-Return ONLY valid JSON matching this exact TypeScript type (no markdown, no explanation outside the JSON):
+Return ONLY valid JSON (no markdown, no explanation outside the JSON):
 
 {
-  id: string,
-  date: string,
-  title: string,
-  regimeLabel: string,  // e.g. "Fed Repricing / Sticky Inflation" | "Risk-On" | "Growth Scare" | "Commodity Shock"
-  executiveSummary: string,
-  frontPage: Array<{
-    headline: string,
-    whatHappened: string,
-    whyItMatters: string,
-    marketImplication: string,
-    affectedAssets: string[]
-  }>,  // 3 items
-  crossAssetMap: {
-    equities: string,
-    rates: string,
-    fx: string,
-    commodities: string,
-    credit: string
+  "id": "string",
+  "date": "string (today, formatted e.g. June 15, 2026)",
+  "title": "string (compelling one-line macro thesis for today)",
+  "regimeLabel": "string (e.g. Fed Repricing / Sticky Inflation | Risk-On | Growth Scare | Commodity Shock)",
+  "executiveSummary": "string (2-3 sentences: what matters today and why)",
+  "frontPage": [
+    {
+      "headline": "string",
+      "whatHappened": "string",
+      "whyItMatters": "string",
+      "marketImplication": "string",
+      "affectedAssets": ["string"]
+    }
+  ],
+  "crossAssetMap": {
+    "equities": "string",
+    "rates": "string",
+    "fx": "string",
+    "commodities": "string",
+    "credit": "string"
   },
-  sectorTranslation: Array<{
-    sector: string,
-    implication: string,
-    tickers?: string[]
-  }>,  // 5-6 sectors
-  watchlistImpact: Array<{
-    ticker: string,
-    companyName: string,
-    impactLevel: "High" | "Medium" | "Low",
-    explanation: string,
-    suggestedAction: string
-  }>,
-  talkingPoints: string[],  // exactly 5
-  actionItems: Array<{
-    title: string,
-    priority: "High" | "Medium" | "Low",
-    category: string,  // research | watchlist | calendar | reading | model_update | meeting_prep
-    dueDate?: string,
-    relatedTicker?: string,
-    relatedEvent?: string
-  }>,  // 5-7 items
-  sourcesUsed: string[],
-  dataQualityNote: string
-}`;
+  "sectorTranslation": [
+    { "sector": "string", "implication": "string", "tickers": ["string"] }
+  ],
+  "actionItems": [
+    {
+      "title": "string",
+      "priority": "High | Medium | Low",
+      "category": "research | watchlist | calendar | reading | model_update | meeting_prep",
+      "dueDate": "string (optional)",
+      "relatedEvent": "string (optional)"
+    }
+  ],
+  "sourcesUsed": ["string"],
+  "dataQualityNote": "string"
+}
+
+frontPage must have exactly 4 stories. sectorTranslation must have 5-6 sectors. actionItems must have 5-7 items.`;
 }
