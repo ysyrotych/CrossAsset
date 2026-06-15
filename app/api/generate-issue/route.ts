@@ -8,7 +8,7 @@ export async function POST() {
     const macroData = await fetchMacroData();
 
     if (!process.env.ANTHROPIC_API_KEY) {
-      return NextResponse.json({ issue: DEMO_ISSUE, source: "demo" });
+      return NextResponse.json({ issue: DEMO_ISSUE, source: "demo", warning: "ANTHROPIC_API_KEY not set on server — returning demo data" });
     }
 
     const calendarContext = DEMO_CALENDAR.slice(0, 4)
