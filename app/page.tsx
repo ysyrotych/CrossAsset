@@ -2,384 +2,80 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { DEMO_ISSUE } from "@/lib/data/demoData";
-import type { MacroIssue } from "@/lib/types";
 import {
-  Area,
-  AreaChart,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  ResponsiveContainer,
-  Tooltip,
-  XAxis,
-  YAxis,
+  Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
+  ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
-type Severity = "high" | "medium" | "low";
-type Direction = "positive" | "negative" | "neutral" | "mixed";
-type Pressure = "hawkish" | "dovish" | "neutral";
+// ── Types ──────────────────────────────────────────────────────────────────
 
-const NAVY = "#0c1b38";
-const INK = "#0a0a0a";
-const MUTED = "#6f6f6f";
-const BORDER = "#e8e3da";
-const PAPER = "#fbfaf7";
-const POSITIVE = "#147a4f";
+type LiveQuote = { price: number; change: number; pct: number } | null;
+
+type DashData = {
+  updatedAt: string;
+  tf: string;
+  fredConnected: boolean;
+  yields:   { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
+  equities: { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote };
+  macro:    { cpi: LiveQuote; coreCpi: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
+  history:  { date: string; tenYear?: number; fiveYear?: number }[];
+  upcomingEvents: { event: string; date: string; impact: string; estimate?: string; previous?: string }[];
+  topNews:  { title: string; source: string; description: string }[];
+  driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string; explanation: string }[];
+  pressureIndex: { name: string; value: number }[];
+  transmission: { label: string; state: string; pressure: "hawkish" | "dovish" | "neutral"; confidence: number; explanation: string }[];
+  agreement: {
+    confirming:   { signal: string; asset: string; explanation: string }[];
+    contradicting:{ signal: string; asset: string; explanation: string }[];
+  };
+  scenarios: { name: string; probability: number; tone: "positive" | "negative" | "neutral"; trigger: string; market: string }[];
+  edgeInsights: { tag: string; title: string; insight: string; why: string; confidence: number }[];
+  regimeLabel: string; regimeScore: number;
+  regimeHeadline: string; regimeBody1: string; regimeBody2: string;
+  sources: { fred: boolean; finnhub: boolean; newsapi: boolean };
+};
+
+// ── Constants ──────────────────────────────────────────────────────────────
+
+const NAVY     = "#0c1b38";
 const NEGATIVE = "#b42318";
-const WARNING = "#b7791f";
-
-type MktData = {
-  yields: { tnx: { price: number; change: number; pct: number } | null; fvx: { price: number; change: number } | null; tyx: { price: number; change: number } | null };
-  equities: { sp500: { price: number; change: number; pct: number } | null; gold: { price: number; change: number; pct: number } | null; oil: { price: number; change: number; pct: number } | null; vix: { price: number; change: number; pct: number } | null; dxy?: { price: number; change: number; pct: number } | null };
-  history: { date: string; tenYear?: number; fiveYear?: number }[];
-  live: boolean;
-} | null;
-
+const POSITIVE = "#147a4f";
+const WARNING  = "#b7791f";
 const TF_LABELS = ["1M", "3M", "6M", "1Y", "FOMC"] as const;
 type TF = typeof TF_LABELS[number];
 
-const fedPath = [
-  { meeting: "Jun", cut: 8, hold: 86, hike: 6, bias: "Hold", delta: "Cuts -4" },
-  { meeting: "Jul", cut: 14, hold: 72, hike: 14, bias: "Hold", delta: "Hike tail +3" },
-  { meeting: "Sep", cut: 28, hold: 58, hike: 14, bias: "Hold / cut", delta: "Cuts -7" },
-  { meeting: "Dec", cut: 36, hold: 44, hike: 20, bias: "Split", delta: "Hike tail +5" },
-];
-
-const repricingDrivers = [
-  {
-    driver: "Inflation",
-    score: 92,
-    direction: "hawkish" as Pressure,
-    trend: "+8",
-    sensitivity: "High",
-    explanation: "Core services remain too sticky for a clean easing cycle.",
-  },
-  {
-    driver: "Labor",
-    score: 76,
-    direction: "hawkish" as Pressure,
-    trend: "+3",
-    sensitivity: "High",
-    explanation: "Labor is cooling, but not weak enough to force the Fed.",
-  },
-  {
-    driver: "Growth",
-    score: 58,
-    direction: "neutral" as Pressure,
-    trend: "-2",
-    sensitivity: "Medium",
-    explanation: "Growth is slowing, but credit is not signaling a break.",
-  },
-  {
-    driver: "Fed communication",
-    score: 70,
-    direction: "hawkish" as Pressure,
-    trend: "+5",
-    sensitivity: "High",
-    explanation: "Fed speakers keep optionality and resist early-cut pricing.",
-  },
-  {
-    driver: "Energy",
-    score: 51,
-    direction: "neutral" as Pressure,
-    trend: "+1",
-    sensitivity: "Medium",
-    explanation: "Oil is not yet the dominant impulse, but it can keep inflation anxiety alive.",
-  },
-  {
-    driver: "Credit conditions",
-    score: 44,
-    direction: "neutral" as Pressure,
-    trend: "0",
-    sensitivity: "Medium",
-    explanation: "Spreads are wider, but not yet confirming a recessionary shock.",
-  },
-];
-
-const transmission = [
-  {
-    label: "Inflation",
-    state: "Sticky",
-    pressure: "hawkish",
-    confidence: 81,
-    explanation: "Services inflation remains the binding macro constraint.",
-  },
-  {
-    label: "Fed Path",
-    state: "Cuts delayed",
-    pressure: "hawkish",
-    confidence: 76,
-    explanation: "The market is reducing confidence in near-term easing.",
-  },
-  {
-    label: "Rates",
-    state: "Long end higher",
-    pressure: "hawkish",
-    confidence: 79,
-    explanation: "10Y yield becomes the main equity valuation pressure point.",
-  },
-  {
-    label: "Equities",
-    state: "Multiple pressure",
-    pressure: "neutral",
-    confidence: 67,
-    explanation: "Weakness is concentrated in rate-sensitive and expensive assets.",
-  },
-  {
-    label: "FX / Credit",
-    state: "USD firm; credit calm",
-    pressure: "neutral",
-    confidence: 63,
-    explanation: "FX confirms the rates story, while credit resists full risk-off.",
-  },
-];
-
-const agreementSignals = {
-  confirming: [
-    {
-      signal: "10Y yield higher",
-      asset: "Rates",
-      explanation: "The long end confirms the higher-for-longer repricing.",
-    },
-    {
-      signal: "USD firm",
-      asset: "FX",
-      explanation: "Rate differentials continue to support the dollar.",
-    },
-    {
-      signal: "REITs weaker",
-      asset: "Equities",
-      explanation: "Rate-sensitive sectors are reacting to discount-rate pressure.",
-    },
-    {
-      signal: "2Y stays elevated",
-      asset: "Rates",
-      explanation: "The front end remains anchored by a patient Fed.",
-    },
-  ],
-  contradicting: [
-    {
-      signal: "Credit spreads contained",
-      asset: "Credit",
-      explanation: "Credit does not yet confirm a broad recessionary regime.",
-    },
-    {
-      signal: "Mega-cap tech resilient",
-      asset: "Equities",
-      explanation: "AI/earnings momentum is offsetting part of the rates pressure.",
-    },
-    {
-      signal: "VIX not breaking out",
-      asset: "Risk",
-      explanation: "The market is repricing rates, not yet pricing panic.",
-    },
-  ],
-};
-
-const scenarios = [
-  {
-    name: "Base case",
-    probability: 55,
-    tone: "neutral" as Direction,
-    trigger: "Sticky inflation, patient Fed, elevated 10Y.",
-    market: "Selective equity pressure; USD supported; credit stable.",
-  },
-  {
-    name: "Dovish break",
-    probability: 20,
-    tone: "positive" as Direction,
-    trigger: "Core services inflation surprises lower.",
-    market: "Yields fall; duration rallies; USD softens.",
-  },
-  {
-    name: "Hawkish shock",
-    probability: 25,
-    tone: "negative" as Direction,
-    trigger: "Hot CPI or hawkish dots force hikes back into distribution.",
-    market: "10Y higher; broad multiple pressure; credit watch.",
-  },
-];
-
-const heatMatrix = [
-  {
-    driver: "Hot CPI",
-    equities: "Negative",
-    rates: "Yields up",
-    fx: "USD up",
-    commodities: "Mixed",
-    credit: "Wider",
-    active: true,
-  },
-  {
-    driver: "Strong jobs",
-    equities: "Mixed",
-    rates: "Yields up",
-    fx: "USD up",
-    commodities: "Positive",
-    credit: "Neutral",
-    active: false,
-  },
-  {
-    driver: "Weak growth",
-    equities: "Negative",
-    rates: "Yields down",
-    fx: "Mixed",
-    commodities: "Negative",
-    credit: "Wider",
-    active: false,
-  },
-  {
-    driver: "Dovish Fed",
-    equities: "Positive",
-    rates: "Yields down",
-    fx: "USD down",
-    commodities: "Positive",
-    credit: "Tighter",
-    active: false,
-  },
-];
-
-const eventRisk = [
-  {
-    event: "CPI",
-    date: "Jun 11",
-    sensitivity: "Very High",
-    asset: "Rates",
-    breaker: "Core services below consensus weakens the entire higher-for-longer setup.",
-  },
-  {
-    event: "FOMC",
-    date: "Jun 12",
-    sensitivity: "Very High",
-    asset: "Rates / FX",
-    breaker: "Dovish dots or softer inflation language would challenge repricing.",
-  },
-  {
-    event: "PPI",
-    date: "Jun 14",
-    sensitivity: "Medium",
-    asset: "Rates",
-    breaker: "Soft pipeline inflation would lower PCE anxiety.",
-  },
-  {
-    event: "Retail Sales",
-    date: "Jun 18",
-    sensitivity: "High",
-    asset: "Consumer",
-    breaker: "Weak control group would shift focus from inflation to growth risk.",
-  },
-];
-
-const edgeInsights = [
-  {
-    tag: "Regime",
-    title: "This is a discount-rate market, not a recession market.",
-    insight:
-      "Rates and FX confirm hawkish repricing, but credit is not yet pricing a full growth shock.",
-    why:
-      "Equity weakness should stay concentrated in duration-sensitive assets unless credit starts confirming stress.",
-    confidence: 74,
-  },
-  {
-    tag: "Rates",
-    title: "The 10Y is the real pressure point.",
-    insight:
-      "The 2Y reflects Fed patience, but the 10Y determines how much valuation pain reaches equities.",
-    why:
-      "If the long end stabilizes, equities can absorb a hold; if it rises again, multiple pressure broadens.",
-    confidence: 81,
-  },
-  {
-    tag: "FX",
-    title: "The dollar is the hidden earnings variable.",
-    insight:
-      "USD strength tightens global financial conditions and quietly pressures multinational revenue translation.",
-    why:
-      "The FX drag may appear in company narratives later than the rates move appears in markets.",
-    confidence: 69,
-  },
-];
+// ── Primitive components ───────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return (
-    <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">
-      {children}
-    </p>
-  );
+  return <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">{children}</p>;
 }
 
-function Card({
-  children,
-  className = "",
-}: {
-  children: React.ReactNode;
-  className?: string;
-}) {
+function MiniLabel({ children }: { children: React.ReactNode }) {
+  return <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{children}</p>;
+}
+
+function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <section
-      className={`border border-[#e8e3da] bg-white shadow-[0_1px_0_rgba(12,27,56,0.02)] ${className}`}
-    >
+    <section className={`border border-[#e8e3da] bg-white shadow-[0_1px_0_rgba(12,27,56,0.02)] ${className}`}>
       {children}
     </section>
   );
 }
 
-function MiniLabel({ children }: { children: React.ReactNode }) {
+function PressurePill({ pressure }: { pressure: "hawkish" | "dovish" | "neutral" }) {
+  const cls =
+    pressure === "hawkish" ? "text-[#b42318] bg-[#fff7f5] border-[#f2d2cc]" :
+    pressure === "dovish"  ? "text-[#147a4f] bg-[#f4fbf7] border-[#cfe8da]" :
+                             "text-[#555] bg-[#faf8f3] border-[#eee9df]";
   return (
-    <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">
-      {children}
-    </p>
+    <span className={`border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] ${cls}`}>
+      {pressure}
+    </span>
   );
 }
 
-function ProbabilityBar({
-  value,
-  active = false,
-}: {
-  value: number;
-  active?: boolean;
-}) {
-  return (
-    <div>
-      <div className="mb-1 flex items-center justify-between">
-        <span
-          className={`text-[10.5px] font-bold tabular-nums ${
-            active ? "text-[#0c1b38]" : "text-[#777]"
-          }`}
-        >
-          {value}%
-        </span>
-      </div>
-      <div className="h-[5px] bg-[#eee9df]">
-        <div
-          className={`h-full ${active ? "bg-[#0c1b38]" : "bg-[#b9b1a3]"}`}
-          style={{ width: `${value}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function ScoreBar({
-  value,
-  tone = "neutral",
-}: {
-  value: number;
-  tone?: Direction;
-}) {
-  const color =
-    tone === "positive"
-      ? POSITIVE
-      : tone === "negative"
-        ? NEGATIVE
-        : tone === "mixed"
-          ? WARNING
-          : NAVY;
-
+function ScoreBar({ value, tone = "neutral" }: { value: number; tone?: "positive" | "negative" | "neutral" | "mixed" }) {
+  const color = tone === "positive" ? POSITIVE : tone === "negative" ? NEGATIVE : tone === "mixed" ? WARNING : NAVY;
   return (
     <div className="h-[6px] bg-[#eee9df]">
       <div className="h-full" style={{ width: `${value}%`, backgroundColor: color }} />
@@ -387,183 +83,196 @@ function ScoreBar({
   );
 }
 
-function PressurePill({ pressure }: { pressure: Pressure }) {
-  const cls =
-    pressure === "hawkish"
-      ? "text-[#b42318] bg-[#fff7f5] border-[#f2d2cc]"
-      : pressure === "dovish"
-        ? "text-[#147a4f] bg-[#f4fbf7] border-[#cfe8da]"
-        : "text-[#555] bg-[#faf8f3] border-[#eee9df]";
-
+function MetricTile({
+  label, quote, note, dec = 2, prefix = "", suffix = "", pctSuffix = "%", invertColor = false,
+}: {
+  label: string; quote: LiveQuote; note: string;
+  dec?: number; prefix?: string; suffix?: string; pctSuffix?: string; invertColor?: boolean;
+}) {
+  const up = (quote?.change ?? 0) > 0;
+  const color = quote == null ? "#bbb" : (invertColor ? !up : up) ? NEGATIVE : POSITIVE;
   return (
-    <span
-      className={`border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] ${cls}`}
-    >
-      {pressure}
+    <div className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
+      <MiniLabel>{label}</MiniLabel>
+      <p className="mt-1 text-[18px] font-bold tabular-nums text-[#0a0a0a]">
+        {quote != null ? `${prefix}${quote.price.toFixed(dec)}${suffix}` : "—"}
+      </p>
+      <p className="mt-1 text-[10px] font-semibold" style={{ color: quote ? color : "#bbb" }}>
+        {quote != null ? `${quote.pct >= 0 ? "+" : ""}${quote.pct.toFixed(2)}${pctSuffix} · ` : ""}{note}
+      </p>
+    </div>
+  );
+}
+
+function SourceDot({ ok, label }: { ok: boolean; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5">
+      <span className={`w-1.5 h-1.5 rounded-full ${ok ? "bg-[#147a4f]" : "bg-[#bbb]"}`} />
+      <span className={`text-[10px] font-bold uppercase tracking-[0.12em] ${ok ? "text-[#147a4f]" : "text-[#bbb]"}`}>
+        {label}
+      </span>
     </span>
   );
 }
 
-function MatrixCell({ value }: { value: string }) {
-  const v = value.toLowerCase();
-  const color =
-    v.includes("negative") || v.includes("wider") || v.includes("up")
-      ? "text-[#b42318]"
-      : v.includes("positive") || v.includes("tighter") || v.includes("down")
-        ? "text-[#147a4f]"
-        : "text-[#555]";
-
-  return <td className={`px-3 py-3 text-[11px] font-bold ${color}`}>{value}</td>;
-}
-
-function ToneText({ tone, children }: { tone: Direction; children: React.ReactNode }) {
-  const cls =
-    tone === "positive"
-      ? "text-[#147a4f]"
-      : tone === "negative"
-        ? "text-[#b42318]"
-        : tone === "mixed"
-          ? "text-[#b7791f]"
-          : "text-[#0c1b38]";
-
-  return <span className={cls}>{children}</span>;
-}
+// ── Main page ──────────────────────────────────────────────────────────────
 
 export default function DashboardPage() {
-  const [issue, setIssue] = useState<MacroIssue>(DEMO_ISSUE);
-  const [tf, setTf] = useState<TF>("6M");
-  const [mkt, setMkt] = useState<MktData>(null);
-  const [mktLoading, setMktLoading] = useState(true);
+  const [tf,      setTf]      = useState<TF>("6M");
+  const [data,    setData]    = useState<DashData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error,   setError]   = useState<string | null>(null);
 
-  useEffect(() => {
-    const stored = localStorage.getItem("crossasset_current_issue");
-    if (stored) { try { setIssue(JSON.parse(stored)); } catch {} }
-  }, []);
-
-  const fetchMkt = useCallback(async (t: TF) => {
-    setMktLoading(true);
+  const fetchData = useCallback(async (t: TF) => {
+    setLoading(true);
+    setError(null);
     try {
-      const r = await fetch(`/api/market-data?tf=${t}`);
-      if (r.ok) setMkt(await r.json());
-    } catch {}
-    setMktLoading(false);
+      const r = await fetch(`/api/dashboard-data?tf=${t}`);
+      if (!r.ok) throw new Error(`HTTP ${r.status}`);
+      setData(await r.json());
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "Failed to load");
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { fetchMkt(tf); }, [tf, fetchMkt]);
+  useEffect(() => { fetchData(tf); }, [tf, fetchData]);
 
-  const ratesData = mkt?.history ?? [];
+  const updatedTime = data?.updatedAt
+    ? new Date(data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
+    : null;
+
+  const today = new Date().toLocaleDateString("en-US", { weekday: "long", year: "numeric", month: "long", day: "numeric" });
 
   return (
     <AppShell>
       <main className="max-w-[1480px] pb-16">
-        {/* Top page header */}
+
+        {/* ── Header ─────────────────────────────────────────────────── */}
         <div className="mb-7 border-b border-[#e8e3da] pb-6">
-          <div className="flex items-end justify-between gap-10">
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] whitespace-nowrap">CrossAsset Command Center</p>
-              <h1
-                className="mt-3 text-[42px] font-light leading-[0.95] tracking-tight text-[#0a0a0a]"
-                style={{ fontFamily: "var(--font-serif)" }}
-              >
-                The market is repricing the cost of money.
+          <div className="flex items-start justify-between gap-10">
+            <div className="flex-1">
+              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">CrossAsset Command Center</p>
+              <h1 className="mt-3 text-[38px] font-light leading-[1.05] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
+                {loading ? "Loading live market data…" : data?.regimeHeadline ?? "Connecting to data sources…"}
               </h1>
-              <p className="mt-4 max-w-4xl text-[14px] font-medium leading-[1.75] text-[#555]">
-                A single-page macro intelligence system built around the chain that matters:
-                regime, market pricing, transmission, cross-asset disagreement, and catalysts.
+              <p className="mt-4 max-w-3xl text-[13.5px] font-medium leading-[1.75] text-[#555]">
+                {loading ? "Fetching FRED, Finnhub, and NewsAPI in real time." : data?.regimeBody1 ?? ""}
               </p>
             </div>
 
-            <div className="min-w-[250px] text-right">
-              <MiniLabel>Pre-market brief</MiniLabel>
-              <p className="mt-1 text-[13px] font-bold text-[#0c1b38]">
-                Monday, June 8, 2026
-              </p>
-              <p className="mt-1 text-[11px] font-semibold text-[#999]">
-                Demo data · 6:30 AM update
-              </p>
+            <div className="min-w-[260px] flex flex-col items-end gap-3">
+              <div className="text-right">
+                <p className="text-[11px] font-bold text-[#0c1b38]">{today}</p>
+                <p className="mt-0.5 text-[11px] font-semibold text-[#999]">
+                  {loading ? "Fetching…" : updatedTime ? `Live · Updated ${updatedTime}` : "No connection"}
+                </p>
+              </div>
+
+              {/* Source indicators */}
+              {data && (
+                <div className="flex gap-3">
+                  <SourceDot ok={data.sources.fred}    label="FRED" />
+                  <SourceDot ok={data.sources.finnhub} label="Finnhub" />
+                  <SourceDot ok={data.sources.newsapi} label="NewsAPI" />
+                </div>
+              )}
+
+              {/* Refresh button */}
+              <button
+                onClick={() => fetchData(tf)}
+                disabled={loading}
+                className="flex items-center gap-2 border border-[#0c1b38] bg-[#0c1b38] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+              >
+                <span className={loading ? "animate-spin" : ""}>↻</span>
+                {loading ? "Updating…" : "Refresh Data"}
+              </button>
             </div>
           </div>
         </div>
 
-        {/* Layer 1 */}
+        {/* ── Error state ─────────────────────────────────────────────── */}
+        {error && (
+          <div className="mb-5 border border-[#f2d2cc] bg-[#fff7f5] p-4">
+            <p className="text-[12px] font-bold text-[#b42318]">Connection error: {error}</p>
+            <p className="mt-1 text-[11px] text-[#777]">Check that FRED_API_KEY is set in Vercel environment variables.</p>
+          </div>
+        )}
+
+        {/* ── No FRED key warning ──────────────────────────────────────── */}
+        {data && !data.fredConnected && (
+          <div className="mb-5 border border-[#f0e3c3] bg-[#fffbf0] p-4">
+            <p className="text-[12px] font-bold text-[#b7791f]">FRED API not connected — add FRED_API_KEY to Vercel environment variables.</p>
+            <p className="mt-1 text-[11px] text-[#777]">Register free at fred.stlouisfed.org · Market data sections will show live values once connected.</p>
+          </div>
+        )}
+
+        {/* ── Layer 1: Chief View · Rates · Upcoming Events ───────────── */}
         <div className="mb-5 grid grid-cols-[1.1fr_1.45fr_1fr] gap-5">
+
           {/* Chief View */}
           <Card className="p-6">
             <div className="mb-6 flex items-center justify-between">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] whitespace-nowrap">Chief View</p>
-              <span className="border border-[#e8e3da] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">
-                Regime 74%
-              </span>
+              <SectionLabel>Chief View</SectionLabel>
+              {data && (
+                <span className="border border-[#e8e3da] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">
+                  Regime {data.regimeScore}%
+                </span>
+              )}
             </div>
 
-            <h2
-              className="text-[24px] font-light leading-[1.15] tracking-tight text-[#0a0a0a]"
-              style={{ fontFamily: "var(--font-serif)" }}
-            >
-              Higher-for-longer is back in control.
+            <h2 className="text-[22px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
+              {loading ? "—" : data?.regimeHeadline ?? "—"}
             </h2>
 
-            <div className="mt-5 space-y-4 text-[13.5px] font-medium leading-[1.75] text-[#4b4b4b]">
-              <p>
-                Sticky inflation and resilient labor data keep the Fed patient, anchoring the
-                front end and pushing the burden of repricing into the 10Y.
-              </p>
-              <p>
-                Equities are not yet in full risk-off, but discount-rate pressure is real.
-                The decisive question is whether credit begins to confirm the rates signal.
-              </p>
+            <div className="mt-5 space-y-4 text-[13px] font-medium leading-[1.75] text-[#4b4b4b]">
+              <p>{loading ? "Loading…" : data?.regimeBody1 ?? ""}</p>
+              <p>{loading ? "" : data?.regimeBody2 ?? ""}</p>
             </div>
 
             <div className="mt-6 grid grid-cols-2 gap-4 border-t border-[#eee9df] pt-5">
               <div>
                 <MiniLabel>Regime</MiniLabel>
-                <p className="mt-1 text-[13px] font-bold text-[#0c1b38]">
-                  {issue.regimeLabel}
+                <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">{data?.regimeLabel ?? "—"}</p>
+              </div>
+              <div>
+                <MiniLabel>10Y Yield</MiniLabel>
+                <p className={`mt-1 text-[12px] font-bold ${(data?.yields.dgs10?.change ?? 0) > 0 ? "text-[#b42318]" : "text-[#147a4f]"}`}>
+                  {data?.yields.dgs10 ? `${data.yields.dgs10.price.toFixed(2)}% (${data.yields.dgs10.change >= 0 ? "+" : ""}${data.yields.dgs10.change.toFixed(2)}%)` : "—"}
                 </p>
               </div>
               <div>
-                <MiniLabel>Changed vs yesterday</MiniLabel>
-                <p className="mt-1 text-[13px] font-bold text-[#b42318]">
-                  Hawkish +6
-                </p>
-              </div>
-              <div>
-                <MiniLabel>Invalidated by</MiniLabel>
-                <p className="mt-1 text-[12px] font-semibold leading-snug text-[#555]">
-                  Downside core inflation surprise.
+                <MiniLabel>HY Spread</MiniLabel>
+                <p className="mt-1 text-[12px] font-semibold text-[#555]">
+                  {data?.macro.hySpread ? `${data.macro.hySpread.price.toFixed(0)}bps` : "—"}
                 </p>
               </div>
               <div>
                 <MiniLabel>Market state</MiniLabel>
-                <p className="mt-1 text-[12px] font-semibold leading-snug text-[#555]">
-                  Repricing, not panic.
+                <p className="mt-1 text-[12px] font-semibold text-[#555]">
+                  {data?.regimeLabel ?? "—"}
                 </p>
               </div>
             </div>
           </Card>
 
-          {/* Rates Command */}
+          {/* Rates Command Center */}
           <Card className="p-6">
             <div className="mb-5 flex items-start justify-between gap-6">
               <div>
-                <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] whitespace-nowrap">Rates Command Center</p>
-                <h3
-                  className="mt-3 text-[24px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]"
-                  style={{ fontFamily: "var(--font-serif)" }}
-                >
-                  The 10Y is where macro becomes equity pressure.
+                <SectionLabel>Rates Command Center</SectionLabel>
+                <h3 className="mt-3 text-[21px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
+                  {data?.yields.dgs10 ? `10Y at ${data.yields.dgs10.price.toFixed(2)}% — live from FRED` : "Connecting to FRED…"}
                 </h3>
               </div>
-
-              <div className="flex gap-1">
+              <div className="flex gap-1 shrink-0">
                 {TF_LABELS.map((r) => (
                   <button
                     key={r}
                     onClick={() => setTf(r)}
                     className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
-                      tf === r
-                        ? "border-[#0c1b38] bg-[#0c1b38] text-white"
-                        : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
+                      tf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
                     }`}
                   >
                     {r}
@@ -572,240 +281,198 @@ export default function DashboardPage() {
               </div>
             </div>
 
+            {/* 8 metric tiles */}
             <div className="mb-5 grid grid-cols-4 gap-3">
-              {((): { label: string; val: number | undefined; chg: number | undefined; note: string; dec: number; prefix?: string; suffix: string; chgSuffix: string }[] => [
-                { label: "5Y Yield",  val: mkt?.yields.fvx?.price,       chg: mkt?.yields.fvx?.change,      note: "Mid-curve",           dec: 2, suffix: "%",  chgSuffix: "%" },
-                { label: "10Y Yield", val: mkt?.yields.tnx?.price,       chg: mkt?.yields.tnx?.change,      note: "Equity pressure",     dec: 2, suffix: "%",  chgSuffix: "%" },
-                { label: "30Y Yield", val: mkt?.yields.tyx?.price,       chg: mkt?.yields.tyx?.change,      note: "Long-end inflation",  dec: 2, suffix: "%",  chgSuffix: "%" },
-                { label: "S&P 500",   val: mkt?.equities.sp500?.price,   chg: mkt?.equities.sp500?.pct,     note: "US equities",         dec: 0, suffix: "",    chgSuffix: "%" },
-                { label: "Gold",      val: mkt?.equities.gold?.price,     chg: mkt?.equities.gold?.pct,      note: "Safe haven",          dec: 0, prefix: "$", suffix: "",    chgSuffix: "%" },
-                { label: "WTI Oil",   val: mkt?.equities.oil?.price,      chg: mkt?.equities.oil?.pct,       note: "Energy / inflation",  dec: 2, prefix: "$", suffix: "",    chgSuffix: "%" },
-                { label: "VIX",       val: mkt?.equities.vix?.price,      chg: mkt?.equities.vix?.pct,       note: "Risk gauge",          dec: 1, suffix: "",    chgSuffix: "%" },
-                { label: "USD Index", val: mkt?.equities.dxy?.price, chg: mkt?.equities.dxy?.pct, note: "FX / global liquidity", dec: 2, suffix: "", chgSuffix: "%" },
-              ])().map(({ label, val, chg, note, dec, prefix = "", suffix, chgSuffix }) => (
-                <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
-                  <MiniLabel>{label}</MiniLabel>
-                  <p className="mt-1 text-[18px] font-bold tabular-nums text-[#0a0a0a]">
-                    {mktLoading ? "—" : val != null ? `${prefix}${val.toFixed(dec)}${suffix}` : "N/A"}
-                  </p>
-                  <p className={`mt-1 text-[10px] font-semibold ${chg != null && chg !== 0 ? (chg > 0 ? "text-[#b42318]" : "text-[#147a4f]") : "text-[#777]"}`}>
-                    {!mktLoading && chg != null ? `${chg > 0 ? "+" : ""}${chg.toFixed(2)}${chgSuffix} · ` : ""}{note}
-                  </p>
-                </div>
-              ))}
+              <MetricTile label="5Y Yield"  quote={data?.yields.dgs5  ?? null} note="Mid-curve"           dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="10Y Yield" quote={data?.yields.dgs10 ?? null} note="Equity pressure"     dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="30Y Yield" quote={data?.yields.dgs30 ?? null} note="Long-end inflation"  dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="S&P 500"   quote={data?.equities.sp500 ?? null} note="US equities"       dec={0} />
+              <MetricTile label="Gold"      quote={data?.equities.gold  ?? null} note="Safe haven"        dec={0} prefix="$" />
+              <MetricTile label="WTI Oil"   quote={data?.equities.oil   ?? null} note="Energy / inflation" dec={2} prefix="$" />
+              <MetricTile label="VIX"       quote={data?.equities.vix   ?? null} note="Risk gauge"        dec={1} invertColor />
+              <MetricTile label="USD Index" quote={data?.equities.dxy   ?? null} note="FX / global liquidity" dec={2} invertColor />
             </div>
 
-            <div className="h-[235px]">
-              {mktLoading ? (
+            {/* Yield curve chart */}
+            <div className="h-[200px]">
+              {loading ? (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading live data…</span>
                 </div>
-              ) : ratesData.length === 0 ? (
+              ) : !data?.history.length ? (
                 <div className="h-full flex items-center justify-center">
-                  <span className="text-[11px] text-[#bbb]">No data available</span>
+                  <span className="text-[11px] text-[#bbb]">Chart data unavailable — check FRED_API_KEY</span>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={ratesData} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+                  <LineChart data={data.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
                     <CartesianGrid stroke="#eee9df" vertical={false} />
-                    <XAxis
-                      dataKey="date"
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: "#777" }}
-                      interval="preserveStartEnd"
-                    />
-                    <YAxis
-                      domain={["auto", "auto"]}
-                      axisLine={false}
-                      tickLine={false}
-                      tick={{ fontSize: 11, fill: "#777" }}
-                      tickFormatter={(v) => `${Number(v).toFixed(1)}%`}
-                    />
-                    <Tooltip
-                      contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }}
-                      formatter={(value: unknown, name: unknown) => [
-                        `${Number(value).toFixed(2)}%`,
-                        String(name),
-                      ]}
-                    />
-                    <Line type="monotone" dataKey="fiveYear" name="5Y Treasury" stroke="#6b7280" strokeWidth={2} dot={false} connectNulls />
-                    <Line type="monotone" dataKey="tenYear" name="10Y Treasury" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" />
+                    <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
+                    <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [`${Number(v).toFixed(2)}%`]} />
+                    <Line type="monotone" dataKey="fiveYear"  name="5Y Treasury"  stroke="#6b7280" strokeWidth={2}   dot={false} connectNulls />
+                    <Line type="monotone" dataKey="tenYear"   name="10Y Treasury" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
                   </LineChart>
                 </ResponsiveContainer>
               )}
             </div>
 
-            <div className="mt-5 grid grid-cols-2 gap-4 border-t border-[#eee9df] pt-4">
+            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-[#eee9df] pt-4">
               <div>
                 <MiniLabel>5Y–10Y spread</MiniLabel>
-                <p className="mt-1 text-[13px] font-bold text-[#0c1b38]">
-                  {mkt?.yields.fvx && mkt?.yields.tnx
-                    ? `${((mkt.yields.tnx.price - mkt.yields.fvx.price) * 100).toFixed(0)}bps`
-                    : "Easing path losing confidence"}
+                <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">
+                  {data?.yields.dgs5 && data?.yields.dgs10
+                    ? `${((data.yields.dgs10.price - data.yields.dgs5.price) * 100).toFixed(0)}bps`
+                    : "—"}
                 </p>
               </div>
               <div>
-                <MiniLabel>Data source</MiniLabel>
-                <p className={`mt-1 text-[13px] font-bold ${mkt?.live ? "text-[#147a4f]" : "text-[#b7791f]"}`}>
-                  {mkt?.live ? "Live · Yahoo Finance" : "Demo data"}
+                <MiniLabel>2Y–10Y spread</MiniLabel>
+                <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">
+                  {data?.yields.dgs2 && data?.yields.dgs10
+                    ? `${((data.yields.dgs10.price - data.yields.dgs2.price) * 100).toFixed(0)}bps`
+                    : "—"}
+                </p>
+              </div>
+              <div>
+                <MiniLabel>Fed Funds</MiniLabel>
+                <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">
+                  {data?.yields.fedfunds ? `${data.yields.fedfunds.price.toFixed(2)}%` : "—"}
                 </p>
               </div>
             </div>
           </Card>
 
-          {/* Market Pricing */}
+          {/* Upcoming Key Events (live from Finnhub) */}
           <Card className="p-6">
-            <div className="mb-5">
-              <SectionLabel>Market Pricing</SectionLabel>
-              <h3
-                className="mt-3 text-[22px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]"
-                style={{ fontFamily: "var(--font-serif)" }}
-              >
-                Fed path distribution is still centered on hold.
-              </h3>
-            </div>
+            <SectionLabel>Upcoming Key Events</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">
+              {data?.sources.finnhub ? "Live · Finnhub economic calendar" : "Finnhub not connected"}
+            </p>
 
-            <div className="border border-[#eee9df]">
-              <table className="w-full text-left">
-                <thead className="bg-[#fbfaf7]">
-                  <tr className="border-b border-[#eee9df]">
-                    {["Mtg", "Cut", "Hold", "Hike", "Bias"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-2 text-[9px] font-bold uppercase tracking-[0.16em] text-[#777]"
-                      >
-                        {h}
-                      </th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {fedPath.map((row) => {
-                    const max = Math.max(row.cut, row.hold, row.hike);
-                    return (
-                      <tr key={row.meeting} className="border-b border-[#f1eee8] last:border-0">
-                        <td className="px-3 py-3 text-[12px] font-bold text-[#0a0a0a]">
-                          {row.meeting}
-                        </td>
-                        <td className="px-3 py-3">
-                          <ProbabilityBar value={row.cut} active={row.cut === max} />
-                        </td>
-                        <td className="px-3 py-3">
-                          <ProbabilityBar value={row.hold} active={row.hold === max} />
-                        </td>
-                        <td className="px-3 py-3">
-                          <ProbabilityBar value={row.hike} active={row.hike === max} />
-                        </td>
-                        <td className="px-3 py-3">
-                          <p className="text-[11px] font-bold text-[#0c1b38]">{row.bias}</p>
-                          <p className="mt-1 text-[9.5px] font-semibold text-[#999]">{row.delta}</p>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="mt-5 border-t border-[#eee9df] pt-4">
-              <MiniLabel>Distribution skew</MiniLabel>
-              <div className="mt-2 flex h-2 overflow-hidden bg-[#eee9df]">
-                <div className="bg-[#147a4f]" style={{ width: "22%" }} />
-                <div className="bg-[#0c1b38]" style={{ width: "58%" }} />
-                <div className="bg-[#b42318]" style={{ width: "20%" }} />
+            {loading ? (
+              <p className="mt-6 text-[12px] text-[#bbb]">Loading events…</p>
+            ) : !data?.upcomingEvents.length ? (
+              <div className="mt-6">
+                <p className="text-[12px] text-[#bbb] mb-4">No upcoming events — add FINNHUB_API_KEY to Vercel</p>
+                {/* Fallback: show macro metrics instead */}
+                <div className="space-y-3 border-t border-[#eee9df] pt-4">
+                  <MiniLabel>Key macro levels</MiniLabel>
+                  {[
+                    { label: "CPI",          val: data?.macro.cpi?.price,      suffix: "%" },
+                    { label: "Core CPI",     val: data?.macro.coreCpi?.price,  suffix: "%" },
+                    { label: "Unemployment", val: data?.macro.unrate?.price,   suffix: "%" },
+                    { label: "HY OAS",       val: data?.macro.hySpread?.price, suffix: "bps" },
+                    { label: "GDP",          val: data?.macro.gdp?.price,      suffix: "%" },
+                  ].map(({ label, val, suffix }) => (
+                    <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] pb-2 last:border-0">
+                      <p className="text-[12px] font-bold text-[#0a0a0a]">{label}</p>
+                      <p className="text-[12px] font-bold text-[#0c1b38]">{val != null ? `${val.toFixed(val > 100 ? 0 : 1)}${suffix}` : "—"}</p>
+                    </div>
+                  ))}
+                </div>
               </div>
-              <p className="mt-3 text-[12.5px] font-medium leading-relaxed text-[#666]">
-                The market is not confidently pricing cuts. The hold distribution dominates, while
-                the hike tail is no longer negligible. Demo probabilities shown.
-              </p>
-            </div>
+            ) : (
+              <div className="mt-5 space-y-0">
+                {data.upcomingEvents.map((e, i) => (
+                  <div key={i} className="border-b border-[#f1eee8] py-3 last:border-0">
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[12.5px] font-bold text-[#0a0a0a]">{e.event}</p>
+                      <p className="text-[11px] font-bold text-[#0c1b38] shrink-0">{new Date(e.date).toLocaleDateString("en-US", { month: "short", day: "numeric" })}</p>
+                    </div>
+                    <div className="mt-1 flex items-center gap-3">
+                      <span className={`text-[9.5px] font-bold uppercase tracking-[0.12em] ${e.impact === "high" ? "text-[#b42318]" : e.impact === "medium" ? "text-[#b7791f]" : "text-[#777]"}`}>
+                        {e.impact} impact
+                      </span>
+                      {e.estimate && <span className="text-[9.5px] text-[#999]">est: {e.estimate}</span>}
+                      {e.previous && <span className="text-[9.5px] text-[#999]">prev: {e.previous}</span>}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </Card>
         </div>
 
-        {/* Layer 2 */}
+        {/* ── Layer 2: Drivers · Transmission · Agreement ─────────────── */}
         <div className="mb-5 grid grid-cols-[0.9fr_1.2fr_0.9fr] gap-5">
-          {/* Repricing drivers */}
+
+          {/* Repricing Drivers — computed from FRED */}
           <Card className="p-6">
             <SectionLabel>Repricing Drivers</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Computed from live FRED data" : "Awaiting FRED connection"}</p>
             <div className="mt-5 space-y-4">
-              {repricingDrivers.map((d) => (
+              {(data?.driverScores ?? []).map((d) => (
                 <div key={d.driver}>
                   <div className="mb-1.5 flex items-start justify-between gap-4">
                     <div>
                       <p className="text-[12.5px] font-bold text-[#0a0a0a]">{d.driver}</p>
                       <div className="mt-1 flex items-center gap-2">
                         <PressurePill pressure={d.direction} />
-                        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#999]">
-                          {d.sensitivity}
-                        </span>
+                        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#999]">{d.sensitivity}</span>
                       </div>
                     </div>
-                    <div className="text-right">
+                    <div className="text-right shrink-0">
                       <p className="text-[13px] font-bold tabular-nums text-[#0c1b38]">{d.score}</p>
-                      <p className="text-[10px] font-bold tabular-nums text-[#b42318]">{d.trend}</p>
+                      <p className={`text-[10px] font-bold tabular-nums ${d.direction === "hawkish" ? "text-[#b42318]" : "text-[#147a4f]"}`}>{d.trend}</p>
                     </div>
                   </div>
                   <ScoreBar value={d.score} tone={d.direction === "hawkish" ? "negative" : "neutral"} />
-                  <p className="mt-2 text-[11.8px] font-medium leading-relaxed text-[#666]">
-                    {d.explanation}
-                  </p>
+                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">{d.explanation}</p>
                 </div>
               ))}
+              {loading && <p className="text-[12px] text-[#bbb]">Computing from FRED…</p>}
             </div>
           </Card>
 
-          {/* Transmission */}
+          {/* Macro Transmission Chain — computed */}
           <Card className="p-6">
             <SectionLabel>Macro Transmission Chain</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived from live FRED series" : "Awaiting FRED connection"}</p>
             <div className="mt-5 space-y-0">
-              {transmission.map((node, index) => (
+              {(data?.transmission ?? []).map((node, index) => (
                 <div key={node.label} className="relative">
                   <div className="flex items-start gap-4 py-4 border-b border-[#f1eee8] last:border-0">
-                    {/* Step number + connector */}
                     <div className="flex flex-col items-center shrink-0 w-8 pt-0.5">
                       <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#bbb]">
                         {String(index + 1).padStart(2, "0")}
                       </span>
-                      {index < transmission.length - 1 && (
+                      {index < (data?.transmission.length ?? 0) - 1 && (
                         <div className="mt-1.5 w-px flex-1 bg-[#e8e3da]" style={{ minHeight: 20 }} />
                       )}
                     </div>
-                    {/* Content */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center justify-between gap-3 mb-1.5">
                         <div className="flex items-center gap-2">
                           <p className="text-[13px] font-bold text-[#0a0a0a]">{node.label}</p>
                           <span className="text-[11px] font-bold text-[#0c1b38]">→</span>
-                          <p className="text-[13px] font-bold text-[#0c1b38]">{node.state}</p>
+                          <p className="text-[12px] font-bold text-[#0c1b38]">{node.state}</p>
                         </div>
-                        <PressurePill pressure={node.pressure as Pressure} />
+                        <PressurePill pressure={node.pressure} />
                       </div>
-                      <p className="text-[12px] font-medium leading-relaxed text-[#666]">
-                        {node.explanation}
-                      </p>
+                      <p className="text-[12px] font-medium leading-relaxed text-[#666]">{node.explanation}</p>
                       <div className="mt-2 flex items-center gap-2">
                         <div className="flex-1 h-[4px] bg-[#eee9df]">
                           <div className="h-full bg-[#0c1b38]" style={{ width: `${node.confidence}%` }} />
                         </div>
-                        <span className="text-[10px] font-bold text-[#999] tabular-nums shrink-0">
-                          {node.confidence}%
-                        </span>
+                        <span className="text-[10px] font-bold text-[#999] tabular-nums shrink-0">{node.confidence}%</span>
                       </div>
                     </div>
                   </div>
                 </div>
               ))}
+              {loading && <p className="mt-4 text-[12px] text-[#bbb]">Deriving chain from FRED…</p>}
             </div>
           </Card>
 
-          {/* Agreement map */}
+          {/* Cross-Asset Agreement — computed */}
           <Card className="p-6">
             <SectionLabel>Cross-Asset Agreement</SectionLabel>
-            <div className="mt-5 space-y-1">
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived from live quote directions" : "Awaiting FRED connection"}</p>
+            <div className="mt-5">
               <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#147a4f]">Confirms</p>
               <div className="space-y-2 mb-5">
-                {agreementSignals.confirming.map((s) => (
+                {(data?.agreement.confirming ?? []).map((s) => (
                   <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
                     <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#147a4f] shrink-0" />
                     <div className="min-w-0">
@@ -820,7 +487,7 @@ export default function DashboardPage() {
               </div>
               <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b42318]">Diverges</p>
               <div className="space-y-2">
-                {agreementSignals.contradicting.map((s) => (
+                {(data?.agreement.contradicting ?? []).map((s) => (
                   <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
                     <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#b42318] shrink-0" />
                     <div className="min-w-0">
@@ -834,221 +501,204 @@ export default function DashboardPage() {
                 ))}
               </div>
             </div>
-
-            <div className="mt-5 border-t border-[#eee9df] pt-4">
-              <MiniLabel>Key disagreement</MiniLabel>
-              <p className="mt-2 text-[12.5px] font-bold leading-relaxed text-[#0c1b38]">
-                If credit continues to ignore rates pressure, this remains a repricing episode —
-                not a full risk-off regime.
-              </p>
-            </div>
+            {loading && <p className="mt-4 text-[12px] text-[#bbb]">Analyzing agreement…</p>}
           </Card>
         </div>
 
-        {/* Layer 3 */}
+        {/* ── Layer 3: Edge · Scenarios · Macro metrics ────────────────── */}
         <div className="mb-5 grid grid-cols-[1.15fr_0.95fr_0.9fr] gap-5">
-          {/* Edge */}
+
+          {/* CrossAsset Edge — computed */}
           <Card className="p-6">
             <SectionLabel>CrossAsset Edge</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived algorithmically from live data" : "Awaiting FRED connection"}</p>
             <div className="mt-5 grid grid-cols-3 gap-5">
-              {edgeInsights.map((edge) => (
-                <div key={edge.title} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
+              {(data?.edgeInsights ?? []).map((edge) => (
+                <div key={edge.tag} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
                   <div className="mb-3 flex items-center justify-between gap-3">
-                    <span className="border border-[#eee9df] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38]">
-                      {edge.tag}
-                    </span>
-                    <span className="text-[11px] font-bold tabular-nums text-[#0c1b38]">
-                      {edge.confidence}%
-                    </span>
+                    <span className="border border-[#eee9df] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38]">{edge.tag}</span>
+                    <span className="text-[11px] font-bold tabular-nums text-[#0c1b38]">{edge.confidence}%</span>
                   </div>
                   <p className="text-[13px] font-bold leading-snug text-[#0a0a0a]">{edge.title}</p>
-                  <p className="mt-2 text-[11.8px] font-medium leading-relaxed text-[#666]">
-                    {edge.insight}
-                  </p>
-                  <p className="mt-3 text-[11.5px] font-semibold leading-relaxed text-[#0c1b38]">
-                    {edge.why}
-                  </p>
+                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">{edge.insight}</p>
+                  <p className="mt-3 text-[11.5px] font-semibold leading-relaxed text-[#0c1b38]">{edge.why}</p>
                 </div>
               ))}
+              {loading && <p className="text-[12px] text-[#bbb]">Computing edge insights…</p>}
             </div>
           </Card>
 
-          {/* Scenario Grid */}
+          {/* Scenario Grid — data-driven probabilities */}
           <Card className="p-6">
             <SectionLabel>Scenario Grid</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Probabilities from live macro levels" : "Awaiting FRED connection"}</p>
             <div className="mt-5 space-y-4">
-              {scenarios.map((s) => (
-                <div key={s.name} className="border-b border-[#f1eee8] pb-4 last:border-0 last:pb-0">
-                  <div className="mb-2 flex items-center justify-between gap-4">
-                    <p className="text-[13px] font-bold text-[#0a0a0a]">{s.name}</p>
-                    <ToneText tone={s.tone}>
-                      <span className="text-[13px] font-bold tabular-nums">
-                        {s.probability}%
-                      </span>
-                    </ToneText>
+              {(data?.scenarios ?? []).map((s) => {
+                const color = s.tone === "positive" ? POSITIVE : s.tone === "negative" ? NEGATIVE : NAVY;
+                return (
+                  <div key={s.name} className="border-b border-[#f1eee8] pb-4 last:border-0 last:pb-0">
+                    <div className="mb-2 flex items-center justify-between gap-4">
+                      <p className="text-[13px] font-bold text-[#0a0a0a]">{s.name}</p>
+                      <span className="text-[13px] font-bold tabular-nums" style={{ color }}>{s.probability}%</span>
+                    </div>
+                    <div className="h-[6px] bg-[#eee9df]">
+                      <div className="h-full" style={{ width: `${s.probability}%`, backgroundColor: color }} />
+                    </div>
+                    <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">
+                      <span className="font-bold text-[#0a0a0a]">Trigger: </span>{s.trigger}
+                    </p>
+                    <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#666]">
+                      <span className="font-bold text-[#0a0a0a]">Market: </span>{s.market}
+                    </p>
                   </div>
-                  <ScoreBar value={s.probability} tone={s.tone} />
-                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                    <span className="font-bold text-[#0a0a0a]">Trigger: </span>
-                    {s.trigger}
-                  </p>
-                  <p className="mt-1 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                    <span className="font-bold text-[#0a0a0a]">Market: </span>
-                    {s.market}
-                  </p>
-                </div>
-              ))}
+                );
+              })}
+              {loading && <p className="text-[12px] text-[#bbb]">Computing scenarios…</p>}
             </div>
           </Card>
 
-          {/* Event risk */}
+          {/* Key Macro Metrics — live from FRED */}
           <Card className="p-6">
-            <SectionLabel>Catalyst Risk</SectionLabel>
-            <div className="mt-5 space-y-4">
-              {eventRisk.map((e) => (
-                <div key={e.event} className="border-l-2 border-[#0c1b38] pl-4">
-                  <div className="flex items-center justify-between">
-                    <p className="text-[13px] font-bold text-[#0a0a0a]">{e.event}</p>
-                    <p className="text-[11px] font-bold text-[#0c1b38]">{e.date}</p>
+            <SectionLabel>Macro Snapshot</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY to Vercel"}</p>
+            <div className="mt-5 space-y-3">
+              {[
+                { label: "CPI (all items)",   val: data?.macro.cpi?.price,      chg: data?.macro.cpi?.pct,      suffix: "%" },
+                { label: "Core CPI",          val: data?.macro.coreCpi?.price,  chg: data?.macro.coreCpi?.pct,  suffix: "%" },
+                { label: "Unemployment",      val: data?.macro.unrate?.price,   chg: data?.macro.unrate?.pct,   suffix: "%" },
+                { label: "GDP growth",        val: data?.macro.gdp?.price,      chg: data?.macro.gdp?.pct,      suffix: "%" },
+                { label: "HY OAS",            val: data?.macro.hySpread?.price, chg: data?.macro.hySpread?.pct, suffix: "bps", dec: 0 },
+                { label: "Fed Funds",         val: data?.yields.fedfunds?.price, chg: 0,                        suffix: "%" },
+                { label: "2Y Treasury",       val: data?.yields.dgs2?.price,    chg: data?.yields.dgs2?.pct,    suffix: "%" },
+                { label: "30Y Treasury",      val: data?.yields.dgs30?.price,   chg: data?.yields.dgs30?.pct,   suffix: "%" },
+              ].map(({ label, val, chg, suffix, dec = 2 }) => (
+                <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] pb-2.5 last:border-0">
+                  <p className="text-[11.5px] font-bold text-[#0a0a0a]">{label}</p>
+                  <div className="text-right">
+                    <p className="text-[12px] font-bold text-[#0c1b38] tabular-nums">
+                      {val != null ? `${val.toFixed(dec)}${suffix}` : "—"}
+                    </p>
+                    {chg != null && chg !== 0 && (
+                      <p className={`text-[10px] font-semibold tabular-nums ${chg > 0 ? "text-[#b42318]" : "text-[#147a4f]"}`}>
+                        {chg > 0 ? "+" : ""}{chg.toFixed(2)}%
+                      </p>
+                    )}
                   </div>
-                  <div className="mt-1 flex items-center gap-2">
-                    <span
-                      className={`text-[9.5px] font-bold uppercase tracking-[0.14em] ${
-                        e.sensitivity === "Very High" ? "text-[#b42318]" : "text-[#b7791f]"
-                      }`}
-                    >
-                      {e.sensitivity}
-                    </span>
-                    <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#999]">
-                      {e.asset}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-[11.5px] font-medium leading-relaxed text-[#666]">
-                    {e.breaker}
-                  </p>
                 </div>
               ))}
             </div>
           </Card>
         </div>
 
-        {/* Layer 4 */}
+        {/* ── Layer 4: Pressure chart ───────────────────────────────────── */}
         <div className="mb-5 grid grid-cols-[1.15fr_0.85fr] gap-5">
-          {/* Heat matrix */}
+
+          {/* Asset-Class Reaction Matrix — static framework, always useful */}
           <Card className="p-6">
             <SectionLabel>Asset-Class Reaction Matrix</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">Framework — which driver is currently active shapes how to read the matrix</p>
             <div className="mt-5 overflow-hidden border border-[#eee9df]">
               <table className="w-full text-left">
                 <thead className="bg-[#fbfaf7]">
                   <tr className="border-b border-[#eee9df]">
                     {["Driver", "Equities", "Rates", "FX", "Commodities", "Credit"].map((h) => (
-                      <th
-                        key={h}
-                        className="px-3 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]"
-                      >
-                        {h}
-                      </th>
+                      <th key={h} className="px-3 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">{h}</th>
                     ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {heatMatrix.map((row) => (
-                    <tr
-                      key={row.driver}
-                      className={`border-b border-[#f1eee8] last:border-0 ${
-                        row.active ? "bg-[#fbfaf7]" : ""
-                      }`}
-                    >
-                      <td className="px-3 py-3 text-[11.5px] font-bold text-[#0a0a0a]">
-                        {row.driver}
-                        {row.active && (
-                          <span className="ml-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38]">
-                            Current
-                          </span>
-                        )}
-                      </td>
-                      <MatrixCell value={row.equities} />
-                      <MatrixCell value={row.rates} />
-                      <MatrixCell value={row.fx} />
-                      <MatrixCell value={row.commodities} />
-                      <MatrixCell value={row.credit} />
-                    </tr>
-                  ))}
+                  {[
+                    { driver: "Hot CPI",     eq: "Negative",  rt: "Yields up",  fx: "USD up",   cm: "Mixed",    cr: "Wider",   active: (data?.macro.cpi?.price ?? 0) > 3 },
+                    { driver: "Strong jobs", eq: "Mixed",     rt: "Yields up",  fx: "USD up",   cm: "Positive", cr: "Neutral", active: (data?.macro.unrate?.price ?? 5) < 4 },
+                    { driver: "Weak growth", eq: "Negative",  rt: "Yields down",fx: "Mixed",    cm: "Negative", cr: "Wider",   active: (data?.macro.gdp?.price ?? 2) < 1.5 },
+                    { driver: "Dovish Fed",  eq: "Positive",  rt: "Yields down",fx: "USD down", cm: "Positive", cr: "Tighter", active: (data?.yields.fedfunds?.price ?? 5) < 4 },
+                  ].map((row) => {
+                    const cellColor = (v: string) => {
+                      const l = v.toLowerCase();
+                      return l.includes("negative") || l.includes("wider") || l.includes("up")
+                        ? "text-[#b42318]" : l.includes("positive") || l.includes("tighter") || l.includes("down")
+                        ? "text-[#147a4f]" : "text-[#555]";
+                    };
+                    return (
+                      <tr key={row.driver} className={`border-b border-[#f1eee8] last:border-0 ${row.active ? "bg-[#fbfaf7]" : ""}`}>
+                        <td className="px-3 py-3 text-[11.5px] font-bold text-[#0a0a0a]">
+                          {row.driver}
+                          {row.active && <span className="ml-2 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38]">Active</span>}
+                        </td>
+                        {[row.eq, row.rt, row.fx, row.cm, row.cr].map((v, i) => (
+                          <td key={i} className={`px-3 py-3 text-[11px] font-bold ${cellColor(v)}`}>{v}</td>
+                        ))}
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>
           </Card>
 
-          {/* Market pressure */}
+          {/* Market Pressure Index — computed from live data */}
           <Card className="p-6">
             <SectionLabel>Market Pressure Index</SectionLabel>
-            <div className="mt-5 h-[225px]">
-              <ResponsiveContainer width="100%" height="100%">
-                <BarChart
-                  data={[
-                    { name: "Rates", value: 88 },
-                    { name: "FX", value: 67 },
-                    { name: "Equity", value: 61 },
-                    { name: "Credit", value: 38 },
-                    { name: "Commod.", value: 45 },
-                  ]}
-                  margin={{ top: 6, right: 0, bottom: 0, left: -24 }}
-                >
-                  <CartesianGrid stroke="#eee9df" vertical={false} />
-                  <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
-                  <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
-                  <Tooltip
-                    contentStyle={{
-                      border: "1px solid #e8e3da",
-                      borderRadius: 0,
-                      fontSize: 12,
-                    }}
-                    formatter={(value: unknown) => [`${Number(value)}/100`, "Pressure"]}
-                  />
-                  <Bar dataKey="value" radius={[0, 0, 0, 0]}>
-                    {[88, 67, 61, 38, 45].map((v, i) => (
-                      <Cell key={i} fill={v > 70 ? NEGATIVE : v > 50 ? WARNING : NAVY} />
-                    ))}
-                  </Bar>
-                </BarChart>
-              </ResponsiveContainer>
+            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Computed from live VIX, HY OAS, yields, DXY, oil" : "Awaiting FRED connection"}</p>
+            <div className="mt-5 h-[210px]">
+              {loading ? (
+                <div className="h-full flex items-center justify-center">
+                  <span className="text-[11px] text-[#bbb]">Loading…</span>
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={data?.pressureIndex ?? []} margin={{ top: 6, right: 0, bottom: 0, left: -24 }}>
+                    <CartesianGrid stroke="#eee9df" vertical={false} />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
+                    <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
+                    <Tooltip
+                      contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }}
+                      formatter={(v: unknown) => [`${Number(v)}/100`, "Pressure"]}
+                    />
+                    <Bar dataKey="value" radius={[0, 0, 0, 0]}>
+                      {(data?.pressureIndex ?? []).map((d, i) => (
+                        <Cell key={i} fill={d.value > 70 ? NEGATIVE : d.value > 50 ? WARNING : NAVY} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              )}
             </div>
             <p className="mt-4 border-t border-[#eee9df] pt-4 text-[12px] font-medium leading-relaxed text-[#666]">
-              Rates remain the dominant pressure channel. Credit is the key confirmation variable:
-              if it deteriorates, the regime shifts from repricing to risk-off.
+              {data?.sources.fred
+                ? "Scores computed from VIX level, HY OAS, 10Y yield change, DXY momentum, and oil volatility."
+                : "Connect FRED API to see computed pressure index."}
             </p>
           </Card>
         </div>
 
-        {/* Today's Stories */}
-        {issue.frontPage && issue.frontPage.length > 0 && (
+        {/* ── Today's Top Stories — live from NewsAPI ───────────────────── */}
+        {(data?.topNews?.length ?? 0) > 0 && (
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
               <SectionLabel>Today's Top Stories</SectionLabel>
-              <p className="text-[10px] text-[#9ca3af]">{issue.date} · {issue.regimeLabel}</p>
+              <p className="text-[10px] text-[#9ca3af]">Live · NewsAPI · {updatedTime}</p>
             </div>
             <div className="grid grid-cols-4 gap-5">
-              {issue.frontPage.slice(0, 4).map((story, i) => (
+              {data!.topNews.slice(0, 4).map((story, i) => (
                 <div key={i} className="border-l border-[#e8e3da] pl-4 first:border-l-0 first:pl-0">
-                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-2">Story {i + 1}</p>
-                  <p className="text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3">{story.headline}</p>
-                  <p className="text-[11.5px] font-medium leading-relaxed text-[#666] mb-3">{story.whyItMatters}</p>
-                  <div className="bg-[#fbfaf7] border border-[#eee9df] p-2.5">
-                    <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-1">Market Implication</p>
-                    <p className="text-[11.5px] font-medium leading-relaxed text-[#444]">{story.marketImplication}</p>
-                  </div>
-                  {story.affectedAssets?.length > 0 && (
-                    <div className="flex flex-wrap gap-1 mt-2.5">
-                      {story.affectedAssets.map((a) => (
-                        <span key={a} className="text-[9.5px] px-2 py-0.5 border border-[#e8e3da] text-[#777]">{a}</span>
-                      ))}
-                    </div>
-                  )}
+                  <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-1">{story.source}</p>
+                  <p className="text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3">{story.title}</p>
+                  <p className="text-[11.5px] font-medium leading-relaxed text-[#666]">{story.description}</p>
                 </div>
               ))}
             </div>
           </Card>
         )}
+
+        {/* No news — show placeholder only if NewsAPI is configured but returned nothing */}
+        {data && !data.sources.newsapi && (
+          <Card className="p-6">
+            <SectionLabel>Today's Top Stories</SectionLabel>
+            <p className="mt-3 text-[12px] text-[#bbb]">Add NEWS_API_KEY to Vercel to see live financial headlines here.</p>
+          </Card>
+        )}
+
       </main>
     </AppShell>
   );

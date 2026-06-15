@@ -4,7 +4,7 @@
     {
       "name": "crossasset",
       "runtimeExecutable": "/tmp/node-v20.18.0-darwin-arm64/bin/npm",
-      "runtimeArgs": ["run", "dev"],
+      "runtimeArgs": ["--prefix", "/Users/yuliansyrotych/Documents/Edgewood/AI@GSB/crossasset", "run", "dev"],
       "port": 3000
     }
   ]
