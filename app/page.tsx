@@ -50,6 +50,7 @@ type ChartData = {
   historyGold:   { date: string; value: number }[];
   historyOil:    { date: string; value: number }[];
   historyNasdaq: { date: string; value: number }[];
+  historyDow:    { date: string; value: number }[];
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -609,7 +610,7 @@ export default function DashboardPage() {
               const seriesMap: Record<NonNullable<ExpandedSeries>, { data: { date: string; value: number }[]; label: string; color: string; fmt: (v: number) => string }> = {
                 sp500:  { data: equityChart?.historySP500  ?? [], label: "S&P 500",          color: NEGATIVE,  fmt: (v) => v.toFixed(0) },
                 nasdaq: { data: equityChart?.historyNasdaq ?? [], label: "NASDAQ Composite",  color: "#7c3aed", fmt: (v) => v.toFixed(0) },
-                dow:    { data: [], label: "Dow Jones",  color: "#0369a1", fmt: (v) => v.toFixed(0) },
+                dow:    { data: equityChart?.historyDow ?? [], label: "Dow Jones (^DJI)", color: "#0369a1", fmt: (v) => v.toFixed(0) },
                 vix:    { data: equityChart?.historyVIX    ?? [], label: "VIX",              color: WARNING,   fmt: (v) => v.toFixed(1) },
                 gold:   { data: equityChart?.historyGold   ?? [], label: "Gold ($/troy oz)",  color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
                 oil:    { data: equityChart?.historyOil    ?? [], label: "WTI Crude ($/bbl)", color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },

@@ -55,23 +55,22 @@ export async function GET(req: NextRequest) {
   const start = startDate(tf);
   const range = yfRange(tf);
 
-  // Fetch FRED history + YF history in parallel
-  // Also fetch live YF quotes to patch today's date onto FRED series (which lag 1 business day)
-  const [hist5, hist10, histSP500, histVIX, histNasdaq, histGoldYF, histOilYF, live] = await Promise.all([
+  // All chart history from Yahoo Finance where possible — FRED only for yields (no YF equivalent)
+  // Live quotes patch today's point onto FRED series that lag 1 business day
+  const [hist5, hist10, histSP500, histVIX, histNasdaq, histGoldYF, histOilYF, histDowYF, live] = await Promise.all([
     fredHistory("DGS5",      start),
     fredHistory("DGS10",     start),
     fredHistory("SP500",     start),
     fredHistory("VIXCLS",    start),
     fredHistory("NASDAQCOM", start),
-    fetchHistory("GC=F", range),
-    fetchHistory("CL=F", range),
-    // ^TNX = 10Y, ^FVX = 5Y (Yahoo quotes in %, e.g. 4.48)
-    // ^GSPC = S&P 500 actual index level (matches FRED SP500 series)
-    // ^TNX = 10Y yield %, ^FVX = 5Y yield %, ^VIX = VIX level
+    fetchHistory("GC=F",  range),   // Gold futures — live from YF
+    fetchHistory("CL=F",  range),   // WTI crude futures — live from YF
+    fetchHistory("^DJI",  range),   // Dow Jones — live from YF
+    // Live quotes to patch today's point onto FRED series
+    // ^GSPC = S&P index, ^TNX = 10Y yield %, ^FVX = 5Y yield %, ^VIX = VIX
     fetchYFQuotes(["^GSPC", "^TNX", "^FVX", "^VIX"]).catch(() => new Map()),
   ]);
 
-  // Patch FRED series with today's live value so charts always extend to today
   const gspc = live.get("^GSPC");
   const tnx  = live.get("^TNX");
   const fvx  = live.get("^FVX");
@@ -100,6 +99,7 @@ export async function GET(req: NextRequest) {
     historyVIX:    sortH(patchedVIX),
     historyGold:   sortH(histGoldYF),
     historyOil:    sortH(histOilYF),
-    historyNasdaq: sortH(histNasdaq), // keep FRED Nasdaq (QQQ proxy scale is off)
+    historyNasdaq: sortH(histNasdaq),
+    historyDow:    sortH(histDowYF),  // ^DJI directly — no scaling needed
   });
 }

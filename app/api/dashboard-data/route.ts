@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
 import { fetchMarketNews, fetchQuote, fetchEarningsCalendar, fetchGlobalIndices } from "@/lib/sources/finnhub";
-import { fetchCommoditySpots, fetchForexYahoo } from "@/lib/sources/yahoo";
+import { fetchCommoditySpots, fetchForexYahoo, fetchYFQuotes } from "@/lib/sources/yahoo";
 import { fetchCryptoCoingecko } from "@/lib/sources/coingecko";
 import { fetchEconCalendar } from "@/lib/sources/forexfactory";
 import { fetchFedWatchProbs } from "@/lib/sources/fedwatch";
@@ -304,7 +304,10 @@ const SECTORS: { symbol: string; name: string }[] = [
   { symbol: "XLB",  name: "Materials" },
   { symbol: "XLRE", name: "Real Estate" },
   { symbol: "XLC",  name: "Comm. Svcs" },
+  { symbol: "SMH",  name: "Semiconductors" },
 ];
+
+const SECTOR_SYMBOLS = SECTORS.map((s) => s.symbol);
 
 // Economic calendar is fetched live from ForexFactory — no hardcoded data
 
@@ -315,13 +318,12 @@ export async function GET() {
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
     cpi, coreCpi, pce, unrate, payems, gdp,
-    hySpread, fredSP500, fredVix, fredGold, fredOil, fredDxy,
+    hySpread, fredSP500, fredVix, fredGold, fredOil, fredDxy, /* fallbacks for YF outage */
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     fredNasdaq,
     rawNews, rawFinnhubNews,
     liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings, liveCalendar, fedwatchProbs,
-    diaQuote,
-    ...sectorQuotes
+    yfEquityMap
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
     fredLatest("DGS30"), fredLatest("FEDFUNDS"),
@@ -353,42 +355,45 @@ export async function GET() {
     fetchEarningsCalendar().catch(() => []),
     fetchEconCalendar().catch(() => []),
     fetchFedWatchProbs().catch(() => []),
-    fetchQuote("DIA").catch(() => null),  // Dow Jones ETF proxy (~DJI/100)
-    // Sector ETFs from Finnhub (11 GICS sectors)
-    ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
+    // All live equity quotes from Yahoo Finance — real-time, updates on every refresh
+    // ^GSPC=S&P500, ^DJI=Dow, ^IXIC=Nasdaq, ^VIX=VIX, sector ETFs (12 GICS)
+    fetchYFQuotes(["^GSPC", "^DJI", "^IXIC", "^VIX", ...SECTOR_SYMBOLS]).catch(() => new Map()),
   ]);
 
   const spots = liveSpots as { gold: LiveQuote | null; silver: LiveQuote | null; oil: LiveQuote | null; dxy: LiveQuote | null };
+  const yfMap = yfEquityMap as Map<string, { price: number; change: number; pct: number }>;
 
-  // Yahoo Finance futures for real-time commodities; FRED as fallback
-  const gold   = spots.gold   ?? fredGold;
+  function yfQ(sym: string): LiveQuote | null {
+    const q = yfMap.get(sym);
+    return q ? { price: q.price, change: q.change, pct: q.pct } : null;
+  }
+
+  // All index/equity tiles from Yahoo Finance — real-time on every refresh
+  const sp500  = yfQ("^GSPC") ?? fredSP500;
+  const vix    = yfQ("^VIX")  ?? fredVix;
+  const nasdaq = yfQ("^IXIC") ?? fredNasdaq;
+  const dow    = yfQ("^DJI");
+
+  // Commodities from Yahoo Finance (futures/spot); FRED as fallback
+  const gold   = spots.gold ?? fredGold;
   const silver = spots.silver;
-  const oil    = spots.oil    ?? fredOil;
-  const dxy    = spots.dxy    ?? fredDxy;
-  const sp500  = fredSP500;   // keep FRED for indices (consistent with history chart)
-  const vix    = fredVix;
-  const nasdaq = fredNasdaq;
-
-  // DIA ETF ≈ DJI / 100 — scale back to index level for display
-  const diaQ = diaQuote as { price: number; change: number; pct: number } | null;
-  const dow: LiveQuote | null = diaQ
-    ? { price: diaQ.price * 100, change: diaQ.change * 100, pct: diaQ.pct }
-    : null;
+  const oil    = spots.oil  ?? fredOil;
+  const dxy    = spots.dxy  ?? fredDxy;
 
   // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
     ? { price: hySpread.price * 100, change: hySpread.change * 100, pct: hySpread.pct }
     : null;
 
-  // Build sector array
-  const sectors: SectorQuote[] = SECTORS.map((s, i) => {
-    const q = sectorQuotes[i] as { price: number; change: number; pct: number } | null;
+  // Build sector array from Yahoo Finance quotes
+  const sectors: SectorQuote[] = SECTORS.map((s) => {
+    const q = yfMap.get(s.symbol);
     return {
       symbol: s.symbol,
       name:   s.name,
-      price:  q?.price ?? 0,
+      price:  q?.price  ?? 0,
       change: q?.change ?? 0,
-      pct:    q?.pct ?? 0,
+      pct:    q?.pct    ?? 0,
     };
   }).filter((s) => s.price > 0);
 
