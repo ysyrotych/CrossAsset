@@ -196,6 +196,16 @@ export default function DashboardPage() {
   useEffect(() => { fetchRatesHistory(ratesTf); }, [ratesTf, fetchRatesHistory]);
   useEffect(() => { fetchEquityHistory(equityTf); }, [equityTf, fetchEquityHistory]);
 
+  // Auto-refresh all data every 60 minutes
+  useEffect(() => {
+    const id = setInterval(() => {
+      fetchData();
+      fetchRatesHistory(ratesTf);
+      fetchEquityHistory(equityTf);
+    }, 60 * 60 * 1000);
+    return () => clearInterval(id);
+  }, [fetchData, fetchRatesHistory, fetchEquityHistory, ratesTf, equityTf]);
+
   const updatedTime = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
     : null;
@@ -204,18 +214,18 @@ export default function DashboardPage() {
 
   return (
     <AppShell>
-      <main className="max-w-[1480px] pb-16">
+      <main className="pb-16">
 
         {/* ── Top Banner ──────────────────────────────────────────────────── */}
-        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-5">
+        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-7">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
               {/* Logo */}
               <div className="flex items-center gap-3">
-                <CrossAssetLogo variant="mark" color="light" className="shrink-0" />
-                <div>
-                  <p className="text-[12.5px] font-bold leading-none tracking-[0.22em] text-white" style={{ fontFamily: "var(--font-serif)" }}>CROSSASSET</p>
-                  <p className="mt-1 text-[8px] tracking-[0.28em] text-white/40 uppercase">Macro Intelligence</p>
+                <CrossAssetLogo variant="compact" color="light" className="shrink-0 scale-[0.55] origin-left" />
+                <div className="-ml-4">
+                  <p className="text-[15px] font-bold leading-none tracking-[0.22em] text-white" style={{ fontFamily: "var(--font-serif)" }}>CROSSASSET</p>
+                  <p className="mt-1.5 text-[9px] tracking-[0.3em] text-white/40 uppercase">Macro Intelligence</p>
                 </div>
               </div>
               <div className="h-6 w-px bg-white/15" />
@@ -252,47 +262,59 @@ export default function DashboardPage() {
           </div>
         </div>
 
-        {/* ── Live Ticker ─────────────────────────────────────────────────── */}
-        <div className="-mx-10 mb-8 overflow-x-auto border-b border-[#e8e3da] bg-[#faf9f7]">
-          <div className="flex min-w-max items-stretch">
-            {(() => {
-              const eurusd = data?.forex?.find(f => f.pair === "EURUSD");
-              const btc    = data?.crypto?.find(c => c.symbol === "BTC");
-              const tickers = [
-                { label: "S&P 500",   val: data?.equities.sp500?.price,   pct: data?.equities.sp500?.pct,   dec: 0, pfx: "",  sfx: "" },
-                { label: "NASDAQ",    val: data?.equities.nasdaq?.price,  pct: data?.equities.nasdaq?.pct,  dec: 0, pfx: "",  sfx: "" },
-                { label: "10Y UST",   val: data?.yields.dgs10?.price,     pct: data?.yields.dgs10?.pct,     dec: 2, pfx: "",  sfx: "%" },
-                { label: "2Y UST",    val: data?.yields.dgs2?.price,      pct: data?.yields.dgs2?.pct,      dec: 2, pfx: "",  sfx: "%" },
-                { label: "Fed Funds", val: data?.yields.fedfunds?.price,  pct: null,                        dec: 2, pfx: "",  sfx: "%" },
-                { label: "VIX",       val: data?.equities.vix?.price,     pct: data?.equities.vix?.pct,     dec: 1, pfx: "",  sfx: "" },
-                { label: "Gold",      val: data?.equities.gold?.price,    pct: data?.equities.gold?.pct,    dec: 0, pfx: "$", sfx: "" },
-                { label: "WTI Crude", val: data?.equities.oil?.price,     pct: data?.equities.oil?.pct,     dec: 2, pfx: "$", sfx: "" },
-                { label: "DXY",       val: data?.equities.dxy?.price,     pct: data?.equities.dxy?.pct,     dec: 2, pfx: "",  sfx: "" },
-                { label: "EUR/USD",   val: eurusd?.price,                 pct: eurusd?.pct,                 dec: 4, pfx: "",  sfx: "" },
-                { label: "Bitcoin",   val: btc?.price,                    pct: btc?.pct,                    dec: 0, pfx: "$", sfx: "" },
-                { label: "HY OAS",    val: data?.macro.hySpread?.price,   pct: null,                        dec: 0, pfx: "",  sfx: "bps" },
-              ];
-              return tickers.map(({ label, val, pct, dec, pfx, sfx }, i) => {
-                const up = (pct ?? 0) > 0;
-                const pctColor = pct == null ? "transparent" : up ? POSITIVE : NEGATIVE;
-                return (
-                  <div key={label} className={`flex flex-col justify-center px-6 py-3.5 ${i < tickers.length - 1 ? "border-r border-[#e8e3da]" : ""}`}>
-                    <p className="mb-1 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#999]">{label}</p>
-                    <div className="flex items-baseline gap-2">
-                      <span className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
-                        {val != null ? `${pfx}${val.toFixed(dec)}${sfx}` : (loading ? "—" : "—")}
+        {/* ── Live Ticker (auto-scroll marquee) ──────────────────────────── */}
+        <style>{`
+          @keyframes ticker-scroll {
+            0%   { transform: translateX(0); }
+            100% { transform: translateX(-50%); }
+          }
+          .ticker-track { animation: ticker-scroll 60s linear infinite; }
+          .ticker-track:hover { animation-play-state: paused; }
+        `}</style>
+        <div className="-mx-10 mb-8 overflow-hidden border-b border-[#e8e3da] bg-[#faf9f7]">
+          {(() => {
+            const eurusd = data?.forex?.find(f => f.pair === "EURUSD");
+            const btc    = data?.crypto?.find(c => c.symbol === "BTC");
+            const tickers = [
+              { label: "S&P 500",   val: data?.equities.sp500?.price,   pct: data?.equities.sp500?.pct,   dec: 0, pfx: "",  sfx: "" },
+              { label: "NASDAQ",    val: data?.equities.nasdaq?.price,  pct: data?.equities.nasdaq?.pct,  dec: 0, pfx: "",  sfx: "" },
+              { label: "10Y UST",   val: data?.yields.dgs10?.price,     pct: data?.yields.dgs10?.pct,     dec: 2, pfx: "",  sfx: "%" },
+              { label: "2Y UST",    val: data?.yields.dgs2?.price,      pct: data?.yields.dgs2?.pct,      dec: 2, pfx: "",  sfx: "%" },
+              { label: "Fed Funds", val: data?.yields.fedfunds?.price,  pct: null,                        dec: 2, pfx: "",  sfx: "%" },
+              { label: "VIX",       val: data?.equities.vix?.price,     pct: data?.equities.vix?.pct,     dec: 1, pfx: "",  sfx: "" },
+              { label: "Gold",      val: data?.equities.gold?.price,    pct: data?.equities.gold?.pct,    dec: 0, pfx: "$", sfx: "" },
+              { label: "WTI Crude", val: data?.equities.oil?.price,     pct: data?.equities.oil?.pct,     dec: 2, pfx: "$", sfx: "" },
+              { label: "DXY",       val: data?.equities.dxy?.price,     pct: data?.equities.dxy?.pct,     dec: 2, pfx: "",  sfx: "" },
+              { label: "EUR/USD",   val: eurusd?.price,                 pct: eurusd?.pct,                 dec: 4, pfx: "",  sfx: "" },
+              { label: "Bitcoin",   val: btc?.price,                    pct: btc?.pct,                    dec: 0, pfx: "$", sfx: "" },
+              { label: "HY OAS",    val: data?.macro.hySpread?.price,   pct: null,                        dec: 0, pfx: "",  sfx: "bps" },
+            ];
+            const renderTicker = (key: string) => tickers.map(({ label, val, pct, dec, pfx, sfx }, i) => {
+              const up = (pct ?? 0) > 0;
+              const pctColor = pct == null ? "transparent" : up ? POSITIVE : NEGATIVE;
+              return (
+                <div key={`${key}-${i}`} className="flex flex-shrink-0 flex-col justify-center border-r border-[#e8e3da] px-7 py-3.5">
+                  <p className="mb-1 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#999]">{label}</p>
+                  <div className="flex items-baseline gap-2">
+                    <span className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
+                      {val != null ? `${pfx}${val.toFixed(dec)}${sfx}` : "—"}
+                    </span>
+                    {pct != null && pct !== 0 && (
+                      <span className="text-[10.5px] font-semibold tabular-nums" style={{ color: pctColor }}>
+                        {up ? "+" : ""}{pct.toFixed(2)}%
                       </span>
-                      {pct != null && pct !== 0 && (
-                        <span className="text-[10.5px] font-semibold tabular-nums" style={{ color: pctColor }}>
-                          {up ? "+" : ""}{pct.toFixed(2)}%
-                        </span>
-                      )}
-                    </div>
+                    )}
                   </div>
-                );
-              });
-            })()}
-          </div>
+                </div>
+              );
+            });
+            return (
+              <div className="ticker-track flex w-max items-stretch">
+                {renderTicker("a")}
+                {renderTicker("b")}
+              </div>
+            );
+          })()}
         </div>
 
         {/* ── Layer 1: Macro Snapshot · Rates · Market Intelligence ──────── */}
