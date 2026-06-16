@@ -205,86 +205,99 @@ export default function DashboardPage() {
     <AppShell>
       <main className="max-w-[1480px] pb-16">
 
-        {/* ── Header ─────────────────────────────────────────────────── */}
-        <div className="mb-7 border-b border-[#e8e3da] pb-6">
-          <div className="flex items-start justify-between gap-10">
-            <div className="flex-1">
-              <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">CrossAsset Command Center</p>
-              <h1 className="mt-3 text-[38px] font-light leading-[1.05] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-                {loading ? "Connecting to FRED…" : data?.regimeLabel ?? "CrossAsset Dashboard"}
-              </h1>
-              <div className="mt-4 flex flex-wrap gap-6">
-                {[
-                  { label: "10Y", val: data?.yields.dgs10?.price,     sfx: "%",   dec: 2, inv: true,  chg: data?.yields.dgs10?.change },
-                  { label: "S&P", val: data?.equities.sp500?.price,   sfx: "",    dec: 0, inv: false, chg: data?.equities.sp500?.pct },
-                  { label: "VIX", val: data?.equities.vix?.price,     sfx: "",    dec: 1, inv: true,  chg: data?.equities.vix?.pct },
-                  { label: "CPI", val: data?.macro.cpi?.price,        sfx: "%",   dec: 2, inv: true,  chg: data?.macro.cpi?.change },
-                  { label: "HY OAS", val: data?.macro.hySpread?.price,sfx: "bps", dec: 0, inv: true,  chg: data?.macro.hySpread?.change },
-                ].map(({ label, val, sfx, dec, inv, chg }) => {
-                  const up = (chg ?? 0) > 0;
-                  const color = val == null ? "#bbb" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
-                  return (
-                    <div key={label}>
-                      <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{label}</p>
-                      <p className="mt-0.5 text-[16px] font-bold tabular-nums text-[#0a0a0a]">
-                        {val != null ? `${val.toFixed(dec)}${sfx}` : "—"}
-                        {chg != null && chg !== 0 && (
-                          <span className="ml-1 text-[11px] font-semibold" style={{ color }}>
-                            {chg > 0 ? "+" : ""}{chg.toFixed(dec)}{sfx}
-                          </span>
-                        )}
-                      </p>
-                    </div>
-                  );
-                })}
+        {/* ── Top Banner ──────────────────────────────────────────────────── */}
+        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-5">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-6">
+              {/* Logo */}
+              <div className="flex items-center gap-3">
+                <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-white/20 bg-white/10">
+                  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none">
+                    <path d="M3 10 L8 5 L13 10 L8 15 Z" fill="white" opacity="0.9"/>
+                    <path d="M8 10 L13 5 L18 10 L13 15 Z" fill="white" opacity="0.45"/>
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-[12.5px] font-bold leading-none tracking-[0.22em] text-white" style={{ fontFamily: "var(--font-serif)" }}>CROSSASSET</p>
+                  <p className="mt-1 text-[8px] tracking-[0.28em] text-white/40 uppercase">Macro Intelligence</p>
+                </div>
               </div>
+              <div className="h-6 w-px bg-white/15" />
+              <p className="text-[11px] font-medium text-white/50">{today}</p>
+              {updatedTime && !loading && (
+                <span className="text-[10px] font-semibold tracking-[0.08em] text-white/35">· Updated {updatedTime}</span>
+              )}
             </div>
 
-            <div className="min-w-[260px] flex flex-col items-end gap-3">
-              <div className="text-right">
-                <p className="text-[11px] font-bold text-[#0c1b38]">{today}</p>
-                <p className="mt-0.5 text-[11px] font-semibold text-[#999]">
-                  {loading ? "Fetching…" : updatedTime ? `Live · Updated ${updatedTime}` : "No connection"}
-                </p>
-              </div>
-
-              {/* Source indicators */}
+            <div className="flex items-center gap-5">
               {data && (
-                <div className="flex gap-3">
-                  <SourceDot ok={data.sources.fred}    label="FRED" />
-                  <SourceDot ok={data.sources.finnhub} label="Finnhub" />
-                  <SourceDot ok={data.sources.newsapi} label="NewsAPI" />
+                <div className="flex gap-4">
+                  {[
+                    { ok: data.sources.fred,    label: "FRED" },
+                    { ok: data.sources.finnhub, label: "Finnhub" },
+                    { ok: data.sources.newsapi, label: "News" },
+                  ].map(({ ok, label }) => (
+                    <span key={label} className="flex items-center gap-1.5">
+                      <span className={`h-1.5 w-1.5 rounded-full ${ok ? "bg-emerald-400" : "bg-white/20"}`} />
+                      <span className={`text-[10px] font-semibold tracking-[0.1em] uppercase ${ok ? "text-white/65" : "text-white/25"}`}>{label}</span>
+                    </span>
+                  ))}
                 </div>
               )}
-
-              {/* Refresh button */}
               <button
                 onClick={() => { fetchData(); fetchRatesHistory(ratesTf); fetchEquityHistory(equityTf); }}
                 disabled={loading}
-                className="flex items-center gap-2 border border-[#0c1b38] bg-[#0c1b38] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-80 disabled:opacity-40"
+                className="flex items-center gap-2 border border-white/20 bg-white/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75 transition-all hover:bg-white/15 disabled:opacity-40"
               >
-                <span className={loading ? "animate-spin" : ""}>↻</span>
-                {loading ? "Updating…" : "Refresh Data"}
+                <span className={loading ? "inline-block animate-spin" : ""}>↻</span>
+                {loading ? "Updating…" : "Refresh"}
               </button>
             </div>
           </div>
         </div>
 
-        {/* ── Error state ─────────────────────────────────────────────── */}
-        {error && (
-          <div className="mb-5 border border-[#f2d2cc] bg-[#fff7f5] p-4">
-            <p className="text-[12px] font-bold text-[#b42318]">Connection error: {error}</p>
-            <p className="mt-1 text-[11px] text-[#777]">Check that FRED_API_KEY is set in Vercel environment variables.</p>
+        {/* ── Live Ticker ─────────────────────────────────────────────────── */}
+        <div className="-mx-10 mb-8 overflow-x-auto border-b border-[#e8e3da] bg-[#faf9f7]">
+          <div className="flex min-w-max items-stretch">
+            {(() => {
+              const eurusd = data?.forex?.find(f => f.pair === "EURUSD");
+              const btc    = data?.crypto?.find(c => c.symbol === "BTC");
+              const tickers = [
+                { label: "S&P 500",   val: data?.equities.sp500?.price,   pct: data?.equities.sp500?.pct,   dec: 0, pfx: "",  sfx: "" },
+                { label: "NASDAQ",    val: data?.equities.nasdaq?.price,  pct: data?.equities.nasdaq?.pct,  dec: 0, pfx: "",  sfx: "" },
+                { label: "10Y UST",   val: data?.yields.dgs10?.price,     pct: data?.yields.dgs10?.pct,     dec: 2, pfx: "",  sfx: "%" },
+                { label: "2Y UST",    val: data?.yields.dgs2?.price,      pct: data?.yields.dgs2?.pct,      dec: 2, pfx: "",  sfx: "%" },
+                { label: "Fed Funds", val: data?.yields.fedfunds?.price,  pct: null,                        dec: 2, pfx: "",  sfx: "%" },
+                { label: "VIX",       val: data?.equities.vix?.price,     pct: data?.equities.vix?.pct,     dec: 1, pfx: "",  sfx: "" },
+                { label: "Gold",      val: data?.equities.gold?.price,    pct: data?.equities.gold?.pct,    dec: 0, pfx: "$", sfx: "" },
+                { label: "WTI Crude", val: data?.equities.oil?.price,     pct: data?.equities.oil?.pct,     dec: 2, pfx: "$", sfx: "" },
+                { label: "DXY",       val: data?.equities.dxy?.price,     pct: data?.equities.dxy?.pct,     dec: 2, pfx: "",  sfx: "" },
+                { label: "EUR/USD",   val: eurusd?.price,                 pct: eurusd?.pct,                 dec: 4, pfx: "",  sfx: "" },
+                { label: "Bitcoin",   val: btc?.price,                    pct: btc?.pct,                    dec: 0, pfx: "$", sfx: "" },
+                { label: "HY OAS",    val: data?.macro.hySpread?.price,   pct: null,                        dec: 0, pfx: "",  sfx: "bps" },
+              ];
+              return tickers.map(({ label, val, pct, dec, pfx, sfx }, i) => {
+                const up = (pct ?? 0) > 0;
+                const pctColor = pct == null ? "transparent" : up ? POSITIVE : NEGATIVE;
+                return (
+                  <div key={label} className={`flex flex-col justify-center px-6 py-3.5 ${i < tickers.length - 1 ? "border-r border-[#e8e3da]" : ""}`}>
+                    <p className="mb-1 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#999]">{label}</p>
+                    <div className="flex items-baseline gap-2">
+                      <span className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
+                        {val != null ? `${pfx}${val.toFixed(dec)}${sfx}` : (loading ? "—" : "—")}
+                      </span>
+                      {pct != null && pct !== 0 && (
+                        <span className="text-[10.5px] font-semibold tabular-nums" style={{ color: pctColor }}>
+                          {up ? "+" : ""}{pct.toFixed(2)}%
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              });
+            })()}
           </div>
-        )}
-
-        {/* ── No FRED key warning ──────────────────────────────────────── */}
-        {data && !data.fredConnected && (
-          <div className="mb-5 border border-[#f0e3c3] bg-[#fffbf0] p-4">
-            <p className="text-[12px] font-bold text-[#b7791f]">FRED API not connected — add FRED_API_KEY to Vercel environment variables.</p>
-            <p className="mt-1 text-[11px] text-[#777]">Register free at fred.stlouisfed.org · Market data sections will show live values once connected.</p>
-          </div>
-        )}
+        </div>
 
         {/* ── Layer 1: Macro Snapshot · Rates · Market Intelligence ──────── */}
         <div className="mb-5 grid grid-cols-[1.1fr_1.45fr_1fr] gap-5">
@@ -293,11 +306,7 @@ export default function DashboardPage() {
           <Card className="p-6">
             <div className="mb-4 flex items-center justify-between">
               <SectionLabel>Macro Snapshot</SectionLabel>
-              {data && (
-                <span className="border border-[#e8e3da] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">
-                  {data.regimeLabel ? data.regimeLabel.split(" ").slice(0,2).join(" ") : "—"}
-                </span>
-              )}
+              <p className="text-[9.5px] text-[#bbb]">{data?.sources.fred ? "FRED · Live" : "—"}</p>
             </div>
 
             <div className="space-y-0">
@@ -334,16 +343,15 @@ export default function DashboardPage() {
                 );
               })}
             </div>
-            <p className="mt-3 text-[9.5px] text-[#bbb]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY"}</p>
           </Card>
 
           {/* Rates Command Center */}
           <Card className="p-6">
             <div className="mb-5 flex items-start justify-between gap-6">
               <div>
-                <SectionLabel>Rates Command Center</SectionLabel>
-                <h3 className="mt-3 text-[21px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-                  {data?.yields.dgs10 ? `10Y at ${data.yields.dgs10.price.toFixed(2)}% — live from FRED` : "Connecting to FRED…"}
+                <SectionLabel>Treasury Yields</SectionLabel>
+                <h3 className="mt-1 text-[11px] text-[#bbb]">
+                  {data?.yields.dgs10 ? `10Y  ${data.yields.dgs10.price.toFixed(2)}%  ·  5Y  ${data?.yields.dgs5?.price.toFixed(2) ?? "—"}%  ·  2Y  ${data?.yields.dgs2?.price.toFixed(2) ?? "—"}%` : "Loading…"}
                 </h3>
               </div>
               <div className="flex gap-1 shrink-0">
@@ -363,14 +371,14 @@ export default function DashboardPage() {
 
             {/* 8 metric tiles */}
             <div className="mb-5 grid grid-cols-4 gap-3">
-              <MetricTile label="5Y Yield"  quote={data?.yields.dgs5  ?? null} note="Mid-curve"           dec={2} suffix="%" pctSuffix="%" invertColor />
-              <MetricTile label="10Y Yield" quote={data?.yields.dgs10 ?? null} note="Equity pressure"     dec={2} suffix="%" pctSuffix="%" invertColor />
-              <MetricTile label="30Y Yield" quote={data?.yields.dgs30 ?? null} note="Long-end inflation"  dec={2} suffix="%" pctSuffix="%" invertColor />
-              <MetricTile label="S&P 500"   quote={data?.equities.sp500 ?? null} note="US equities"       dec={0} />
-              <MetricTile label="Gold"      quote={data?.equities.gold  ?? null} note="Safe haven"        dec={0} prefix="$" />
-              <MetricTile label="WTI Oil"   quote={data?.equities.oil   ?? null} note="Energy / inflation" dec={2} prefix="$" />
-              <MetricTile label="VIX"       quote={data?.equities.vix   ?? null} note="Risk gauge"        dec={1} invertColor />
-              <MetricTile label="USD Index" quote={data?.equities.dxy   ?? null} note="FX / global liquidity" dec={2} invertColor />
+              <MetricTile label="5Y Yield"  quote={data?.yields.dgs5  ?? null} note="Treasury"  dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="10Y Yield" quote={data?.yields.dgs10 ?? null} note="Treasury"  dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="30Y Yield" quote={data?.yields.dgs30 ?? null} note="Treasury"  dec={2} suffix="%" pctSuffix="%" invertColor />
+              <MetricTile label="S&P 500"   quote={data?.equities.sp500 ?? null} note="FRED"    dec={0} />
+              <MetricTile label="Gold"      quote={data?.equities.gold  ?? null} note="XAU/USD" dec={0} prefix="$" />
+              <MetricTile label="WTI Crude" quote={data?.equities.oil   ?? null} note="CL=F"   dec={2} prefix="$" />
+              <MetricTile label="VIX"       quote={data?.equities.vix   ?? null} note="CBOE"   dec={1} invertColor />
+              <MetricTile label="USD Index" quote={data?.equities.dxy   ?? null} note="DXY"    dec={2} invertColor />
             </div>
 
             {/* Yield curve chart */}
@@ -534,12 +542,10 @@ export default function DashboardPage() {
           <Card className="p-6">
             <div className="mb-5 flex items-start justify-between gap-6">
               <div>
-                <SectionLabel>Equities Command Center</SectionLabel>
-                <h3 className="mt-3 text-[21px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-                  {data?.equities.sp500
-                    ? `S&P 500 at ${data.equities.sp500.price.toFixed(0)} — live from FRED`
-                    : "Connecting to FRED…"}
-                </h3>
+                <SectionLabel>Equities & Commodities</SectionLabel>
+                <p className="mt-1 text-[11px] text-[#bbb]">
+                  {data?.equities.sp500 ? `S&P ${data.equities.sp500.price.toFixed(0)}  ·  NASDAQ ${data?.equities.nasdaq?.price.toFixed(0) ?? "—"}  ·  VIX ${data?.equities.vix?.price.toFixed(1) ?? "—"}` : ""}
+                </p>
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {TF_LABELS.map((r) => (
@@ -554,11 +560,11 @@ export default function DashboardPage() {
             {/* 5 clickable equity metric tiles */}
             <div className="mb-5 grid grid-cols-5 gap-3">
               {([
-                { key: "sp500",  label: "S&P 500",  q: data?.equities.sp500,  note: "Click to expand", dec: 0 },
-                { key: "nasdaq", label: "NASDAQ",   q: data?.equities.nasdaq, note: "Click to expand", dec: 0 },
-                { key: "vix",    label: "VIX",      q: data?.equities.vix,    note: "Click to expand", dec: 1, inv: true },
-                { key: "gold",   label: "Gold",     q: data?.equities.gold,   note: "Click to expand", dec: 0, pfx: "$" },
-                { key: "oil",    label: "WTI Oil",  q: data?.equities.oil,    note: "Click to expand", dec: 2, pfx: "$" },
+                { key: "sp500",  label: "S&P 500",  q: data?.equities.sp500,  note: "Expand chart", dec: 0 },
+                { key: "nasdaq", label: "NASDAQ",   q: data?.equities.nasdaq, note: "Expand chart", dec: 0 },
+                { key: "vix",    label: "VIX",      q: data?.equities.vix,    note: "Expand chart", dec: 1, inv: true },
+                { key: "gold",   label: "Gold",     q: data?.equities.gold,   note: "Expand chart", dec: 0, pfx: "$" },
+                { key: "oil",    label: "WTI Crude",q: data?.equities.oil,    note: "Expand chart", dec: 2, pfx: "$" },
               ] as { key: ExpandedSeries; label: string; q: LiveQuote; note: string; dec: number; inv?: boolean; pfx?: string }[]).map(({ key, label, q, note, dec, inv, pfx }) => {
                 const isActive = expanded === key;
                 const up = (q?.change ?? 0) > 0;
@@ -820,7 +826,7 @@ export default function DashboardPage() {
           {/* Fear & Greed — 6-component methodology */}
           <Card className="p-6">
             <SectionLabel>Fear & Greed Index</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">6 components · VIX · HY OAS · Yield Curve · DXY · Gold · Equity Momentum</p>
+            <p className="mt-1 text-[9.5px] text-[#bbb]">Composite · 6 market signals · Refreshes with data</p>
             {(() => {
               const vix    = data?.equities.vix?.price   ?? 20;
               const hyOas  = data?.macro.hySpread?.price ?? 350;
@@ -878,7 +884,7 @@ export default function DashboardPage() {
                       { label: "Credit (HY OAS)",    v: Math.round(hyScore),   note: `${hyOas.toFixed(0)}bps` },
                       { label: "Yield Curve",        v: Math.round(curveScore),note: `2s10s ${t10y2y >= 0 ? "+" : ""}${t10y2y.toFixed(2)}%` },
                       { label: "USD Momentum",       v: Math.round(dxyScore),  note: `${dxyPct >= 0 ? "+" : ""}${dxyPct.toFixed(2)}%` },
-                      { label: "Gold (Safe Haven)",  v: Math.round(goldScore), note: `${goldPct >= 0 ? "+" : ""}${goldPct.toFixed(2)}%` },
+                      { label: "Gold",               v: Math.round(goldScore), note: `${goldPct >= 0 ? "+" : ""}${goldPct.toFixed(2)}%` },
                       { label: "Equity Momentum",    v: Math.round(spScore),   note: `S&P ${spPct >= 0 ? "+" : ""}${spPct.toFixed(2)}%` },
                     ].map((row) => (
                       <div key={row.label} className="flex items-center gap-2">
@@ -890,9 +896,7 @@ export default function DashboardPage() {
                       </div>
                     ))}
                   </div>
-                  <p className="mt-3 text-[9.5px] text-[#bbb] leading-relaxed">
-                    Weighted composite: VIX 28% · HY OAS 22% · Yield curve 18% · USD momentum 12% · Gold safe haven 10% · S&P momentum 10%
-                  </p>
+                  <p className="mt-3 text-[9px] text-[#ccc]">VIX 28% · HY OAS 22% · Yield curve 18% · DXY 12% · Gold 10% · S&P 10%</p>
                 </div>
               );
             })()}
@@ -1050,7 +1054,7 @@ export default function DashboardPage() {
                 })}
               </div>
             ) : (
-              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No forex data — check FINNHUB_API_KEY"}</p>
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "Data unavailable"}</p>
             )}
           </Card>
 
@@ -1122,7 +1126,7 @@ export default function DashboardPage() {
                 })}
               </div>
             ) : (
-              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No crypto data — check FINNHUB_API_KEY"}</p>
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "Data unavailable"}</p>
             )}
           </Card>
 
@@ -1154,17 +1158,17 @@ export default function DashboardPage() {
                 })}
               </div>
             ) : (
-              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No global data — check FINNHUB_API_KEY"}</p>
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "Data unavailable"}</p>
             )}
           </Card>
         </div>
 
-        {/* ── Today's Top Stories — live from NewsAPI ───────────────────── */}
+        {/* ── Market News ────────────────────────────────────────────────── */}
         {(data?.topNews?.length ?? 0) > 0 && (
           <Card className="p-6">
             <div className="flex items-center justify-between mb-6">
-              <SectionLabel>Today's Top Stories</SectionLabel>
-              <p className="text-[10px] text-[#9ca3af]">Live · NewsAPI · {updatedTime}</p>
+              <SectionLabel>Market News</SectionLabel>
+              <p className="text-[9.5px] text-[#bbb]">{updatedTime ? `Updated ${updatedTime}` : ""}</p>
             </div>
             <div className="grid grid-cols-4 gap-5">
               {data!.topNews.slice(0, 8).map((story, i) => (
@@ -1183,12 +1187,6 @@ export default function DashboardPage() {
         )}
 
         {/* No news — show placeholder only if NewsAPI is configured but returned nothing */}
-        {data && !data.sources.newsapi && (
-          <Card className="p-6">
-            <SectionLabel>Today's Top Stories</SectionLabel>
-            <p className="mt-3 text-[12px] text-[#bbb]">Add NEWS_API_KEY to Vercel to see live financial headlines here.</p>
-          </Card>
-        )}
 
       </main>
     </AppShell>
