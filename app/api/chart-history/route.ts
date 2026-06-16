@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+import { fetchHistory } from "@/lib/sources/yahoo";
 
 export const dynamic = "force-dynamic";
 
@@ -21,6 +22,15 @@ async function fredHistory(id: string, start: string): Promise<{ date: string; v
   }
 }
 
+// Map dashboard TF to Yahoo Finance range param
+function yfRange(tf: string): string {
+  if (tf === "1M")   return "1mo";
+  if (tf === "3M")   return "3mo";
+  if (tf === "1Y")   return "1y";
+  if (tf === "FOMC") return "3mo";
+  return "6mo"; // 6M default
+}
+
 function startDate(tf: string): string {
   const d = new Date();
   if (tf === "1M")   d.setDate(d.getDate() - 35);
@@ -34,15 +44,18 @@ function startDate(tf: string): string {
 export async function GET(req: NextRequest) {
   const tf    = req.nextUrl.searchParams.get("tf") ?? "6M";
   const start = startDate(tf);
+  const range = yfRange(tf);
 
-  const [hist5, hist10, histSP500, histVIX, histGold, histOil, histNasdaq] = await Promise.all([
-    fredHistory("DGS5",             start),
-    fredHistory("DGS10",            start),
-    fredHistory("SP500",            start),
-    fredHistory("VIXCLS",           start),
-    fredHistory("GOLDAMGBD228NLBM", start),
-    fredHistory("DCOILWTICO",       start),
-    fredHistory("NASDAQCOM",        start),
+  // FRED for yields, SP500, VIX, Nasdaq (their data is fine and consistent with tiles)
+  // Yahoo Finance for Gold (GC=F) and Oil (CL=F) — FRED lags 1-2 days and has stale values
+  const [hist5, hist10, histSP500, histVIX, histNasdaq, histGoldYF, histOilYF] = await Promise.all([
+    fredHistory("DGS5",      start),
+    fredHistory("DGS10",     start),
+    fredHistory("SP500",     start),
+    fredHistory("VIXCLS",    start),
+    fredHistory("NASDAQCOM", start),
+    fetchHistory("GC=F",  range),
+    fetchHistory("CL=F",  range),
   ]);
 
   const sortH = (arr: { date: string; value: number }[]) =>
@@ -62,8 +75,8 @@ export async function GET(req: NextRequest) {
     history,
     historySP500:  sortH(histSP500),
     historyVIX:    sortH(histVIX),
-    historyGold:   sortH(histGold),
-    historyOil:    sortH(histOil),
+    historyGold:   sortH(histGoldYF),
+    historyOil:    sortH(histOilYF),
     historyNasdaq: sortH(histNasdaq),
   });
 }

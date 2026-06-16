@@ -25,7 +25,7 @@ type DashData = {
   global:    { symbol: string; name: string; region: string; price: number; change: number; pct: number }[];
   earnings:  { symbol: string; date: string; epsEstimate?: number; revenueEstimate?: number }[];
   econCalendar: { event: string; date: string; impact: string; estimate: string }[];
-  fedwatch: { date: string; label: string; cutProb: number; holdProb: number; hikeProb: number; impliedRate: number; probs: { range: string; lb: number; ub: number; prob: number }[] }[];
+  fedwatch: { date: string; label: string; cutProb: number; holdProb: number; hikeProb: number; impliedRate: number }[];
   finnhubNews: { headline: string; source: string; url?: string }[];
   topNews:   { title: string; source: string; description: string; url?: string }[];
   driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string }[];
@@ -286,47 +286,47 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Layer 1: Chief View · Rates · Upcoming Events ───────────── */}
+        {/* ── Layer 1: Macro Snapshot · Rates · Market Intelligence ──────── */}
         <div className="mb-5 grid grid-cols-[1.1fr_1.45fr_1fr] gap-5">
 
-          {/* Chief View */}
+          {/* Macro Snapshot */}
           <Card className="p-6">
-            <div className="mb-6 flex items-center justify-between">
-              <SectionLabel>Chief View</SectionLabel>
+            <div className="mb-4 flex items-center justify-between">
+              <SectionLabel>Macro Snapshot</SectionLabel>
               {data && (
                 <span className="border border-[#e8e3da] px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">
-                  Regime {data.regimeScore}%
+                  {data.regimeLabel ? data.regimeLabel.split(" ").slice(0,2).join(" ") : "—"}
                 </span>
               )}
             </div>
 
-            <h2 className="text-[20px] font-bold leading-[1.2] tracking-tight text-[#0a0a0a]">
-              {loading ? "—" : data?.regimeLabel ?? "—"}
-            </h2>
-
-            <div className="mt-5 space-y-0">
+            <div className="space-y-0">
               {[
-                { label: "10Y Yield",    val: data?.yields.dgs10?.price,        chg: data?.yields.dgs10?.change,      sfx: "%",   dec: 2, inv: true },
-                { label: "2Y Yield",     val: data?.yields.dgs2?.price,         chg: data?.yields.dgs2?.change,       sfx: "%",   dec: 2, inv: true },
-                { label: "Fed Funds",    val: data?.yields.fedfunds?.price,     chg: data?.yields.fedfunds?.change,   sfx: "%",   dec: 2, inv: false },
-                { label: "CPI YoY",      val: data?.macro.cpi?.price,           chg: data?.macro.cpi?.change,         sfx: "%",   dec: 2, inv: true },
-                { label: "Core CPI",     val: data?.macro.coreCpi?.price,       chg: data?.macro.coreCpi?.change,     sfx: "%",   dec: 2, inv: true },
-                { label: "Unemployment", val: data?.macro.unrate?.price,        chg: data?.macro.unrate?.change,      sfx: "%",   dec: 1, inv: true },
-                { label: "GDP growth",   val: data?.macro.gdp?.price,           chg: data?.macro.gdp?.change,         sfx: "%",   dec: 1, inv: false },
-                { label: "HY OAS",       val: data?.macro.hySpread?.price,      chg: data?.macro.hySpread?.change,    sfx: "bps", dec: 0, inv: true },
+                { label: "Fed Funds",    val: data?.yields.fedfunds?.price,    chg: data?.yields.fedfunds?.change,  sfx: "%",   dec: 2, inv: false },
+                { label: "10Y Treasury", val: data?.yields.dgs10?.price,       chg: data?.yields.dgs10?.change,     sfx: "%",   dec: 2, inv: true },
+                { label: "2Y Treasury",  val: data?.yields.dgs2?.price,        chg: data?.yields.dgs2?.change,      sfx: "%",   dec: 2, inv: true },
+                { label: "30Y Treasury", val: data?.yields.dgs30?.price,       chg: data?.yields.dgs30?.change,     sfx: "%",   dec: 2, inv: true },
+                { label: "CPI YoY",      val: data?.macro.cpi?.price,          chg: data?.macro.cpi?.change,        sfx: "%",   dec: 2, inv: true },
+                { label: "Core CPI",     val: data?.macro.coreCpi?.price,      chg: data?.macro.coreCpi?.change,    sfx: "%",   dec: 2, inv: true },
+                { label: "PCE YoY",      val: data?.macro.pce?.price,          chg: data?.macro.pce?.change,        sfx: "%",   dec: 2, inv: true },
+                { label: "Unemployment", val: data?.macro.unrate?.price,       chg: data?.macro.unrate?.change,     sfx: "%",   dec: 1, inv: true },
+                { label: "GDP growth",   val: data?.macro.gdp?.price,          chg: data?.macro.gdp?.change,        sfx: "%",   dec: 1, inv: false },
+                { label: "HY OAS",       val: data?.macro.hySpread?.price,     chg: data?.macro.hySpread?.change,   sfx: "bps", dec: 0, inv: true },
+                { label: "10Y Breakeven",val: data?.extraData.breakeven?.price, chg: data?.extraData.breakeven?.change, sfx: "%", dec: 2, inv: true },
+                { label: "2s10s Spread", val: data?.extraData.t10y2y?.price,   chg: data?.extraData.t10y2y?.change, sfx: "%",   dec: 2, inv: false },
               ].map(({ label, val, chg, sfx, dec, inv }) => {
                 const up = (chg ?? 0) > 0;
                 const color = val == null ? "#bbb" : chg == null || chg === 0 ? "#999" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
                 return (
-                  <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] py-2.5 last:border-0">
-                    <p className="text-[12px] font-semibold text-[#555]">{label}</p>
+                  <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] py-2 last:border-0">
+                    <p className="text-[11.5px] font-semibold text-[#555]">{label}</p>
                     <div className="flex items-center gap-3">
                       {chg != null && chg !== 0 && (
                         <span className="text-[10px] font-bold tabular-nums" style={{ color }}>
                           {chg > 0 ? "+" : ""}{chg.toFixed(dec)}{sfx}
                         </span>
                       )}
-                      <p className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
+                      <p className="text-[13.5px] font-bold tabular-nums text-[#0a0a0a]">
                         {val != null ? `${val.toFixed(dec)}${sfx}` : "—"}
                       </p>
                     </div>
@@ -334,6 +334,7 @@ export default function DashboardPage() {
                 );
               })}
             </div>
+            <p className="mt-3 text-[9.5px] text-[#bbb]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY"}</p>
           </Card>
 
           {/* Rates Command Center */}
@@ -779,23 +780,21 @@ export default function DashboardPage() {
           </Card>
         </div>
 
-        {/* ── Layer 3: Edge · Scenarios · Macro metrics ────────────────── */}
-        <div className="mb-5 grid grid-cols-[1.15fr_0.95fr_0.9fr] gap-5">
+        {/* ── Layer 3: Global Data · Fear & Greed ──────────────────────── */}
+        <div className="mb-5 grid grid-cols-[1.2fr_0.8fr] gap-5">
 
-          {/* Global Data Snapshot — extra FRED series */}
+          {/* Global Data — secondary FRED series */}
           <Card className="p-6">
-            <SectionLabel>Global Data Snapshot</SectionLabel>
+            <SectionLabel>Economic Indicators</SectionLabel>
             <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY to Vercel"}</p>
-            <div className="mt-4 grid grid-cols-2 gap-x-6 gap-y-0">
+            <div className="mt-4 grid grid-cols-2 gap-x-8 gap-y-0">
               {[
-                { label: "10Y Breakeven",     val: data?.extraData?.breakeven?.price,  chg: data?.extraData?.breakeven?.change,  sfx: "%",   dec: 2 },
-                { label: "PCE YoY",           val: data?.macro?.pce?.price,            chg: data?.macro?.pce?.change,            sfx: "%",   dec: 2 },
-                { label: "30Y Mortgage",      val: data?.extraData?.mortgage?.price,   chg: data?.extraData?.mortgage?.change,   sfx: "%",   dec: 2 },
-                { label: "2s10s (FRED)",      val: data?.extraData?.t10y2y?.price,     chg: data?.extraData?.t10y2y?.change,     sfx: "%",   dec: 2 },
-                { label: "Retail Sales MoM",  val: data?.extraData?.retail?.pct,       chg: null,                                sfx: "%",   dec: 2 },
-                { label: "Initial Claims",    val: data?.extraData?.claims?.price,     chg: data?.extraData?.claims?.change,     sfx: "K",   dec: 0 },
-                { label: "Indus. Production", val: data?.extraData?.indpro?.pct,       chg: null,                                sfx: "%",   dec: 2 },
-                { label: "Consumer Sentiment",val: data?.extraData?.sentiment?.price,  chg: data?.extraData?.sentiment?.change,  sfx: "",    dec: 1 },
+                { label: "30Y Mortgage",       val: data?.extraData?.mortgage?.price,  chg: data?.extraData?.mortgage?.change,  sfx: "%",   dec: 2 },
+                { label: "Retail Sales MoM",   val: data?.extraData?.retail?.pct,      chg: null,                               sfx: "%",   dec: 2 },
+                { label: "Initial Claims",     val: data?.extraData?.claims?.price,    chg: data?.extraData?.claims?.change,    sfx: "K",   dec: 0 },
+                { label: "Indus. Production",  val: data?.extraData?.indpro?.pct,      chg: null,                               sfx: "%",   dec: 2 },
+                { label: "Consumer Sentiment", val: data?.extraData?.sentiment?.price, chg: data?.extraData?.sentiment?.change, sfx: "",    dec: 1 },
+                { label: "Nonfarm Payrolls",   val: data?.macro?.payems?.change,       chg: null,                               sfx: "K",   dec: 0 },
               ].map(({ label, val, chg, sfx, dec }) => {
                 const up = (chg ?? 0) > 0;
                 const chgColor = chg == null || chg === 0 ? "#bbb" : up ? NEGATIVE : POSITIVE;
@@ -818,69 +817,95 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          {/* Scenario Grid — data-driven probabilities */}
+          {/* Fear & Greed — 6-component methodology */}
           <Card className="p-6">
-            <SectionLabel>Scenario Grid</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Probabilities from live macro levels" : "Awaiting FRED connection"}</p>
-            <div className="mt-5 space-y-4">
-              {(data?.scenarios ?? []).map((s) => {
-                const color = s.tone === "positive" ? POSITIVE : s.tone === "negative" ? NEGATIVE : NAVY;
-                return (
-                  <div key={s.name} className="border-b border-[#f1eee8] pb-4 last:border-0 last:pb-0">
-                    <div className="mb-2 flex items-center justify-between gap-4">
-                      <p className="text-[13px] font-bold text-[#0a0a0a]">{s.name}</p>
-                      <span className="text-[13px] font-bold tabular-nums" style={{ color }}>{s.probability}%</span>
-                    </div>
-                    <div className="h-[6px] bg-[#eee9df]">
-                      <div className="h-full" style={{ width: `${s.probability}%`, backgroundColor: color }} />
-                    </div>
-                  </div>
-                );
-              })}
-              {loading && <p className="text-[12px] text-[#bbb]">Computing scenarios…</p>}
-            </div>
-          </Card>
+            <SectionLabel>Fear & Greed Index</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">6 components · VIX · HY OAS · Yield Curve · DXY · Gold · Equity Momentum</p>
+            {(() => {
+              const vix    = data?.equities.vix?.price   ?? 20;
+              const hyOas  = data?.macro.hySpread?.price ?? 350;
+              const t10y2y = data?.extraData.t10y2y?.price ?? 0.2;
+              const dxyPct = data?.equities.dxy?.pct     ?? 0;
+              const goldPct= data?.equities.gold?.pct    ?? 0;
+              const spPct  = data?.equities.sp500?.pct   ?? 0;
 
-          {/* Key Macro Metrics — live from FRED */}
-          <Card className="p-6">
-            <SectionLabel>Macro Snapshot</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Live · FRED" : "Add FRED_API_KEY to Vercel"}</p>
-            <div className="mt-5 space-y-3">
-              {[
-                { label: "CPI (all items)",   val: data?.macro.cpi?.price,      chg: data?.macro.cpi?.pct,      suffix: "%" },
-                { label: "Core CPI",          val: data?.macro.coreCpi?.price,  chg: data?.macro.coreCpi?.pct,  suffix: "%" },
-                { label: "Unemployment",      val: data?.macro.unrate?.price,   chg: data?.macro.unrate?.pct,   suffix: "%" },
-                { label: "GDP growth",        val: data?.macro.gdp?.price,      chg: data?.macro.gdp?.pct,      suffix: "%" },
-                { label: "HY OAS",            val: data?.macro.hySpread?.price, chg: data?.macro.hySpread?.change, suffix: "bps", dec: 0 },
-                { label: "Fed Funds",         val: data?.yields.fedfunds?.price, chg: 0,                        suffix: "%" },
-                { label: "2Y Treasury",       val: data?.yields.dgs2?.price,    chg: data?.yields.dgs2?.pct,    suffix: "%" },
-                { label: "30Y Treasury",      val: data?.yields.dgs30?.price,   chg: data?.yields.dgs30?.pct,   suffix: "%" },
-              ].map(({ label, val, chg, suffix, dec = 2 }) => (
-                <div key={label} className="flex items-center justify-between border-b border-[#f1eee8] pb-2.5 last:border-0">
-                  <p className="text-[11.5px] font-bold text-[#0a0a0a]">{label}</p>
-                  <div className="text-right">
-                    <p className="text-[12px] font-bold text-[#0c1b38] tabular-nums">
-                      {val != null ? `${val.toFixed(dec)}${suffix}` : "—"}
-                    </p>
-                    {chg != null && chg !== 0 && (
-                      <p className={`text-[10px] font-semibold tabular-nums ${chg > 0 ? "text-[#b42318]" : "text-[#147a4f]"}`}>
-                        {chg > 0 ? "+" : ""}{chg.toFixed(2)}%
-                      </p>
-                    )}
+              // Each component 0–100 (100 = extreme greed, 0 = extreme fear)
+              const vixScore   = Math.max(0, Math.min(100, ((40 - vix)     / 30) * 100));  // 100 at VIX=10, 0 at VIX=40
+              const hyScore    = Math.max(0, Math.min(100, ((650 - hyOas)  / 400) * 100)); // 100 at 250bps, 0 at 650bps
+              const curveScore = Math.max(0, Math.min(100, ((t10y2y + 0.8) / 2.8) * 100)); // 100 at +2%, 0 at -0.8%
+              const dxyScore   = Math.max(0, Math.min(100, 50 - dxyPct * 12));             // falling USD = greed
+              const goldScore  = Math.max(0, Math.min(100, 50 - goldPct * 8));             // rising gold = fear
+              const spScore    = Math.max(0, Math.min(100, 50 + spPct * 10));              // rising stocks = greed
+
+              const score = loading ? 50 : Math.round(
+                vixScore * 0.28 + hyScore * 0.22 + curveScore * 0.18 +
+                dxyScore * 0.12 + goldScore * 0.10 + spScore * 0.10
+              );
+              const label = score >= 75 ? "Extreme Greed" : score >= 58 ? "Greed" : score >= 42 ? "Neutral" : score >= 25 ? "Fear" : "Extreme Fear";
+              const gaugeColor = score >= 58 ? POSITIVE : score >= 42 ? WARNING : NEGATIVE;
+
+              const cx = 100; const cy = 90; const r = 72;
+              const angleDeg = (score / 100) * 180 - 90;
+              const rad = (angleDeg * Math.PI) / 180;
+              const nx = cx + r * Math.cos(rad); const ny = cy + r * Math.sin(rad);
+              const arc = (startA: number, endA: number) => {
+                const s = ((startA - 90) * Math.PI) / 180;
+                const e = ((endA   - 90) * Math.PI) / 180;
+                return `M ${cx + r * Math.cos(s)} ${cy + r * Math.sin(s)} A ${r} ${r} 0 0 1 ${cx + r * Math.cos(e)} ${cy + r * Math.sin(e)}`;
+              };
+              const zones = [
+                { color: NEGATIVE, pct: 0.25 }, { color: "#e57a3b", pct: 0.20 },
+                { color: WARNING,  pct: 0.10 }, { color: "#5f9e6e",  pct: 0.20 },
+                { color: POSITIVE, pct: 0.25 },
+              ];
+              let acc = 0;
+              return (
+                <div className="flex flex-col items-center mt-3">
+                  <svg viewBox="0 0 200 100" className="w-full max-w-[220px]">
+                    {zones.map((z, i) => {
+                      const s = acc * 180; acc += z.pct; const e = acc * 180;
+                      return <path key={i} d={arc(s, e)} fill="none" stroke={z.color} strokeWidth={12} opacity={0.22} />;
+                    })}
+                    <path d={arc(0, score * 1.8)} fill="none" stroke={gaugeColor} strokeWidth={12} opacity={0.9} />
+                    <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#0c1b38" strokeWidth={2} strokeLinecap="round" />
+                    <circle cx={cx} cy={cy} r={4} fill="#0c1b38" />
+                    <text x={cx} y={cy - 14} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#0a0a0a">{loading ? "—" : score}</text>
+                  </svg>
+                  <p className="mt-1 text-[15px] font-bold tracking-wide" style={{ color: gaugeColor }}>{loading ? "…" : label}</p>
+                  <div className="mt-4 w-full space-y-1.5 border-t border-[#eee9df] pt-4">
+                    {[
+                      { label: "Volatility (VIX)",   v: Math.round(vixScore),  note: `VIX ${vix.toFixed(1)}` },
+                      { label: "Credit (HY OAS)",    v: Math.round(hyScore),   note: `${hyOas.toFixed(0)}bps` },
+                      { label: "Yield Curve",        v: Math.round(curveScore),note: `2s10s ${t10y2y >= 0 ? "+" : ""}${t10y2y.toFixed(2)}%` },
+                      { label: "USD Momentum",       v: Math.round(dxyScore),  note: `${dxyPct >= 0 ? "+" : ""}${dxyPct.toFixed(2)}%` },
+                      { label: "Gold (Safe Haven)",  v: Math.round(goldScore), note: `${goldPct >= 0 ? "+" : ""}${goldPct.toFixed(2)}%` },
+                      { label: "Equity Momentum",    v: Math.round(spScore),   note: `S&P ${spPct >= 0 ? "+" : ""}${spPct.toFixed(2)}%` },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center gap-2">
+                        <p className="w-32 text-[9.5px] font-semibold text-[#777] shrink-0">{row.label}</p>
+                        <div className="flex-1 h-[4px] bg-[#eee9df]">
+                          <div className="h-full" style={{ width: `${loading ? 50 : row.v}%`, backgroundColor: row.v >= 58 ? POSITIVE : row.v >= 42 ? WARNING : NEGATIVE }} />
+                        </div>
+                        <p className="w-16 text-right text-[9.5px] tabular-nums text-[#999] shrink-0">{loading ? "…" : row.note}</p>
+                      </div>
+                    ))}
                   </div>
+                  <p className="mt-3 text-[9.5px] text-[#bbb] leading-relaxed">
+                    Weighted composite: VIX 28% · HY OAS 22% · Yield curve 18% · USD momentum 12% · Gold safe haven 10% · S&P momentum 10%
+                  </p>
                 </div>
-              ))}
-            </div>
+              );
+            })()}
           </Card>
         </div>
 
-        {/* ── Layer 4: Pressure chart ───────────────────────────────────── */}
-        <div className="mb-5 grid grid-cols-[1.15fr_0.85fr] gap-5">
+        {/* ── Layer 4 REMOVED (Asset-Class Reaction Matrix deleted) ───── */}
+        {false && <div className="mb-5 grid grid-cols-[1.15fr_0.85fr] gap-5">
 
-          {/* Asset-Class Reaction Matrix — static framework, always useful */}
+          {/* DELETED */}
           <Card className="p-6">
-            <SectionLabel>Asset-Class Reaction Matrix</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">Framework — which driver is currently active shapes how to read the matrix</p>
+            <SectionLabel>deleted</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">deleted</p>
             <div className="mt-5 overflow-hidden border border-[#eee9df]">
               <table className="w-full text-left">
                 <thead className="bg-[#fbfaf7]">
@@ -992,7 +1017,7 @@ export default function DashboardPage() {
               );
             })()}
           </Card>
-        </div>
+        </div>}
 
         {/* ── Layer 5: Currency Matrix + Commodities ───────────────────── */}
         <div className="mb-5 grid grid-cols-2 gap-5">
