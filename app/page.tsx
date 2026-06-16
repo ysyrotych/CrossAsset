@@ -2,6 +2,7 @@
 
 import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
+import CrossAssetLogo from "@/components/layout/CrossAssetLogo";
 import {
   Bar, BarChart, Brush, CartesianGrid, Cell, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -211,12 +212,7 @@ export default function DashboardPage() {
             <div className="flex items-center gap-6">
               {/* Logo */}
               <div className="flex items-center gap-3">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center border border-white/20 bg-white/10">
-                  <svg viewBox="0 0 20 20" className="h-4 w-4" fill="none">
-                    <path d="M3 10 L8 5 L13 10 L8 15 Z" fill="white" opacity="0.9"/>
-                    <path d="M8 10 L13 5 L18 10 L13 15 Z" fill="white" opacity="0.45"/>
-                  </svg>
-                </div>
+                <CrossAssetLogo variant="mark" color="light" className="shrink-0" />
                 <div>
                   <p className="text-[12.5px] font-bold leading-none tracking-[0.22em] text-white" style={{ fontFamily: "var(--font-serif)" }}>CROSSASSET</p>
                   <p className="mt-1 text-[8px] tracking-[0.28em] text-white/40 uppercase">Macro Intelligence</p>
