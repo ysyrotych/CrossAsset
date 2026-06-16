@@ -1,12 +1,13 @@
 import { NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
-import {
-  fetchMarketNews, fetchQuote, fetchEarningsCalendar,
-  fetchLiveSpotQuotes, fetchForexQuotes, fetchCryptoQuotes, fetchGlobalIndices,
-} from "@/lib/sources/finnhub";
+import { fetchMarketNews, fetchQuote, fetchEarningsCalendar, fetchGlobalIndices } from "@/lib/sources/finnhub";
+import { fetchCommoditySpots, fetchForexYahoo } from "@/lib/sources/yahoo";
+import { fetchCryptoCoingecko } from "@/lib/sources/coingecko";
+import { fetchEconCalendar } from "@/lib/sources/forexfactory";
 
-// Finnhub ETF proxies (SPY, GLD, USO) are NOT index values — only use for sectors.
-// All main equities quotes come from FRED which has the actual index/commodity levels.
+// Commodities/forex come from Yahoo Finance (real-time futures/spot).
+// Equities index levels (SP500, VIX, Nasdaq) come from FRED for consistency with history charts.
+// Sectors come from Finnhub ETF quotes.
 
 export const dynamic = "force-dynamic";
 
@@ -304,17 +305,7 @@ const SECTORS: { symbol: string; name: string }[] = [
   { symbol: "XLC",  name: "Comm. Svcs" },
 ];
 
-// Static upcoming economic calendar (hardcoded BEA/BLS/Fed schedule)
-const ECON_CALENDAR = [
-  { event: "FOMC Meeting",          date: "2026-07-29", impact: "High",   estimate: "Hold 4.25-4.50%" },
-  { event: "CPI (June)",            date: "2026-07-15", impact: "High",   estimate: "~2.7% YoY" },
-  { event: "NFP (June)",            date: "2026-07-02", impact: "High",   estimate: "~150K jobs" },
-  { event: "GDP Q2 Advance",        date: "2026-07-30", impact: "High",   estimate: "~2.1% SAAR" },
-  { event: "PPI (June)",            date: "2026-07-14", impact: "Medium", estimate: "~2.3% YoY" },
-  { event: "Retail Sales (June)",   date: "2026-07-16", impact: "Medium", estimate: "~0.3% MoM" },
-  { event: "PCE Deflator (May)",    date: "2026-06-27", impact: "High",   estimate: "~2.6% YoY" },
-  { event: "Consumer Confidence",   date: "2026-06-24", impact: "Medium", estimate: "" },
-];
+// Economic calendar is fetched live from ForexFactory — no hardcoded data
 
 export async function GET() {
   // tf is NO LONGER used here — history is fetched separately via /api/chart-history
@@ -327,7 +318,7 @@ export async function GET() {
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     fredNasdaq,
     rawNews, rawFinnhubNews,
-    liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings,
+    liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings, liveCalendar,
     ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
@@ -352,20 +343,22 @@ export async function GET() {
     // News
     fetchFinancialNews().catch(() => []),
     fetchMarketNews().catch(() => []),
-    // New live data sources
-    fetchLiveSpotQuotes().catch(() => ({ gold: null, oil: null, dxy: null, silver: null })),
-    fetchForexQuotes().catch(() => []),
-    fetchCryptoQuotes().catch(() => []),
+    // Live data — Yahoo Finance for commodities/forex, CoinGecko for crypto
+    fetchCommoditySpots().catch(() => ({ gold: null, silver: null, oil: null, dxy: null })),
+    fetchForexYahoo().catch(() => []),
+    fetchCryptoCoingecko().catch(() => []),
     fetchGlobalIndices().catch(() => []),
     fetchEarningsCalendar().catch(() => []),
-    // Sector ETFs from Finnhub (expanded to 11)
+    fetchEconCalendar().catch(() => []),
+    // Sector ETFs from Finnhub (11 GICS sectors)
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
 
-  const spots = liveSpots as { gold: LiveQuote | null; oil: LiveQuote | null; dxy: LiveQuote | null; silver: LiveQuote | null };
+  const spots = liveSpots as { gold: LiveQuote | null; silver: LiveQuote | null; oil: LiveQuote | null; dxy: LiveQuote | null };
 
-  // Prefer Finnhub live spots for commodities (fresher than FRED); fall back to FRED
+  // Yahoo Finance futures for real-time commodities; FRED as fallback
   const gold   = spots.gold   ?? fredGold;
+  const silver = spots.silver;
   const oil    = spots.oil    ?? fredOil;
   const dxy    = spots.dxy    ?? fredDxy;
   const sp500  = fredSP500;   // keep FRED for indices (consistent with history chart)
@@ -396,7 +389,7 @@ export async function GET() {
     updatedAt: new Date().toISOString(),
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
-    equities: { sp500, vix, gold, oil, dxy, nasdaq, silver: spots.silver },
+    equities: { sp500, vix, gold, oil, dxy, nasdaq, silver },
     macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
     extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
     // history is now served by /api/chart-history — not included here
@@ -405,7 +398,7 @@ export async function GET() {
     crypto:  cryptoQuotes,
     global:  globalIndices,
     earnings: earnings,
-    econCalendar: ECON_CALENDAR,
+    econCalendar: liveCalendar,
     finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
     topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 8),
     driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),

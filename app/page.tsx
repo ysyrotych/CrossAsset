@@ -141,14 +141,18 @@ function fmtDate(iso: unknown): string {
 }
 
 export default function DashboardPage() {
-  const [tf,           setTf]           = useState<TF>("6M");
   const [data,         setData]         = useState<DashData | null>(null);
-  const [chartData,    setChartData]    = useState<ChartData | null>(null);
   const [loading,      setLoading]      = useState(true);
-  const [chartLoading, setChartLoading] = useState(true);
   const [error,        setError]        = useState<string | null>(null);
   const [expanded,     setExpanded]     = useState<ExpandedSeries>(null);
   const [newsTab,      setNewsTab]      = useState<"headlines" | "earnings" | "calendar">("headlines");
+  // Per-chart independent TF state — changing one does NOT affect the other
+  const [ratesTf,      setRatesTf]      = useState<TF>("6M");
+  const [equityTf,     setEquityTf]     = useState<TF>("6M");
+  const [ratesChart,   setRatesChart]   = useState<ChartData | null>(null);
+  const [equityChart,  setEquityChart]  = useState<ChartData | null>(null);
+  const [ratesLoading, setRatesLoading] = useState(true);
+  const [equityLoading,setEquityLoading]= useState(true);
 
   // Fetch quotes + analytics + news — runs once on mount only
   const fetchData = useCallback(async () => {
@@ -167,23 +171,28 @@ export default function DashboardPage() {
     }
   }, []);
 
-  // Fetch chart history only — runs when TF changes (fast, doesn't touch metric tiles)
-  const fetchHistory = useCallback(async (t: TF) => {
-    setChartLoading(true);
+  // Independent history fetchers — each chart manages its own TF
+  const fetchRatesHistory = useCallback(async (t: TF) => {
+    setRatesLoading(true);
     try {
       const r = await fetch(`/api/chart-history?tf=${t}`);
       if (!r.ok) return;
-      const d: ChartData = await r.json();
-      setChartData(d);
-    } catch {
-      // silent — charts just stay on last data
-    } finally {
-      setChartLoading(false);
-    }
+      setRatesChart(await r.json());
+    } catch { /* silent */ } finally { setRatesLoading(false); }
+  }, []);
+
+  const fetchEquityHistory = useCallback(async (t: TF) => {
+    setEquityLoading(true);
+    try {
+      const r = await fetch(`/api/chart-history?tf=${t}`);
+      if (!r.ok) return;
+      setEquityChart(await r.json());
+    } catch { /* silent */ } finally { setEquityLoading(false); }
   }, []);
 
   useEffect(() => { fetchData(); }, [fetchData]);
-  useEffect(() => { fetchHistory(tf); }, [tf, fetchHistory]);
+  useEffect(() => { fetchRatesHistory(ratesTf); }, [ratesTf, fetchRatesHistory]);
+  useEffect(() => { fetchEquityHistory(equityTf); }, [equityTf, fetchEquityHistory]);
 
   const updatedTime = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
@@ -249,7 +258,7 @@ export default function DashboardPage() {
 
               {/* Refresh button */}
               <button
-                onClick={() => { fetchData(); fetchHistory(tf); }}
+                onClick={() => { fetchData(); fetchRatesHistory(ratesTf); fetchEquityHistory(equityTf); }}
                 disabled={loading}
                 className="flex items-center gap-2 border border-[#0c1b38] bg-[#0c1b38] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-80 disabled:opacity-40"
               >
@@ -339,9 +348,9 @@ export default function DashboardPage() {
                 {TF_LABELS.map((r) => (
                   <button
                     key={r}
-                    onClick={() => setTf(r)}
+                    onClick={() => setRatesTf(r)}
                     className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
-                      tf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
+                      ratesTf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
                     }`}
                   >
                     {r}
@@ -364,17 +373,17 @@ export default function DashboardPage() {
 
             {/* Yield curve chart */}
             <div className="h-[200px]">
-              {chartLoading ? (
+              {ratesLoading ? (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading chart…</span>
                 </div>
-              ) : !chartData?.history.length ? (
+              ) : !ratesChart?.history.length ? (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[11px] text-[#bbb]">Chart data unavailable — check FRED_API_KEY</span>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={chartData.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+                  <LineChart data={ratesChart.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
                     <CartesianGrid stroke="#eee9df" vertical={false} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
                     <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
@@ -532,9 +541,9 @@ export default function DashboardPage() {
               </div>
               <div className="flex items-center gap-1 shrink-0">
                 {TF_LABELS.map((r) => (
-                  <button key={r} onClick={() => setTf(r)}
+                  <button key={r} onClick={() => setEquityTf(r)}
                     className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
-                      tf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
+                      equityTf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
                     }`}>{r}</button>
                 ))}
               </div>
@@ -570,18 +579,18 @@ export default function DashboardPage() {
             {/* Expanded per-metric chart */}
             {expanded && (() => {
               const seriesMap: Record<NonNullable<ExpandedSeries>, { data: { date: string; value: number }[]; label: string; color: string; fmt: (v: number) => string }> = {
-                sp500:  { data: chartData?.historySP500  ?? [], label: "S&P 500",        color: NEGATIVE, fmt: (v) => v.toFixed(0) },
-                nasdaq: { data: chartData?.historyNasdaq ?? [], label: "NASDAQ Composite",color: "#7c3aed", fmt: (v) => v.toFixed(0) },
-                vix:    { data: chartData?.historyVIX    ?? [], label: "VIX",            color: WARNING,  fmt: (v) => v.toFixed(1) },
-                gold:   { data: chartData?.historyGold   ?? [], label: "Gold ($/troy oz)",color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
-                oil:    { data: chartData?.historyOil    ?? [], label: "WTI Crude ($/bbl)",color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
+                sp500:  { data: equityChart?.historySP500  ?? [], label: "S&P 500",          color: NEGATIVE,  fmt: (v) => v.toFixed(0) },
+                nasdaq: { data: equityChart?.historyNasdaq ?? [], label: "NASDAQ Composite",  color: "#7c3aed", fmt: (v) => v.toFixed(0) },
+                vix:    { data: equityChart?.historyVIX    ?? [], label: "VIX",              color: WARNING,   fmt: (v) => v.toFixed(1) },
+                gold:   { data: equityChart?.historyGold   ?? [], label: "Gold ($/troy oz)",  color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
+                oil:    { data: equityChart?.historyOil    ?? [], label: "WTI Crude ($/bbl)", color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
               };
               const s = seriesMap[expanded];
               const vals = s.data.map((p) => p.value);
               const hi = vals.length ? Math.max(...vals) : 0;
               const lo = vals.length ? Math.min(...vals) : 0;
               const cur = s.data.length ? s.data[s.data.length - 1].value : 0;
-              const chgPct = lo > 0 ? ((cur - s.data[0]?.value) / s.data[0]?.value * 100) : 0;
+              const chgPct = s.data[0]?.value > 0 ? ((cur - s.data[0].value) / s.data[0].value * 100) : 0;
               return (
                 <div className="border-t border-[#eee9df] pt-5">
                   <div className="mb-3 flex items-center justify-between">
@@ -589,7 +598,7 @@ export default function DashboardPage() {
                       <p className="text-[13px] font-bold text-[#0a0a0a]">{s.label}</p>
                       <span className="text-[16px] font-bold tabular-nums text-[#0a0a0a]">{s.fmt(cur)}</span>
                       <span className={`text-[11px] font-bold tabular-nums ${chgPct >= 0 ? "text-[#147a4f]" : "text-[#b42318]"}`}>
-                        {chgPct >= 0 ? "+" : ""}{chgPct.toFixed(2)}% ({tf})
+                        {chgPct >= 0 ? "+" : ""}{chgPct.toFixed(2)}% ({equityTf})
                       </span>
                     </div>
                     <div className="flex items-center gap-4 text-right">
@@ -622,17 +631,17 @@ export default function DashboardPage() {
             {/* S&P 500 overview chart when nothing is expanded */}
             {!expanded && (
               <div className="h-[200px]">
-                {chartLoading ? (
+                {equityLoading ? (
                   <div className="h-full flex items-center justify-center">
                     <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading chart…</span>
                   </div>
-                ) : !chartData?.historySP500?.length ? (
+                ) : !equityChart?.historySP500?.length ? (
                   <div className="h-full flex items-center justify-center">
                     <span className="text-[11px] text-[#bbb]">SP500 history unavailable</span>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={chartData.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 8 }}>
+                    <LineChart data={equityChart.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 8 }}>
                       <CartesianGrid stroke="#eee9df" vertical={false} />
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
                       <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v)/1000).toFixed(1)}K` : String(v)} width={48} />
@@ -681,106 +690,139 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ── Layer 2: Drivers · Transmission · Agreement ─────────────── */}
-        <div className="mb-5 grid grid-cols-[0.9fr_1.2fr_0.9fr] gap-5">
-
-          {/* Repricing Drivers — computed from FRED */}
+        {/* ── Fed Rate Change Probability Matrix ───────────────────────── */}
+        <div className="mb-5">
           <Card className="p-6">
-            <SectionLabel>Repricing Drivers</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Computed from live FRED data" : "Awaiting FRED connection"}</p>
-            <div className="mt-5 space-y-4">
-              {(data?.driverScores ?? []).map((d) => (
-                <div key={d.driver}>
-                  <div className="mb-1.5 flex items-start justify-between gap-4">
-                    <div>
-                      <p className="text-[12.5px] font-bold text-[#0a0a0a]">{d.driver}</p>
-                      <div className="mt-1 flex items-center gap-2">
-                        <PressurePill pressure={d.direction} />
-                        <span className="text-[10px] font-bold uppercase tracking-[0.12em] text-[#999]">{d.sensitivity}</span>
-                      </div>
-                    </div>
-                    <div className="text-right shrink-0">
-                      <p className="text-[13px] font-bold tabular-nums text-[#0c1b38]">{d.score}</p>
-                      <p className={`text-[10px] font-bold tabular-nums ${d.direction === "hawkish" ? "text-[#b42318]" : "text-[#147a4f]"}`}>{d.trend}</p>
-                    </div>
-                  </div>
-                  <ScoreBar value={d.score} tone={d.direction === "hawkish" ? "negative" : "neutral"} />
-                </div>
-              ))}
-              {loading && <p className="text-[12px] text-[#bbb]">Computing from FRED…</p>}
-            </div>
-          </Card>
-
-          {/* Macro Transmission Chain — computed */}
-          <Card className="p-6">
-            <SectionLabel>Macro Transmission Chain</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived from live FRED series" : "Awaiting FRED connection"}</p>
-            <div className="mt-5 space-y-0">
-              {(data?.transmission ?? []).map((node, index) => (
-                <div key={node.label} className="relative">
-                  <div className="flex items-start gap-4 py-4 border-b border-[#f1eee8] last:border-0">
-                    <div className="flex flex-col items-center shrink-0 w-8 pt-0.5">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#bbb]">
-                        {String(index + 1).padStart(2, "0")}
-                      </span>
-                      {index < (data?.transmission.length ?? 0) - 1 && (
-                        <div className="mt-1.5 w-px flex-1 bg-[#e8e3da]" style={{ minHeight: 20 }} />
-                      )}
-                    </div>
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center justify-between gap-3 mb-1.5">
-                        <div className="flex items-center gap-2">
-                          <p className="text-[13px] font-bold text-[#0a0a0a]">{node.label}</p>
-                          <span className="text-[11px] font-bold text-[#0c1b38]">→</span>
-                          <p className="text-[12px] font-bold text-[#0c1b38]">{node.state}</p>
-                        </div>
-                        <PressurePill pressure={node.pressure} />
-                      </div>
-                      <div className="mt-2 flex items-center gap-2">
-                        <div className="flex-1 h-[4px] bg-[#eee9df]">
-                          <div className="h-full bg-[#0c1b38]" style={{ width: `${node.confidence}%` }} />
-                        </div>
-                        <span className="text-[10px] font-bold text-[#999] tabular-nums shrink-0">{node.confidence}%</span>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              ))}
-              {loading && <p className="mt-4 text-[12px] text-[#bbb]">Deriving chain from FRED…</p>}
-            </div>
-          </Card>
-
-          {/* Cross-Asset Agreement — computed */}
-          <Card className="p-6">
-            <SectionLabel>Cross-Asset Agreement</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Derived from live quote directions" : "Awaiting FRED connection"}</p>
-            <div className="mt-5">
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#147a4f]">Confirms</p>
-              <div className="space-y-2 mb-5">
-                {(data?.agreement.confirming ?? []).map((s) => (
-                  <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
-                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#147a4f] shrink-0" />
-                    <div className="flex items-center gap-2">
-                      <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
-                      <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#147a4f]">{s.asset}</span>
-                    </div>
-                  </div>
-                ))}
+            <div className="mb-5 flex items-center justify-between">
+              <div>
+                <SectionLabel>Fed Rate Change Probability Matrix</SectionLabel>
+                <p className="mt-1 text-[9.5px] text-[#999]">
+                  Derived from live CPI, unemployment, yield curve, and fed funds data · Model-based estimate
+                </p>
               </div>
-              <p className="mb-2 text-[10px] font-bold uppercase tracking-[0.18em] text-[#b42318]">Diverges</p>
-              <div className="space-y-2">
-                {(data?.agreement.contradicting ?? []).map((s) => (
-                  <div key={s.signal} className="flex items-start gap-3 py-2 border-b border-[#f1eee8] last:border-0">
-                    <span className="mt-0.5 w-1.5 h-1.5 rounded-full bg-[#b42318] shrink-0" />
-                    <div className="flex items-center gap-2">
-                      <p className="text-[12px] font-bold text-[#0a0a0a]">{s.signal}</p>
-                      <span className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#b42318]">{s.asset}</span>
-                    </div>
-                  </div>
-                ))}
+              <div className="text-right">
+                <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">Current Rate</p>
+                <p className="text-[18px] font-bold tabular-nums text-[#0c1b38]">
+                  {data?.yields.fedfunds ? `${data.yields.fedfunds.price.toFixed(2)}%` : "—"}
+                </p>
               </div>
             </div>
-            {loading && <p className="mt-4 text-[12px] text-[#bbb]">Analyzing agreement…</p>}
+            {(() => {
+              const cpi     = data?.macro.cpi?.price ?? 3;
+              const unrate  = data?.macro.unrate?.price ?? 4.2;
+              const ff      = data?.yields.fedfunds?.price ?? 4.33;
+              const t10y2y  = data?.extraData.t10y2y?.price ?? 0;
+              const hyOas   = data?.macro.hySpread?.price ?? 350;
+
+              // Model inputs → cut/hike bias
+              const inflationPressure = Math.max(0, (cpi - 2) / 3);       // 0 at target, 1 at 5%
+              const laborSlack        = Math.max(0, (unrate - 4) / 2);    // 0 at 4%, 1 at 6%
+              const curveInversion    = t10y2y < -0.1 ? 0.25 : 0;
+              const creditStress      = hyOas > 500 ? 0.15 : 0;
+              // Positive cutBias = more likely to cut
+              const cutBias = laborSlack * 0.5 + curveInversion + creditStress - inflationPressure * 0.4;
+
+              const meetings = [
+                { label: "Jul 29 FOMC", lag: 0 },
+                { label: "Sep 17 FOMC", lag: 1 },
+                { label: "Nov 5 FOMC",  lag: 2 },
+                { label: "Dec 10 FOMC", lag: 3 },
+              ];
+
+              const rows = meetings.map((m) => {
+                const bias = cutBias + m.lag * 0.08;
+                const pHike = cpi > 3.8 && ff < 5.5 ? Math.max(0, Math.min(30, (cpi - 3.5) * 25)) : 0;
+                const pCut  = Math.max(0, Math.min(85, 20 + bias * 50));
+                const pHold = Math.max(5, 100 - Math.round(pCut) - Math.round(pHike));
+                return {
+                  meeting: m.label,
+                  pHike:   Math.round(pHike),
+                  pHold:   Math.round(pHold),
+                  pCut:    Math.round(pCut),
+                };
+              });
+
+              return (
+                <div>
+                  <div className="overflow-hidden border border-[#eee9df]">
+                    <table className="w-full text-left">
+                      <thead>
+                        <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">Meeting</th>
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#147a4f]">Cut (−25bps)</th>
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#555]">Hold</th>
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#b42318]">Hike (+25bps)</th>
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">Signal</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {(loading ? [] : rows).map((row, i) => {
+                          const dominant = row.pCut > row.pHold && row.pCut > row.pHike ? "cut"
+                            : row.pHike > row.pHold ? "hike" : "hold";
+                          return (
+                            <tr key={i} className="border-b border-[#f1eee8] last:border-0">
+                              <td className="px-4 py-3 text-[12px] font-bold text-[#0a0a0a]">{row.meeting}</td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                    <div className="h-full bg-[#147a4f]" style={{ width: `${row.pCut}%` }} />
+                                  </div>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#147a4f]">{row.pCut}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                    <div className="h-full bg-[#555]" style={{ width: `${row.pHold}%` }} />
+                                  </div>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#555]">{row.pHold}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <div className="flex items-center gap-2">
+                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                    <div className="h-full bg-[#b42318]" style={{ width: `${row.pHike}%` }} />
+                                  </div>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#b42318]">{row.pHike}%</span>
+                                </div>
+                              </td>
+                              <td className="px-4 py-3">
+                                <span className={`text-[9.5px] font-bold uppercase tracking-[0.1em] px-2 py-1 border ${
+                                  dominant === "cut"  ? "text-[#147a4f] bg-[#f4fbf7] border-[#cfe8da]" :
+                                  dominant === "hike" ? "text-[#b42318] bg-[#fff7f5] border-[#f2d2cc]" :
+                                                        "text-[#555] bg-[#faf8f3] border-[#eee9df]"
+                                }`}>{dominant}</span>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                        {loading && (
+                          <tr><td colSpan={5} className="px-4 py-4 text-[12px] text-[#bbb]">Computing from FRED data…</td></tr>
+                        )}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div className="mt-4 grid grid-cols-5 gap-4 border-t border-[#eee9df] pt-4">
+                    {[
+                      { label: "CPI YoY",     val: cpi.toFixed(1) + "%",    note: cpi > 3 ? "Above target" : "Near target" },
+                      { label: "Unemployment", val: unrate.toFixed(1) + "%", note: unrate > 4.5 ? "Labor loosening" : "Labor tight" },
+                      { label: "2s10s Slope",  val: (t10y2y >= 0 ? "+" : "") + t10y2y.toFixed(2) + "%", note: t10y2y < 0 ? "Inverted" : "Normal" },
+                      { label: "HY OAS",       val: (data?.macro.hySpread?.price ?? 0).toFixed(0) + "bps", note: hyOas > 450 ? "Credit stress" : "Benign" },
+                      { label: "Fed Funds",    val: ff.toFixed(2) + "%",     note: ff > 4.5 ? "Restrictive" : "Neutral" },
+                    ].map((item) => (
+                      <div key={item.label}>
+                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.label}</p>
+                        <p className="mt-1 text-[14px] font-bold tabular-nums text-[#0c1b38]">{loading ? "—" : item.val}</p>
+                        <p className="mt-0.5 text-[10px] font-semibold text-[#777]">{loading ? "" : item.note}</p>
+                      </div>
+                    ))}
+                  </div>
+                  <p className="mt-3 text-[10px] text-[#bbb] leading-relaxed">
+                    Methodology: Probabilities derived from a rule-based model using live CPI relative to 2% target, labor market slack (unemployment above/below 4%), yield curve slope, credit spreads, and Fed Funds vs neutral rate. Not a market-implied probability — for directional context only.
+                  </p>
+                </div>
+              );
+            })()}
           </Card>
         </div>
 
