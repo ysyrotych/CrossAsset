@@ -66,21 +66,21 @@ export async function GET(req: NextRequest) {
     fetchHistory("GC=F", range),
     fetchHistory("CL=F", range),
     // ^TNX = 10Y, ^FVX = 5Y (Yahoo quotes in %, e.g. 4.48)
-    fetchYFQuotes(["^TNX", "^FVX", "SPY", "^VIX", "QQQ"]).catch(() => new Map()),
+    // ^GSPC = S&P 500 actual index level (matches FRED SP500 series)
+    // ^TNX = 10Y yield %, ^FVX = 5Y yield %, ^VIX = VIX level
+    fetchYFQuotes(["^GSPC", "^TNX", "^FVX", "^VIX"]).catch(() => new Map()),
   ]);
 
   // Patch FRED series with today's live value so charts always extend to today
-  const tnx = live.get("^TNX");
-  const fvx = live.get("^FVX");
-  const spy = live.get("SPY");
-  const vix = live.get("^VIX");
-  const qqq = live.get("QQQ");
+  const gspc = live.get("^GSPC");
+  const tnx  = live.get("^TNX");
+  const fvx  = live.get("^FVX");
+  const vix  = live.get("^VIX");
 
   const patched10  = patchToday(hist10,    tnx?.price);
   const patched5   = patchToday(hist5,     fvx?.price);
-  const patchedSP  = patchToday(histSP500, spy?.price);
+  const patchedSP  = patchToday(histSP500, gspc?.price);
   const patchedVIX = patchToday(histVIX,   vix?.price);
-  const patchedNQ  = patchToday(histNasdaq, qqq ? qqq.price * 8.3 : undefined); // QQQ ≈ NQ / 8.3 — rough proxy, skip if bad
 
   const sortH = (arr: Pt[]) => [...arr].sort((a, b) => a.date.localeCompare(b.date));
 

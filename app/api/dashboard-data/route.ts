@@ -320,6 +320,7 @@ export async function GET() {
     fredNasdaq,
     rawNews, rawFinnhubNews,
     liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings, liveCalendar, fedwatchProbs,
+    diaQuote,
     ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
@@ -352,6 +353,7 @@ export async function GET() {
     fetchEarningsCalendar().catch(() => []),
     fetchEconCalendar().catch(() => []),
     fetchFedWatchProbs().catch(() => []),
+    fetchQuote("DIA").catch(() => null),  // Dow Jones ETF proxy (~DJI/100)
     // Sector ETFs from Finnhub (11 GICS sectors)
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
@@ -366,6 +368,12 @@ export async function GET() {
   const sp500  = fredSP500;   // keep FRED for indices (consistent with history chart)
   const vix    = fredVix;
   const nasdaq = fredNasdaq;
+
+  // DIA ETF ≈ DJI / 100 — scale back to index level for display
+  const diaQ = diaQuote as { price: number; change: number; pct: number } | null;
+  const dow: LiveQuote | null = diaQ
+    ? { price: diaQ.price * 100, change: diaQ.change * 100, pct: diaQ.pct }
+    : null;
 
   // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
@@ -391,7 +399,7 @@ export async function GET() {
     updatedAt: new Date().toISOString(),
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
-    equities: { sp500, vix, gold, oil, dxy, nasdaq, silver },
+    equities: { sp500, vix, gold, oil, dxy, nasdaq, silver, dow },
     macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
     extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
     // history is now served by /api/chart-history — not included here

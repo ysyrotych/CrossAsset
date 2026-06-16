@@ -17,7 +17,7 @@ type DashData = {
   updatedAt: string;
   fredConnected: boolean;
   yields:    { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
-  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote; silver: LiveQuote };
+  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote; silver: LiveQuote; dow: LiveQuote };
   macro:     { cpi: LiveQuote; coreCpi: LiveQuote; pce: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
   extraData: { breakeven: LiveQuote; mortgage: LiveQuote; sentiment: LiveQuote; indpro: LiveQuote; retail: LiveQuote; t10y2y: LiveQuote; claims: LiveQuote };
   sectors:   { symbol: string; name: string; price: number; change: number; pct: number }[];
@@ -134,7 +134,7 @@ function SourceDot({ ok, label }: { ok: boolean; label: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
-type ExpandedSeries = "sp500" | "nasdaq" | "vix" | "gold" | "oil" | null;
+type ExpandedSeries = "sp500" | "nasdaq" | "dow" | "vix" | "gold" | "oil" | null;
 
 function fmtDate(iso: unknown): string {
   if (!iso || typeof iso !== "string") return "";
@@ -278,6 +278,7 @@ export default function DashboardPage() {
             const tickers = [
               { label: "S&P 500",   val: data?.equities.sp500?.price,   pct: data?.equities.sp500?.pct,   dec: 0, pfx: "",  sfx: "" },
               { label: "NASDAQ",    val: data?.equities.nasdaq?.price,  pct: data?.equities.nasdaq?.pct,  dec: 0, pfx: "",  sfx: "" },
+              { label: "Dow Jones", val: data?.equities.dow?.price,     pct: data?.equities.dow?.pct,     dec: 0, pfx: "",  sfx: "" },
               { label: "10Y UST",   val: data?.yields.dgs10?.price,     pct: data?.yields.dgs10?.pct,     dec: 2, pfx: "",  sfx: "%" },
               { label: "2Y UST",    val: data?.yields.dgs2?.price,      pct: data?.yields.dgs2?.pct,      dec: 2, pfx: "",  sfx: "%" },
               { label: "Fed Funds", val: data?.yields.fedfunds?.price,  pct: null,                        dec: 2, pfx: "",  sfx: "%" },
@@ -575,11 +576,12 @@ export default function DashboardPage() {
               </div>
             </div>
 
-            {/* 5 clickable equity metric tiles */}
-            <div className="mb-5 grid grid-cols-5 gap-3">
+            {/* 6 clickable equity metric tiles */}
+            <div className="mb-5 grid grid-cols-6 gap-3">
               {([
                 { key: "sp500",  label: "S&P 500",  q: data?.equities.sp500,  note: "Expand chart", dec: 0 },
                 { key: "nasdaq", label: "NASDAQ",   q: data?.equities.nasdaq, note: "Expand chart", dec: 0 },
+                { key: "dow",    label: "Dow Jones",q: data?.equities.dow,    note: "Expand chart", dec: 0 },
                 { key: "vix",    label: "VIX",      q: data?.equities.vix,    note: "Expand chart", dec: 1, inv: true },
                 { key: "gold",   label: "Gold",     q: data?.equities.gold,   note: "Expand chart", dec: 0, pfx: "$" },
                 { key: "oil",    label: "WTI Crude",q: data?.equities.oil,    note: "Expand chart", dec: 2, pfx: "$" },
@@ -607,6 +609,7 @@ export default function DashboardPage() {
               const seriesMap: Record<NonNullable<ExpandedSeries>, { data: { date: string; value: number }[]; label: string; color: string; fmt: (v: number) => string }> = {
                 sp500:  { data: equityChart?.historySP500  ?? [], label: "S&P 500",          color: NEGATIVE,  fmt: (v) => v.toFixed(0) },
                 nasdaq: { data: equityChart?.historyNasdaq ?? [], label: "NASDAQ Composite",  color: "#7c3aed", fmt: (v) => v.toFixed(0) },
+                dow:    { data: [], label: "Dow Jones",  color: "#0369a1", fmt: (v) => v.toFixed(0) },
                 vix:    { data: equityChart?.historyVIX    ?? [], label: "VIX",              color: WARNING,   fmt: (v) => v.toFixed(1) },
                 gold:   { data: equityChart?.historyGold   ?? [], label: "Gold ($/troy oz)",  color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
                 oil:    { data: equityChart?.historyOil    ?? [], label: "WTI Crude ($/bbl)", color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
