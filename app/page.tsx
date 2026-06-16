@@ -247,7 +247,7 @@ export default function DashboardPage() {
               <button
                 onClick={() => { fetchData(); fetchRatesHistory(ratesTf); fetchEquityHistory(equityTf); }}
                 disabled={loading}
-                className="flex items-center gap-2 border border-white/20 bg-white/8 px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75 transition-all hover:bg-white/15 disabled:opacity-40"
+                className="flex items-center gap-2 border border-white/20 bg-white/[0.08] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75 transition-all hover:bg-white/15 disabled:opacity-40"
               >
                 <span className={loading ? "inline-block animate-spin" : ""}>↻</span>
                 {loading ? "Updating…" : "Refresh"}
