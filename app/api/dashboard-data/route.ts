@@ -72,6 +72,7 @@ async function fredYoY(id: string): Promise<LiveQuote | null> {
   }
 }
 
+// Returns raw ISO dates (YYYY-MM-DD) — never format here, format in the chart component
 async function fredHistory(id: string, start: string): Promise<{ date: string; value: number }[]> {
   if (!KEY) return [];
   try {
@@ -82,10 +83,7 @@ async function fredHistory(id: string, start: string): Promise<{ date: string; v
     if (!r.ok) return [];
     return ((await r.json()).observations ?? [])
       .filter((o: { value: string }) => o.value !== ".")
-      .map((o: { date: string; value: string }) => ({
-        date: new Date(o.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }),
-        value: parseFloat(o.value),
-      }));
+      .map((o: { date: string; value: string }) => ({ date: o.date, value: parseFloat(o.value) }));
   } catch {
     return [];
   }
@@ -334,10 +332,10 @@ export async function GET(req: NextRequest) {
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
     cpi, coreCpi, pce, unrate, payems, gdp,
-    hySpread, sp500, vix, gold, oil, dxy,
+    hySpread, fredSP500, fredVix, fredGold, oil, dxy,
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
-    nasdaq,
-    hist5, hist10, histSP500,
+    fredNasdaq,
+    hist5, hist10, histSP500, histVIX, histGold, histOil, histNasdaq,
     rawNews, rawFinnhubNews,
     ...sectorQuotes
   ] = await Promise.all([
@@ -360,32 +358,52 @@ export async function GET(req: NextRequest) {
     fredLatest("RSXFS"),
     fredLatest("T10Y2Y"),
     fredLatest("ICSA"),
-    // Nasdaq
     fredLatest("NASDAQCOM", 5),
-    // History
-    fredHistory("DGS5", start), fredHistory("DGS10", start), fredHistory("SP500", start),
+    // History — keep raw ISO dates, sort ascending
+    fredHistory("DGS5", start), fredHistory("DGS10", start),
+    fredHistory("SP500", start), fredHistory("VIXCLS", start),
+    fredHistory("GOLDAMGBD228NLBM", start), fredHistory("DCOILWTICO", start),
+    fredHistory("NASDAQCOM", start),
     // News
     fetchFinancialNews().catch(() => []),
     fetchMarketNews().catch(() => []),
-    // Sector ETFs only from Finnhub (no FRED equivalent)
+    // Sector ETFs only from Finnhub
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
 
-  // Build yield history
+  // Sort history arrays (ISO dates sort lexicographically = chronologically)
+  const sortH = (arr: { date: string; value: number }[]) =>
+    [...arr].sort((a, b) => a.date.localeCompare(b.date));
+
+  const historySP500  = sortH(histSP500  as { date: string; value: number }[]);
+  const historyVIX    = sortH(histVIX    as { date: string; value: number }[]);
+  const historyGold   = sortH(histGold   as { date: string; value: number }[]);
+  const historyOil    = sortH(histOil    as { date: string; value: number }[]);
+  const historyNasdaq = sortH(histNasdaq as { date: string; value: number }[]);
+
+  // Build yield history map
   const dateMap = new Map<string, { date: string; tenYear?: number; fiveYear?: number }>();
   (hist10 as { date: string; value: number }[]).forEach((p) => dateMap.set(p.date, { date: p.date, tenYear: p.value }));
-  (hist5 as { date: string; value: number }[]).forEach((p) => {
+  (hist5  as { date: string; value: number }[]).forEach((p) => {
     const e = dateMap.get(p.date) ?? { date: p.date };
     dateMap.set(p.date, { ...e, fiveYear: p.value });
   });
-  const history = [...dateMap.values()].sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  const history = [...dateMap.values()].sort((a, b) => a.date.localeCompare(b.date));
 
-  // SP500 history (for equities chart)
-  const historySP500 = (histSP500 as { date: string; value: number }[]).sort(
-    (a, b) => new Date(a.date).getTime() - new Date(b.date).getTime()
-  );
+  // Derive live quotes from last two history points (consistent with chart, avoids FRED lag mismatch)
+  function quoteFromHistory(arr: { date: string; value: number }[]): LiveQuote | null {
+    if (arr.length < 2) return arr.length === 1 ? { price: arr[0].value, change: 0, pct: 0 } : null;
+    const cur = arr[arr.length - 1].value;
+    const prev = arr[arr.length - 2].value;
+    const change = cur - prev;
+    return { price: cur, change, pct: prev ? (change / prev) * 100 : 0 };
+  }
+
+  // Use history-derived quotes for index series so tile and chart are always consistent
+  const sp500  = quoteFromHistory(historySP500)  ?? fredSP500;
+  const vix    = quoteFromHistory(historyVIX)    ?? fredVix;
+  const gold   = quoteFromHistory(historyGold)   ?? fredGold;
+  const nasdaq = quoteFromHistory(historyNasdaq) ?? fredNasdaq;
 
   // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
@@ -412,11 +430,15 @@ export async function GET(req: NextRequest) {
     tf,
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
-    equities: { sp500, vix, gold, oil, dxy, nasdaq },
+    equities: { sp500, vix, gold, oil, dxy, nasdaq: nasdaq ?? fredNasdaq },
     macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
     extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
     history,
     historySP500,
+    historyVIX,
+    historyGold,
+    historyOil,
+    historyNasdaq,
     sectors,
     finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
     topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 8),

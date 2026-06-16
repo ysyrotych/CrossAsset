@@ -3,7 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import {
-  Bar, BarChart, CartesianGrid, Cell, Line, LineChart,
+  Bar, BarChart, Brush, CartesianGrid, Cell, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
 } from "recharts";
 
@@ -19,8 +19,12 @@ type DashData = {
   equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote };
   macro:     { cpi: LiveQuote; coreCpi: LiveQuote; pce: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
   extraData: { breakeven: LiveQuote; mortgage: LiveQuote; sentiment: LiveQuote; indpro: LiveQuote; retail: LiveQuote; t10y2y: LiveQuote; claims: LiveQuote };
-  history:   { date: string; tenYear?: number; fiveYear?: number }[];
-  historySP500: { date: string; value: number }[];
+  history:      { date: string; tenYear?: number; fiveYear?: number }[];
+  historySP500:  { date: string; value: number }[];
+  historyVIX:    { date: string; value: number }[];
+  historyGold:   { date: string; value: number }[];
+  historyOil:    { date: string; value: number }[];
+  historyNasdaq: { date: string; value: number }[];
   sectors:   { symbol: string; name: string; price: number; change: number; pct: number }[];
   finnhubNews: { headline: string; source: string; url?: string }[];
   topNews:   { title: string; source: string; description: string; url?: string }[];
@@ -118,11 +122,20 @@ function SourceDot({ ok, label }: { ok: boolean; label: string }) {
 
 // ── Main page ──────────────────────────────────────────────────────────────
 
+type ExpandedSeries = "sp500" | "nasdaq" | "vix" | "gold" | "oil" | null;
+
+function fmtDate(iso: unknown): string {
+  if (!iso || typeof iso !== "string") return "";
+  const d = new Date(iso + "T00:00:00");
+  return d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+}
+
 export default function DashboardPage() {
-  const [tf,      setTf]      = useState<TF>("6M");
-  const [data,    setData]    = useState<DashData | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error,   setError]   = useState<string | null>(null);
+  const [tf,       setTf]       = useState<TF>("6M");
+  const [data,     setData]     = useState<DashData | null>(null);
+  const [loading,  setLoading]  = useState(true);
+  const [error,    setError]    = useState<string | null>(null);
+  const [expanded, setExpanded] = useState<ExpandedSeries>(null);
 
   const fetchData = useCallback(async (t: TF) => {
     setLoading(true);
@@ -333,11 +346,12 @@ export default function DashboardPage() {
                 <ResponsiveContainer width="100%" height="100%">
                   <LineChart data={data.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
                     <CartesianGrid stroke="#eee9df" vertical={false} />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" />
+                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
                     <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
-                    <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [`${Number(v).toFixed(2)}%`]} />
+                    <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [`${Number(v).toFixed(2)}%`]} labelFormatter={fmtDate} />
                     <Line type="monotone" dataKey="fiveYear"  name="5Y Treasury"  stroke="#6b7280" strokeWidth={2}   dot={false} connectNulls />
                     <Line type="monotone" dataKey="tenYear"   name="10Y Treasury" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
+                    <Brush dataKey="date" height={18} travellerWidth={6} stroke="#e8e3da" fill="#fbfaf7" tickFormatter={fmtDate} />
                   </LineChart>
                 </ResponsiveContainer>
               )}
@@ -403,61 +417,125 @@ export default function DashboardPage() {
               <div>
                 <SectionLabel>Equities Command Center</SectionLabel>
                 <h3 className="mt-3 text-[21px] font-light leading-[1.2] tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>
-                  {data?.equities.sp500 ? `S&P 500 at ${data.equities.sp500.price.toFixed(0)} — live via Finnhub` : "Connecting…"}
+                  {data?.equities.sp500
+                    ? `S&P 500 at ${data.equities.sp500.price.toFixed(0)} — live from FRED`
+                    : "Connecting to FRED…"}
                 </h3>
               </div>
-              <div className="text-right shrink-0">
-                <p className="text-[9.5px] text-[#999]">{data?.sources.finnhub ? "Real-time · Finnhub" : "FRED delayed data"}</p>
+              <div className="flex items-center gap-1 shrink-0">
+                {TF_LABELS.map((r) => (
+                  <button key={r} onClick={() => setTf(r)}
+                    className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
+                      tf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
+                    }`}>{r}</button>
+                ))}
               </div>
             </div>
 
-            {/* 4 equity metric tiles */}
-            <div className="mb-5 grid grid-cols-4 gap-3">
-              <MetricTile label="S&P 500"  quote={data?.equities.sp500  ?? null} note="Large-cap US"     dec={0} />
-              <MetricTile label="NASDAQ"   quote={data?.equities.nasdaq ?? null} note="Tech-heavy"       dec={0} />
-              <MetricTile label="VIX"      quote={data?.equities.vix    ?? null} note="Fear gauge"       dec={1} invertColor />
-              <MetricTile label="Gold"     quote={data?.equities.gold   ?? null} note="Safe haven / USD hedge" dec={2} prefix="$" />
+            {/* 5 clickable equity metric tiles */}
+            <div className="mb-5 grid grid-cols-5 gap-3">
+              {([
+                { key: "sp500",  label: "S&P 500",  q: data?.equities.sp500,  note: "Click to expand", dec: 0 },
+                { key: "nasdaq", label: "NASDAQ",   q: data?.equities.nasdaq, note: "Click to expand", dec: 0 },
+                { key: "vix",    label: "VIX",      q: data?.equities.vix,    note: "Click to expand", dec: 1, inv: true },
+                { key: "gold",   label: "Gold",     q: data?.equities.gold,   note: "Click to expand", dec: 0, pfx: "$" },
+                { key: "oil",    label: "WTI Oil",  q: data?.equities.oil,    note: "Click to expand", dec: 2, pfx: "$" },
+              ] as { key: ExpandedSeries; label: string; q: LiveQuote; note: string; dec: number; inv?: boolean; pfx?: string }[]).map(({ key, label, q, note, dec, inv, pfx }) => {
+                const isActive = expanded === key;
+                const up = (q?.change ?? 0) > 0;
+                const color = q == null ? "#bbb" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
+                return (
+                  <button key={key} onClick={() => setExpanded(isActive ? null : key)}
+                    className={`border text-left px-3 py-3 transition-all cursor-pointer ${isActive ? "border-[#0c1b38] bg-[#0c1b38]" : "border-[#eee9df] bg-[#fbfaf7] hover:border-[#0c1b38]"}`}>
+                    <MiniLabel><span className={isActive ? "text-[#aab]" : ""}>{label}</span></MiniLabel>
+                    <p className={`mt-1 text-[18px] font-bold tabular-nums ${isActive ? "text-white" : "text-[#0a0a0a]"}`}>
+                      {q != null ? `${pfx ?? ""}${q.price.toFixed(dec)}` : "—"}
+                    </p>
+                    <p className="mt-1 text-[10px] font-semibold" style={{ color: isActive ? "#aab" : (q ? color : "#bbb") }}>
+                      {q != null ? `${q.pct >= 0 ? "+" : ""}${q.pct.toFixed(2)}% · ` : ""}{note}
+                    </p>
+                  </button>
+                );
+              })}
             </div>
 
-            {/* S&P 500 history chart */}
-            <div className="h-[200px]">
-              {loading ? (
-                <div className="h-full flex items-center justify-center">
-                  <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading…</span>
-                </div>
-              ) : !data?.historySP500?.length ? (
-                <div className="h-full flex items-center justify-center">
-                  <span className="text-[11px] text-[#bbb]">SP500 history unavailable</span>
-                </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 0 }}>
-                    <CartesianGrid stroke="#eee9df" vertical={false} />
-                    <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" />
-                    <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v)/1000).toFixed(1)}K` : String(v)} width={48} />
-                    <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [Number(v).toFixed(0), "S&P 500"]} />
-                    <Line type="monotone" dataKey="value" name="S&P 500" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
-                  </LineChart>
-                </ResponsiveContainer>
-              )}
-            </div>
-
-            {/* 52W stats + sector performance */}
-            {data?.historySP500?.length ? (() => {
-              const vals = data.historySP500.map((p) => p.value);
-              const hi = Math.max(...vals); const lo = Math.min(...vals);
-              const cur = data.equities.sp500?.price ?? vals[vals.length - 1];
-              const fromLo = ((cur - lo) / lo * 100).toFixed(1);
-              const fromHi = ((cur - hi) / hi * 100).toFixed(1);
+            {/* Expanded per-metric chart */}
+            {expanded && (() => {
+              const seriesMap: Record<NonNullable<ExpandedSeries>, { data: { date: string; value: number }[]; label: string; color: string; fmt: (v: number) => string }> = {
+                sp500:  { data: data?.historySP500  ?? [], label: "S&P 500",        color: NEGATIVE, fmt: (v) => v.toFixed(0) },
+                nasdaq: { data: data?.historyNasdaq ?? [], label: "NASDAQ Composite",color: "#7c3aed", fmt: (v) => v.toFixed(0) },
+                vix:    { data: data?.historyVIX    ?? [], label: "VIX",            color: WARNING,  fmt: (v) => v.toFixed(1) },
+                gold:   { data: data?.historyGold   ?? [], label: "Gold ($/troy oz)",color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
+                oil:    { data: data?.historyOil    ?? [], label: "WTI Crude ($/bbl)",color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
+              };
+              const s = seriesMap[expanded];
+              const vals = s.data.map((p) => p.value);
+              const hi = vals.length ? Math.max(...vals) : 0;
+              const lo = vals.length ? Math.min(...vals) : 0;
+              const cur = s.data.length ? s.data[s.data.length - 1].value : 0;
+              const chgPct = lo > 0 ? ((cur - s.data[0]?.value) / s.data[0]?.value * 100) : 0;
               return (
-                <div className="mt-4 grid grid-cols-4 gap-4 border-t border-[#eee9df] pt-4">
-                  <div><MiniLabel>Period High</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#147a4f]">{hi.toFixed(0)}</p></div>
-                  <div><MiniLabel>Period Low</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#b42318]">{lo.toFixed(0)}</p></div>
-                  <div><MiniLabel>From Low</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#147a4f]">+{fromLo}%</p></div>
-                  <div><MiniLabel>From High</MiniLabel><p className="mt-1 text-[12px] font-bold text-[#b42318]">{fromHi}%</p></div>
+                <div className="border-t border-[#eee9df] pt-5">
+                  <div className="mb-3 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <p className="text-[13px] font-bold text-[#0a0a0a]">{s.label}</p>
+                      <span className="text-[16px] font-bold tabular-nums text-[#0a0a0a]">{s.fmt(cur)}</span>
+                      <span className={`text-[11px] font-bold tabular-nums ${chgPct >= 0 ? "text-[#147a4f]" : "text-[#b42318]"}`}>
+                        {chgPct >= 0 ? "+" : ""}{chgPct.toFixed(2)}% ({tf})
+                      </span>
+                    </div>
+                    <div className="flex items-center gap-4 text-right">
+                      <div><p className="text-[9px] font-bold uppercase tracking-widest text-[#999]">Period High</p><p className="text-[12px] font-bold text-[#147a4f]">{s.fmt(hi)}</p></div>
+                      <div><p className="text-[9px] font-bold uppercase tracking-widest text-[#999]">Period Low</p><p className="text-[12px] font-bold text-[#b42318]">{s.fmt(lo)}</p></div>
+                      <button onClick={() => setExpanded(null)} className="text-[11px] font-bold text-[#999] hover:text-[#0a0a0a] ml-4">✕ Close</button>
+                    </div>
+                  </div>
+                  <div className="h-[280px]">
+                    {!s.data.length ? (
+                      <div className="h-full flex items-center justify-center"><span className="text-[12px] text-[#bbb]">No data available</span></div>
+                    ) : (
+                      <ResponsiveContainer width="100%" height="100%">
+                        <LineChart data={s.data} margin={{ top: 6, right: 8, bottom: 20, left: 8 }}>
+                          <CartesianGrid stroke="#eee9df" vertical={false} />
+                          <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
+                          <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => s.fmt(Number(v))} width={56} />
+                          <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [s.fmt(Number(v)), s.label]} labelFormatter={fmtDate} />
+                          <Line type="monotone" dataKey="value" name={s.label} stroke={s.color} strokeWidth={2.2} dot={false} connectNulls />
+                          <Brush dataKey="date" height={22} travellerWidth={8} stroke="#e8e3da" fill="#fbfaf7" tickFormatter={fmtDate} startIndex={0} />
+                        </LineChart>
+                      </ResponsiveContainer>
+                    )}
+                  </div>
+                  <p className="mt-2 text-[10px] text-[#bbb]">Drag the handles at the bottom to zoom into a time range · Click a tile above to switch series</p>
                 </div>
               );
-            })() : null}
+            })()}
+
+            {/* S&P 500 overview chart when nothing is expanded */}
+            {!expanded && (
+              <div className="h-[200px]">
+                {loading ? (
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading…</span>
+                  </div>
+                ) : !data?.historySP500?.length ? (
+                  <div className="h-full flex items-center justify-center">
+                    <span className="text-[11px] text-[#bbb]">SP500 history unavailable</span>
+                  </div>
+                ) : (
+                  <ResponsiveContainer width="100%" height="100%">
+                    <LineChart data={data.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 8 }}>
+                      <CartesianGrid stroke="#eee9df" vertical={false} />
+                      <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
+                      <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v)/1000).toFixed(1)}K` : String(v)} width={48} />
+                      <Tooltip contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }} formatter={(v: unknown) => [Number(v).toFixed(0), "S&P 500"]} labelFormatter={fmtDate} />
+                      <Line type="monotone" dataKey="value" name="S&P 500" stroke={NEGATIVE} strokeWidth={2.2} dot={false} connectNulls />
+                      <Brush dataKey="date" height={18} travellerWidth={6} stroke="#e8e3da" fill="#fbfaf7" tickFormatter={fmtDate} />
+                    </LineChart>
+                  </ResponsiveContainer>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
