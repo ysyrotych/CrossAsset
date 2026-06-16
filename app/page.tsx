@@ -25,6 +25,7 @@ type DashData = {
   global:    { symbol: string; name: string; region: string; price: number; change: number; pct: number }[];
   earnings:  { symbol: string; date: string; epsEstimate?: number; revenueEstimate?: number }[];
   econCalendar: { event: string; date: string; impact: string; estimate: string }[];
+  fedwatch: { date: string; label: string; cutProb: number; holdProb: number; hikeProb: number; impliedRate: number; probs: { range: string; lb: number; ub: number; prob: number }[] }[];
   finnhubNews: { headline: string; source: string; url?: string }[];
   topNews:   { title: string; source: string; description: string; url?: string }[];
   driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string }[];
@@ -697,7 +698,7 @@ export default function DashboardPage() {
               <div>
                 <SectionLabel>Fed Rate Change Probability Matrix</SectionLabel>
                 <p className="mt-1 text-[9.5px] text-[#999]">
-                  Derived from live CPI, unemployment, yield curve, and fed funds data · Model-based estimate
+                  Market-implied · CME ZQ Fed Funds Futures (ZQM26–ZQK27) · Refreshes every 5 min
                 </p>
               </div>
               <div className="text-right">
@@ -707,41 +708,13 @@ export default function DashboardPage() {
                 </p>
               </div>
             </div>
-            {(() => {
-              const cpi     = data?.macro.cpi?.price ?? 3;
-              const unrate  = data?.macro.unrate?.price ?? 4.2;
-              const ff      = data?.yields.fedfunds?.price ?? 4.33;
-              const t10y2y  = data?.extraData.t10y2y?.price ?? 0;
-              const hyOas   = data?.macro.hySpread?.price ?? 350;
-
-              // Model inputs → cut/hike bias
-              const inflationPressure = Math.max(0, (cpi - 2) / 3);       // 0 at target, 1 at 5%
-              const laborSlack        = Math.max(0, (unrate - 4) / 2);    // 0 at 4%, 1 at 6%
-              const curveInversion    = t10y2y < -0.1 ? 0.25 : 0;
-              const creditStress      = hyOas > 500 ? 0.15 : 0;
-              // Positive cutBias = more likely to cut
-              const cutBias = laborSlack * 0.5 + curveInversion + creditStress - inflationPressure * 0.4;
-
-              const meetings = [
-                { label: "Jul 29 FOMC", lag: 0 },
-                { label: "Sep 17 FOMC", lag: 1 },
-                { label: "Nov 5 FOMC",  lag: 2 },
-                { label: "Dec 10 FOMC", lag: 3 },
-              ];
-
-              const rows = meetings.map((m) => {
-                const bias = cutBias + m.lag * 0.08;
-                const pHike = cpi > 3.8 && ff < 5.5 ? Math.max(0, Math.min(30, (cpi - 3.5) * 25)) : 0;
-                const pCut  = Math.max(0, Math.min(85, 20 + bias * 50));
-                const pHold = Math.max(5, 100 - Math.round(pCut) - Math.round(pHike));
-                return {
-                  meeting: m.label,
-                  pHike:   Math.round(pHike),
-                  pHold:   Math.round(pHold),
-                  pCut:    Math.round(pCut),
-                };
-              });
-
+            {loading ? (
+              <div className="py-6 text-[12px] text-[#bbb]">Loading ZQ futures…</div>
+            ) : (() => {
+              const fw = data?.fedwatch ?? [];
+              if (!fw.length) return (
+                <p className="py-4 text-[12px] text-[#bbb]">Fetching ZQ Fed Funds Futures…</p>
+              );
               return (
                 <div>
                   <div className="overflow-hidden border border-[#eee9df]">
@@ -752,73 +725,53 @@ export default function DashboardPage() {
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#147a4f]">Cut (−25bps)</th>
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#555]">Hold</th>
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#b42318]">Hike (+25bps)</th>
-                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">Signal</th>
+                          <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">Implied Rate</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {(loading ? [] : rows).map((row, i) => {
-                          const dominant = row.pCut > row.pHold && row.pCut > row.pHike ? "cut"
-                            : row.pHike > row.pHold ? "hike" : "hold";
+                        {fw.map((row, i) => {
+                          const dominant = row.cutProb > row.holdProb && row.cutProb > row.hikeProb ? "cut"
+                            : row.hikeProb > row.holdProb ? "hike" : "hold";
                           return (
                             <tr key={i} className="border-b border-[#f1eee8] last:border-0">
-                              <td className="px-4 py-3 text-[12px] font-bold text-[#0a0a0a]">{row.meeting}</td>
+                              <td className="px-4 py-3 text-[12px] font-bold text-[#0a0a0a]">{row.label}</td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
                                   <div className="w-20 h-[5px] bg-[#eee9df]">
-                                    <div className="h-full bg-[#147a4f]" style={{ width: `${row.pCut}%` }} />
+                                    <div className="h-full bg-[#147a4f]" style={{ width: `${row.cutProb}%` }} />
                                   </div>
-                                  <span className="text-[12px] font-bold tabular-nums text-[#147a4f]">{row.pCut}%</span>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#147a4f]">{row.cutProb.toFixed(1)}%</span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
                                   <div className="w-20 h-[5px] bg-[#eee9df]">
-                                    <div className="h-full bg-[#555]" style={{ width: `${row.pHold}%` }} />
+                                    <div className="h-full bg-[#555]" style={{ width: `${row.holdProb}%` }} />
                                   </div>
-                                  <span className="text-[12px] font-bold tabular-nums text-[#555]">{row.pHold}%</span>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#555]">{row.holdProb.toFixed(1)}%</span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
                                   <div className="w-20 h-[5px] bg-[#eee9df]">
-                                    <div className="h-full bg-[#b42318]" style={{ width: `${row.pHike}%` }} />
+                                    <div className="h-full bg-[#b42318]" style={{ width: `${row.hikeProb}%` }} />
                                   </div>
-                                  <span className="text-[12px] font-bold tabular-nums text-[#b42318]">{row.pHike}%</span>
+                                  <span className="text-[12px] font-bold tabular-nums text-[#b42318]">{row.hikeProb.toFixed(1)}%</span>
                                 </div>
                               </td>
                               <td className="px-4 py-3">
-                                <span className={`text-[9.5px] font-bold uppercase tracking-[0.1em] px-2 py-1 border ${
-                                  dominant === "cut"  ? "text-[#147a4f] bg-[#f4fbf7] border-[#cfe8da]" :
-                                  dominant === "hike" ? "text-[#b42318] bg-[#fff7f5] border-[#f2d2cc]" :
-                                                        "text-[#555] bg-[#faf8f3] border-[#eee9df]"
-                                }`}>{dominant}</span>
+                                <span className={`text-[11px] font-bold tabular-nums mr-2 ${dominant === "cut" ? "text-[#147a4f]" : dominant === "hike" ? "text-[#b42318]" : "text-[#555]"}`}>
+                                  {row.impliedRate.toFixed(3)}%
+                                </span>
                               </td>
                             </tr>
                           );
                         })}
-                        {loading && (
-                          <tr><td colSpan={5} className="px-4 py-4 text-[12px] text-[#bbb]">Computing from FRED data…</td></tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
-                  <div className="mt-4 grid grid-cols-5 gap-4 border-t border-[#eee9df] pt-4">
-                    {[
-                      { label: "CPI YoY",     val: cpi.toFixed(1) + "%",    note: cpi > 3 ? "Above target" : "Near target" },
-                      { label: "Unemployment", val: unrate.toFixed(1) + "%", note: unrate > 4.5 ? "Labor loosening" : "Labor tight" },
-                      { label: "2s10s Slope",  val: (t10y2y >= 0 ? "+" : "") + t10y2y.toFixed(2) + "%", note: t10y2y < 0 ? "Inverted" : "Normal" },
-                      { label: "HY OAS",       val: (data?.macro.hySpread?.price ?? 0).toFixed(0) + "bps", note: hyOas > 450 ? "Credit stress" : "Benign" },
-                      { label: "Fed Funds",    val: ff.toFixed(2) + "%",     note: ff > 4.5 ? "Restrictive" : "Neutral" },
-                    ].map((item) => (
-                      <div key={item.label}>
-                        <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.label}</p>
-                        <p className="mt-1 text-[14px] font-bold tabular-nums text-[#0c1b38]">{loading ? "—" : item.val}</p>
-                        <p className="mt-0.5 text-[10px] font-semibold text-[#777]">{loading ? "" : item.note}</p>
-                      </div>
-                    ))}
-                  </div>
                   <p className="mt-3 text-[10px] text-[#bbb] leading-relaxed">
-                    Methodology: Probabilities derived from a rule-based model using live CPI relative to 2% target, labor market slack (unemployment above/below 4%), yield curve slope, credit spreads, and Fed Funds vs neutral rate. Not a market-implied probability — for directional context only.
+                    Market-implied probabilities derived from CME ZQ Fed Funds Futures (ZQM26–ZQK27). Methodology: implied monthly avg EFFR = 100 − ZQ price. For end-of-month meetings the next contract gives the clean post-meeting rate; for mid-month meetings a day-weighted interpolation is used. Probabilities are rounded to nearest 25bps band.
                   </p>
                 </div>
               );

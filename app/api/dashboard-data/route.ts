@@ -4,6 +4,7 @@ import { fetchMarketNews, fetchQuote, fetchEarningsCalendar, fetchGlobalIndices 
 import { fetchCommoditySpots, fetchForexYahoo } from "@/lib/sources/yahoo";
 import { fetchCryptoCoingecko } from "@/lib/sources/coingecko";
 import { fetchEconCalendar } from "@/lib/sources/forexfactory";
+import { fetchFedWatchProbs } from "@/lib/sources/fedwatch";
 
 // Commodities/forex come from Yahoo Finance (real-time futures/spot).
 // Equities index levels (SP500, VIX, Nasdaq) come from FRED for consistency with history charts.
@@ -318,7 +319,7 @@ export async function GET() {
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     fredNasdaq,
     rawNews, rawFinnhubNews,
-    liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings, liveCalendar,
+    liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings, liveCalendar, fedwatchProbs,
     ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
@@ -350,6 +351,7 @@ export async function GET() {
     fetchGlobalIndices().catch(() => []),
     fetchEarningsCalendar().catch(() => []),
     fetchEconCalendar().catch(() => []),
+    fetchFedWatchProbs().catch(() => []),
     // Sector ETFs from Finnhub (11 GICS sectors)
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
@@ -399,6 +401,7 @@ export async function GET() {
     global:  globalIndices,
     earnings: earnings,
     econCalendar: liveCalendar,
+    fedwatch: fedwatchProbs,
     finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
     topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 8),
     driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),
