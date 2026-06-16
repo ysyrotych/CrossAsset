@@ -1,6 +1,9 @@
-import { NextRequest, NextResponse } from "next/server";
+import { NextResponse } from "next/server";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
-import { fetchMarketNews, fetchQuote } from "@/lib/sources/finnhub";
+import {
+  fetchMarketNews, fetchQuote, fetchEarningsCalendar,
+  fetchLiveSpotQuotes, fetchForexQuotes, fetchCryptoQuotes, fetchGlobalIndices,
+} from "@/lib/sources/finnhub";
 
 // Finnhub ETF proxies (SPY, GLD, USO) are NOT index values — only use for sectors.
 // All main equities quotes come from FRED which has the actual index/commodity levels.
@@ -70,33 +73,6 @@ async function fredYoY(id: string): Promise<LiveQuote | null> {
   } catch {
     return null;
   }
-}
-
-// Returns raw ISO dates (YYYY-MM-DD) — never format here, format in the chart component
-async function fredHistory(id: string, start: string): Promise<{ date: string; value: number }[]> {
-  if (!KEY) return [];
-  try {
-    const r = await fetch(
-      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=asc&observation_start=${start}`,
-      { cache: "no-store" }
-    );
-    if (!r.ok) return [];
-    return ((await r.json()).observations ?? [])
-      .filter((o: { value: string }) => o.value !== ".")
-      .map((o: { date: string; value: string }) => ({ date: o.date, value: parseFloat(o.value) }));
-  } catch {
-    return [];
-  }
-}
-
-function startDate(tf: string): string {
-  const d = new Date();
-  if (tf === "1M") d.setDate(d.getDate() - 35);
-  else if (tf === "3M") d.setMonth(d.getMonth() - 3);
-  else if (tf === "6M") d.setMonth(d.getMonth() - 6);
-  else if (tf === "1Y") d.setFullYear(d.getFullYear() - 1);
-  else if (tf === "FOMC") return "2026-04-30";
-  return d.toISOString().split("T")[0];
 }
 
 function n(q: LiveQuote | null): number { return q?.price ?? 0; }
@@ -315,28 +291,43 @@ function computeRegime(
 }
 
 const SECTORS: { symbol: string; name: string }[] = [
-  { symbol: "XLK", name: "Technology" },
-  { symbol: "XLF", name: "Financials" },
-  { symbol: "XLE", name: "Energy" },
-  { symbol: "XLV", name: "Healthcare" },
-  { symbol: "XLI", name: "Industrials" },
-  { symbol: "XLU", name: "Utilities" },
-  { symbol: "XLY", name: "Cons. Disc." },
-  { symbol: "XLP", name: "Cons. Staples" },
+  { symbol: "XLK",  name: "Technology" },
+  { symbol: "XLF",  name: "Financials" },
+  { symbol: "XLE",  name: "Energy" },
+  { symbol: "XLV",  name: "Healthcare" },
+  { symbol: "XLI",  name: "Industrials" },
+  { symbol: "XLU",  name: "Utilities" },
+  { symbol: "XLY",  name: "Cons. Disc." },
+  { symbol: "XLP",  name: "Cons. Staples" },
+  { symbol: "XLB",  name: "Materials" },
+  { symbol: "XLRE", name: "Real Estate" },
+  { symbol: "XLC",  name: "Comm. Svcs" },
 ];
 
-export async function GET(req: NextRequest) {
-  const tf = req.nextUrl.searchParams.get("tf") ?? "6M";
-  const start = startDate(tf);
+// Static upcoming economic calendar (hardcoded BEA/BLS/Fed schedule)
+const ECON_CALENDAR = [
+  { event: "FOMC Meeting",          date: "2026-07-29", impact: "High",   estimate: "Hold 4.25-4.50%" },
+  { event: "CPI (June)",            date: "2026-07-15", impact: "High",   estimate: "~2.7% YoY" },
+  { event: "NFP (June)",            date: "2026-07-02", impact: "High",   estimate: "~150K jobs" },
+  { event: "GDP Q2 Advance",        date: "2026-07-30", impact: "High",   estimate: "~2.1% SAAR" },
+  { event: "PPI (June)",            date: "2026-07-14", impact: "Medium", estimate: "~2.3% YoY" },
+  { event: "Retail Sales (June)",   date: "2026-07-16", impact: "Medium", estimate: "~0.3% MoM" },
+  { event: "PCE Deflator (May)",    date: "2026-06-27", impact: "High",   estimate: "~2.6% YoY" },
+  { event: "Consumer Confidence",   date: "2026-06-24", impact: "Medium", estimate: "" },
+];
+
+export async function GET() {
+  // tf is NO LONGER used here — history is fetched separately via /api/chart-history
+  // This route returns quotes, analytics, news only (fast, tf-independent)
 
   const [
     dgs2, dgs5, dgs10, dgs30, fedfunds,
     cpi, coreCpi, pce, unrate, payems, gdp,
-    hySpread, fredSP500, fredVix, fredGold, oil, dxy,
+    hySpread, fredSP500, fredVix, fredGold, fredOil, fredDxy,
     breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims,
     fredNasdaq,
-    hist5, hist10, histSP500, histVIX, histGold, histOil, histNasdaq,
     rawNews, rawFinnhubNews,
+    liveSpots, forexQuotes, cryptoQuotes, globalIndices, earnings,
     ...sectorQuotes
   ] = await Promise.all([
     fredLatest("DGS2"), fredLatest("DGS5"), fredLatest("DGS10"),
@@ -350,7 +341,6 @@ export async function GET(req: NextRequest) {
     fredLatest("GOLDAMGBD228NLBM", 10),
     fredLatest("DCOILWTICO"),
     fredLatest("DTWEXBGS"),
-    // Extra FRED series for Global Data Snapshot
     fredLatest("T10YIE"),
     fredLatest("MORTGAGE30US"),
     fredLatest("UMCSENT"),
@@ -359,51 +349,28 @@ export async function GET(req: NextRequest) {
     fredLatest("T10Y2Y"),
     fredLatest("ICSA"),
     fredLatest("NASDAQCOM", 5),
-    // History — keep raw ISO dates, sort ascending
-    fredHistory("DGS5", start), fredHistory("DGS10", start),
-    fredHistory("SP500", start), fredHistory("VIXCLS", start),
-    fredHistory("GOLDAMGBD228NLBM", start), fredHistory("DCOILWTICO", start),
-    fredHistory("NASDAQCOM", start),
     // News
     fetchFinancialNews().catch(() => []),
     fetchMarketNews().catch(() => []),
-    // Sector ETFs only from Finnhub
+    // New live data sources
+    fetchLiveSpotQuotes().catch(() => ({ gold: null, oil: null, dxy: null, silver: null })),
+    fetchForexQuotes().catch(() => []),
+    fetchCryptoQuotes().catch(() => []),
+    fetchGlobalIndices().catch(() => []),
+    fetchEarningsCalendar().catch(() => []),
+    // Sector ETFs from Finnhub (expanded to 11)
     ...SECTORS.map((s) => fetchQuote(s.symbol).catch(() => null)),
   ]);
 
-  // Sort history arrays (ISO dates sort lexicographically = chronologically)
-  const sortH = (arr: { date: string; value: number }[]) =>
-    [...arr].sort((a, b) => a.date.localeCompare(b.date));
+  const spots = liveSpots as { gold: LiveQuote | null; oil: LiveQuote | null; dxy: LiveQuote | null; silver: LiveQuote | null };
 
-  const historySP500  = sortH(histSP500  as { date: string; value: number }[]);
-  const historyVIX    = sortH(histVIX    as { date: string; value: number }[]);
-  const historyGold   = sortH(histGold   as { date: string; value: number }[]);
-  const historyOil    = sortH(histOil    as { date: string; value: number }[]);
-  const historyNasdaq = sortH(histNasdaq as { date: string; value: number }[]);
-
-  // Build yield history map
-  const dateMap = new Map<string, { date: string; tenYear?: number; fiveYear?: number }>();
-  (hist10 as { date: string; value: number }[]).forEach((p) => dateMap.set(p.date, { date: p.date, tenYear: p.value }));
-  (hist5  as { date: string; value: number }[]).forEach((p) => {
-    const e = dateMap.get(p.date) ?? { date: p.date };
-    dateMap.set(p.date, { ...e, fiveYear: p.value });
-  });
-  const history = [...dateMap.values()].sort((a, b) => a.date.localeCompare(b.date));
-
-  // Derive live quotes from last two history points (consistent with chart, avoids FRED lag mismatch)
-  function quoteFromHistory(arr: { date: string; value: number }[]): LiveQuote | null {
-    if (arr.length < 2) return arr.length === 1 ? { price: arr[0].value, change: 0, pct: 0 } : null;
-    const cur = arr[arr.length - 1].value;
-    const prev = arr[arr.length - 2].value;
-    const change = cur - prev;
-    return { price: cur, change, pct: prev ? (change / prev) * 100 : 0 };
-  }
-
-  // Use history-derived quotes for index series so tile and chart are always consistent
-  const sp500  = quoteFromHistory(historySP500)  ?? fredSP500;
-  const vix    = quoteFromHistory(historyVIX)    ?? fredVix;
-  const gold   = quoteFromHistory(historyGold)   ?? fredGold;
-  const nasdaq = quoteFromHistory(historyNasdaq) ?? fredNasdaq;
+  // Prefer Finnhub live spots for commodities (fresher than FRED); fall back to FRED
+  const gold   = spots.gold   ?? fredGold;
+  const oil    = spots.oil    ?? fredOil;
+  const dxy    = spots.dxy    ?? fredDxy;
+  const sp500  = fredSP500;   // keep FRED for indices (consistent with history chart)
+  const vix    = fredVix;
+  const nasdaq = fredNasdaq;
 
   // BAMLH0A0HYM2 is in percent (e.g. 2.97 = 297bps) — convert to bps
   const hySpreadBps: typeof hySpread = hySpread
@@ -427,19 +394,18 @@ export async function GET(req: NextRequest) {
 
   return NextResponse.json({
     updatedAt: new Date().toISOString(),
-    tf,
     fredConnected,
     yields:   { dgs2, dgs5, dgs10, dgs30, fedfunds },
-    equities: { sp500, vix, gold, oil, dxy, nasdaq: nasdaq ?? fredNasdaq },
+    equities: { sp500, vix, gold, oil, dxy, nasdaq, silver: spots.silver },
     macro:    { cpi, coreCpi, pce, unrate, payems, gdp, hySpread: hySpreadBps },
     extraData: { breakeven, mortgage, sentiment, indpro, retail, t10y2y, claims },
-    history,
-    historySP500,
-    historyVIX,
-    historyGold,
-    historyOil,
-    historyNasdaq,
+    // history is now served by /api/chart-history — not included here
     sectors,
+    forex:   forexQuotes,
+    crypto:  cryptoQuotes,
+    global:  globalIndices,
+    earnings: earnings,
+    econCalendar: ECON_CALENDAR,
     finnhubNews: (rawFinnhubNews as { headline: string; source: string; url: string }[]).slice(0, 8),
     topNews: (rawNews as { title: string; source: string; description: string; url: string }[]).slice(0, 8),
     driverScores:  computeDrivers(cpi, coreCpi, unrate, payems, gdp, hySpreadBps, fedfunds, dgs2, oil),

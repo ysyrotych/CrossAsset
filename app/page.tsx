@@ -11,21 +11,20 @@ import {
 
 type LiveQuote = { price: number; change: number; pct: number } | null;
 
+// Quotes, analytics, news — fetched once on mount (tf-independent)
 type DashData = {
   updatedAt: string;
-  tf: string;
   fredConnected: boolean;
   yields:    { dgs2: LiveQuote; dgs5: LiveQuote; dgs10: LiveQuote; dgs30: LiveQuote; fedfunds: LiveQuote };
-  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote };
+  equities:  { sp500: LiveQuote; vix: LiveQuote; gold: LiveQuote; oil: LiveQuote; dxy: LiveQuote; nasdaq: LiveQuote; silver: LiveQuote };
   macro:     { cpi: LiveQuote; coreCpi: LiveQuote; pce: LiveQuote; unrate: LiveQuote; payems: LiveQuote; gdp: LiveQuote; hySpread: LiveQuote };
   extraData: { breakeven: LiveQuote; mortgage: LiveQuote; sentiment: LiveQuote; indpro: LiveQuote; retail: LiveQuote; t10y2y: LiveQuote; claims: LiveQuote };
-  history:      { date: string; tenYear?: number; fiveYear?: number }[];
-  historySP500:  { date: string; value: number }[];
-  historyVIX:    { date: string; value: number }[];
-  historyGold:   { date: string; value: number }[];
-  historyOil:    { date: string; value: number }[];
-  historyNasdaq: { date: string; value: number }[];
   sectors:   { symbol: string; name: string; price: number; change: number; pct: number }[];
+  forex:     { pair: string; label: string; price: number; change: number; pct: number }[];
+  crypto:    { symbol: string; name: string; price: number; change: number; pct: number }[];
+  global:    { symbol: string; name: string; region: string; price: number; change: number; pct: number }[];
+  earnings:  { symbol: string; date: string; epsEstimate?: number; revenueEstimate?: number }[];
+  econCalendar: { event: string; date: string; impact: string; estimate: string }[];
   finnhubNews: { headline: string; source: string; url?: string }[];
   topNews:   { title: string; source: string; description: string; url?: string }[];
   driverScores: { driver: string; score: number; direction: "hawkish" | "dovish" | "neutral"; trend: string; sensitivity: string }[];
@@ -38,6 +37,17 @@ type DashData = {
   scenarios: { name: string; probability: number; tone: "positive" | "negative" | "neutral" }[];
   regimeLabel: string; regimeScore: number;
   sources: { fred: boolean; finnhub: boolean; newsapi: boolean };
+};
+
+// Chart history only — re-fetched on TF change, does NOT affect metric tiles
+type ChartData = {
+  tf: string;
+  history:      { date: string; tenYear?: number; fiveYear?: number }[];
+  historySP500:  { date: string; value: number }[];
+  historyVIX:    { date: string; value: number }[];
+  historyGold:   { date: string; value: number }[];
+  historyOil:    { date: string; value: number }[];
+  historyNasdaq: { date: string; value: number }[];
 };
 
 // ── Constants ──────────────────────────────────────────────────────────────
@@ -131,17 +141,21 @@ function fmtDate(iso: unknown): string {
 }
 
 export default function DashboardPage() {
-  const [tf,       setTf]       = useState<TF>("6M");
-  const [data,     setData]     = useState<DashData | null>(null);
-  const [loading,  setLoading]  = useState(true);
-  const [error,    setError]    = useState<string | null>(null);
-  const [expanded, setExpanded] = useState<ExpandedSeries>(null);
+  const [tf,           setTf]           = useState<TF>("6M");
+  const [data,         setData]         = useState<DashData | null>(null);
+  const [chartData,    setChartData]    = useState<ChartData | null>(null);
+  const [loading,      setLoading]      = useState(true);
+  const [chartLoading, setChartLoading] = useState(true);
+  const [error,        setError]        = useState<string | null>(null);
+  const [expanded,     setExpanded]     = useState<ExpandedSeries>(null);
+  const [newsTab,      setNewsTab]      = useState<"headlines" | "earnings" | "calendar">("headlines");
 
-  const fetchData = useCallback(async (t: TF) => {
+  // Fetch quotes + analytics + news — runs once on mount only
+  const fetchData = useCallback(async () => {
     setLoading(true);
     setError(null);
     try {
-      const r = await fetch(`/api/dashboard-data?tf=${t}`);
+      const r = await fetch("/api/dashboard-data");
       if (!r.ok) throw new Error(`HTTP ${r.status}`);
       const d: DashData = await r.json();
       setData(d);
@@ -153,7 +167,23 @@ export default function DashboardPage() {
     }
   }, []);
 
-  useEffect(() => { fetchData(tf); }, [tf, fetchData]);
+  // Fetch chart history only — runs when TF changes (fast, doesn't touch metric tiles)
+  const fetchHistory = useCallback(async (t: TF) => {
+    setChartLoading(true);
+    try {
+      const r = await fetch(`/api/chart-history?tf=${t}`);
+      if (!r.ok) return;
+      const d: ChartData = await r.json();
+      setChartData(d);
+    } catch {
+      // silent — charts just stay on last data
+    } finally {
+      setChartLoading(false);
+    }
+  }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchHistory(tf); }, [tf, fetchHistory]);
 
   const updatedTime = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
@@ -219,7 +249,7 @@ export default function DashboardPage() {
 
               {/* Refresh button */}
               <button
-                onClick={() => fetchData(tf)}
+                onClick={() => { fetchData(); fetchHistory(tf); }}
                 disabled={loading}
                 className="flex items-center gap-2 border border-[#0c1b38] bg-[#0c1b38] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.18em] text-white transition-opacity hover:opacity-80 disabled:opacity-40"
               >
@@ -334,17 +364,17 @@ export default function DashboardPage() {
 
             {/* Yield curve chart */}
             <div className="h-[200px]">
-              {loading ? (
+              {chartLoading ? (
                 <div className="h-full flex items-center justify-center">
-                  <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading live data…</span>
+                  <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading chart…</span>
                 </div>
-              ) : !data?.history.length ? (
+              ) : !chartData?.history.length ? (
                 <div className="h-full flex items-center justify-center">
                   <span className="text-[11px] text-[#bbb]">Chart data unavailable — check FRED_API_KEY</span>
                 </div>
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={data.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
+                  <LineChart data={chartData.history} margin={{ top: 6, right: 8, bottom: 0, left: -18 }}>
                     <CartesianGrid stroke="#eee9df" vertical={false} />
                     <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
                     <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => `${Number(v).toFixed(1)}%`} />
@@ -383,30 +413,108 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          {/* Market Headlines — Finnhub free-tier news */}
+          {/* Market Headlines — tabbed: Headlines | Earnings | Calendar */}
           <Card className="p-6">
-            <SectionLabel>Market Headlines</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">
-              {data?.sources.finnhub ? "Live · Finnhub" : "Add FINNHUB_API_KEY to Vercel"}
-            </p>
-            <div className="mt-4 space-y-0">
-              {loading ? (
-                <p className="text-[12px] text-[#bbb]">Loading…</p>
-              ) : (data?.finnhubNews ?? []).length > 0 ? (
-                (data!.finnhubNews).map((item, i) => (
-                  <div key={i} className="border-b border-[#f1eee8] py-2.5 last:border-0">
-                    <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.source}</p>
-                    {item.url ? (
-                      <a href={item.url} target="_blank" rel="noreferrer" className="mt-0.5 block text-[12px] font-semibold leading-snug text-[#0a0a0a] hover:text-[#0c1b38] hover:underline cursor-pointer">{item.headline}</a>
-                    ) : (
-                      <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0a0a0a]">{item.headline}</p>
-                    )}
-                  </div>
-                ))
-              ) : (
-                <p className="text-[12px] text-[#bbb]">No headlines — FINNHUB_API_KEY not set</p>
-              )}
+            <div className="flex items-center justify-between mb-3">
+              <SectionLabel>Market Intelligence</SectionLabel>
+              <p className="text-[9.5px] text-[#999]">{data?.sources.finnhub ? "Live · Finnhub" : "Add FINNHUB_API_KEY"}</p>
             </div>
+            {/* Tab bar */}
+            <div className="flex gap-0 border-b border-[#eee9df] mb-4">
+              {(["headlines", "earnings", "calendar"] as const).map((tab) => (
+                <button
+                  key={tab}
+                  onClick={() => setNewsTab(tab)}
+                  className={`px-3 py-2 text-[9.5px] font-bold uppercase tracking-[0.16em] border-b-2 -mb-px transition-colors ${
+                    newsTab === tab
+                      ? "border-[#0c1b38] text-[#0c1b38]"
+                      : "border-transparent text-[#999] hover:text-[#555]"
+                  }`}
+                >
+                  {tab === "headlines" ? "Headlines" : tab === "earnings" ? "Earnings" : "Calendar"}
+                </button>
+              ))}
+            </div>
+            {/* Headlines tab */}
+            {newsTab === "headlines" && (
+              <div className="space-y-0 overflow-y-auto max-h-[360px]">
+                {loading ? (
+                  <p className="text-[12px] text-[#bbb]">Loading…</p>
+                ) : (data?.finnhubNews ?? []).length > 0 ? (
+                  data!.finnhubNews.map((item, i) => (
+                    <div key={i} className="border-b border-[#f1eee8] py-2.5 last:border-0">
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{item.source}</p>
+                      {item.url ? (
+                        <a href={item.url} target="_blank" rel="noreferrer" className="mt-0.5 block text-[12px] font-semibold leading-snug text-[#0a0a0a] hover:text-[#0c1b38] hover:underline cursor-pointer">{item.headline}</a>
+                      ) : (
+                        <p className="mt-0.5 text-[12px] font-semibold leading-snug text-[#0a0a0a]">{item.headline}</p>
+                      )}
+                    </div>
+                  ))
+                ) : (
+                  <p className="text-[12px] text-[#bbb]">No headlines available</p>
+                )}
+              </div>
+            )}
+            {/* Earnings tab */}
+            {newsTab === "earnings" && (
+              <div className="overflow-y-auto max-h-[360px]">
+                {loading ? (
+                  <p className="text-[12px] text-[#bbb]">Loading…</p>
+                ) : (data?.earnings ?? []).length > 0 ? (
+                  <table className="w-full text-left">
+                    <thead><tr className="border-b border-[#eee9df]">
+                      {["Symbol", "Date", "EPS Est.", "Rev. Est."].map((h) => (
+                        <th key={h} className="pb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{h}</th>
+                      ))}
+                    </tr></thead>
+                    <tbody>
+                      {data!.earnings.map((e, i) => (
+                        <tr key={i} className="border-b border-[#f1eee8] last:border-0">
+                          <td className="py-2 text-[12px] font-bold text-[#0c1b38]">{e.symbol}</td>
+                          <td className="py-2 text-[11px] text-[#555]">{e.date}</td>
+                          <td className="py-2 text-[11px] tabular-nums text-[#0a0a0a]">
+                            {e.epsEstimate != null ? `$${e.epsEstimate.toFixed(2)}` : "—"}
+                          </td>
+                          <td className="py-2 text-[11px] tabular-nums text-[#0a0a0a]">
+                            {e.revenueEstimate != null ? `$${(e.revenueEstimate / 1e9).toFixed(1)}B` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                ) : (
+                  <p className="text-[12px] text-[#bbb]">No earnings in next 7 days</p>
+                )}
+              </div>
+            )}
+            {/* Economic Calendar tab */}
+            {newsTab === "calendar" && (
+              <div className="overflow-y-auto max-h-[360px]">
+                {loading ? (
+                  <p className="text-[12px] text-[#bbb]">Loading…</p>
+                ) : (data?.econCalendar ?? []).length > 0 ? (
+                  <div className="space-y-0">
+                    {data!.econCalendar.map((ev, i) => {
+                      const impact = ev.impact?.toLowerCase();
+                      const dotColor = impact === "high" ? NEGATIVE : impact === "medium" ? WARNING : "#bbb";
+                      return (
+                        <div key={i} className="flex items-start gap-3 border-b border-[#f1eee8] py-2.5 last:border-0">
+                          <span className="mt-1.5 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: dotColor }} />
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[12px] font-semibold text-[#0a0a0a] leading-snug">{ev.event}</p>
+                            <p className="text-[9.5px] text-[#999] mt-0.5">{ev.date}{ev.estimate ? ` · Est: ${ev.estimate}` : ""}</p>
+                          </div>
+                          <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: dotColor }}>{ev.impact}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ) : (
+                  <p className="text-[12px] text-[#bbb]">No upcoming events</p>
+                )}
+              </div>
+            )}
           </Card>
         </div>
 
@@ -462,11 +570,11 @@ export default function DashboardPage() {
             {/* Expanded per-metric chart */}
             {expanded && (() => {
               const seriesMap: Record<NonNullable<ExpandedSeries>, { data: { date: string; value: number }[]; label: string; color: string; fmt: (v: number) => string }> = {
-                sp500:  { data: data?.historySP500  ?? [], label: "S&P 500",        color: NEGATIVE, fmt: (v) => v.toFixed(0) },
-                nasdaq: { data: data?.historyNasdaq ?? [], label: "NASDAQ Composite",color: "#7c3aed", fmt: (v) => v.toFixed(0) },
-                vix:    { data: data?.historyVIX    ?? [], label: "VIX",            color: WARNING,  fmt: (v) => v.toFixed(1) },
-                gold:   { data: data?.historyGold   ?? [], label: "Gold ($/troy oz)",color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
-                oil:    { data: data?.historyOil    ?? [], label: "WTI Crude ($/bbl)",color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
+                sp500:  { data: chartData?.historySP500  ?? [], label: "S&P 500",        color: NEGATIVE, fmt: (v) => v.toFixed(0) },
+                nasdaq: { data: chartData?.historyNasdaq ?? [], label: "NASDAQ Composite",color: "#7c3aed", fmt: (v) => v.toFixed(0) },
+                vix:    { data: chartData?.historyVIX    ?? [], label: "VIX",            color: WARNING,  fmt: (v) => v.toFixed(1) },
+                gold:   { data: chartData?.historyGold   ?? [], label: "Gold ($/troy oz)",color: "#b7791f", fmt: (v) => `$${v.toFixed(0)}` },
+                oil:    { data: chartData?.historyOil    ?? [], label: "WTI Crude ($/bbl)",color: "#374151", fmt: (v) => `$${v.toFixed(2)}` },
               };
               const s = seriesMap[expanded];
               const vals = s.data.map((p) => p.value);
@@ -514,17 +622,17 @@ export default function DashboardPage() {
             {/* S&P 500 overview chart when nothing is expanded */}
             {!expanded && (
               <div className="h-[200px]">
-                {loading ? (
+                {chartLoading ? (
                   <div className="h-full flex items-center justify-center">
-                    <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading…</span>
+                    <span className="text-[11px] text-[#bbb] tracking-widest uppercase">Loading chart…</span>
                   </div>
-                ) : !data?.historySP500?.length ? (
+                ) : !chartData?.historySP500?.length ? (
                   <div className="h-full flex items-center justify-center">
                     <span className="text-[11px] text-[#bbb]">SP500 history unavailable</span>
                   </div>
                 ) : (
                   <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={data.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 8 }}>
+                    <LineChart data={chartData.historySP500} margin={{ top: 6, right: 8, bottom: 0, left: 8 }}>
                       <CartesianGrid stroke="#eee9df" vertical={false} />
                       <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} interval="preserveStartEnd" tickFormatter={fmtDate} />
                       <YAxis domain={["auto", "auto"]} axisLine={false} tickLine={false} tick={{ fontSize: 11, fill: "#777" }} tickFormatter={(v) => Number(v) >= 1000 ? `${(Number(v)/1000).toFixed(1)}K` : String(v)} width={48} />
@@ -547,16 +655,22 @@ export default function DashboardPage() {
                 <SectionLabel>Sector Performance</SectionLabel>
                 <p className="text-[9.5px] text-[#999]">Live · Finnhub · S&P 500 sector ETFs</p>
               </div>
-              <div className="grid grid-cols-8 gap-3">
+              <div className="grid grid-cols-6 gap-2">
                 {(data?.sectors ?? []).map((s) => {
                   const up = s.pct >= 0;
+                  const absPct = Math.abs(s.pct);
+                  const intensity = Math.min(absPct / 3, 1); // 0→0%, 3%→100% intensity
+                  const bg = up
+                    ? `rgba(20,122,79,${0.06 + intensity * 0.18})`
+                    : `rgba(180,35,24,${0.06 + intensity * 0.18})`;
+                  const border = up ? "rgba(20,122,79,0.25)" : "rgba(180,35,24,0.25)";
                   const color = up ? POSITIVE : NEGATIVE;
                   return (
-                    <div key={s.symbol} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[#0c1b38]">{s.symbol}</p>
-                      <p className="mt-0.5 text-[9px] font-semibold text-[#999]">{s.name}</p>
-                      <p className="mt-2 text-[14px] font-bold tabular-nums text-[#0a0a0a]">${s.price.toFixed(2)}</p>
-                      <p className="mt-0.5 text-[11px] font-bold tabular-nums" style={{ color }}>
+                    <div key={s.symbol} className="px-3 py-3 text-center" style={{ background: bg, border: `1px solid ${border}` }}>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[#0c1b38]">{s.symbol}</p>
+                      <p className="mt-0.5 text-[9px] font-semibold text-[#777]">{s.name}</p>
+                      <p className="mt-2 text-[13px] font-bold tabular-nums text-[#0a0a0a]">${s.price.toFixed(2)}</p>
+                      <p className="mt-0.5 text-[12px] font-bold tabular-nums" style={{ color }}>
                         {up ? "+" : ""}{s.pct.toFixed(2)}%
                       </p>
                     </div>
@@ -811,39 +925,217 @@ export default function DashboardPage() {
             </div>
           </Card>
 
-          {/* Market Pressure Index — computed from live data */}
+          {/* Fear & Greed Gauge */}
           <Card className="p-6">
-            <SectionLabel>Market Pressure Index</SectionLabel>
-            <p className="mt-1 text-[9.5px] text-[#999]">{data?.sources.fred ? "Computed from live VIX, HY OAS, yields, DXY, oil" : "Awaiting FRED connection"}</p>
-            <div className="mt-5 h-[210px]">
-              {loading ? (
-                <div className="h-full flex items-center justify-center">
-                  <span className="text-[11px] text-[#bbb]">Loading…</span>
+            <SectionLabel>Fear & Greed Index</SectionLabel>
+            <p className="mt-1 text-[9.5px] text-[#999]">Computed · VIX · HY OAS · Yield Curve</p>
+            {(() => {
+              const vix    = data?.equities.vix?.price ?? 20;
+              const hyOas  = data?.macro.hySpread?.price ?? 350;
+              const t10y2y = data?.extraData.t10y2y?.price ?? 0;
+              const vixScore   = Math.max(0, Math.min(100, ((35 - vix)    / 23) * 100));
+              const hyScore    = Math.max(0, Math.min(100, ((600 - hyOas) / 400) * 100));
+              const curveScore = Math.max(0, Math.min(100, ((t10y2y + 0.5) / 1.5) * 100));
+              const score = loading ? 50 : Math.round((vixScore + hyScore + curveScore) / 3);
+              const label = score >= 75 ? "Extreme Greed" : score >= 55 ? "Greed" : score >= 45 ? "Neutral" : score >= 25 ? "Fear" : "Extreme Fear";
+              const gaugeColor = score >= 55 ? POSITIVE : score >= 45 ? "#b7791f" : NEGATIVE;
+              // SVG arc gauge: half-circle 0=left(fear) to 180=right(greed)
+              const r = 72; const cx = 100; const cy = 90;
+              const angleDeg = (score / 100) * 180 - 90; // -90=left, +90=right
+              const rad = (angleDeg * Math.PI) / 180;
+              const nx = cx + r * Math.cos(rad); const ny = cy + r * Math.sin(rad);
+              const zones = [
+                { color: "#b42318", pct: 0.25 },
+                { color: "#e57a3b", pct: 0.25 },
+                { color: "#b7791f", pct: 0.2 },
+                { color: "#5f9e6e", pct: 0.15 },
+                { color: "#147a4f", pct: 0.15 },
+              ];
+              // Arc path helper
+              const arc = (startAngle: number, endAngle: number) => {
+                const s = ((startAngle - 90) * Math.PI) / 180;
+                const e = ((endAngle - 90) * Math.PI) / 180;
+                const x1 = cx + r * Math.cos(s); const y1 = cy + r * Math.sin(s);
+                const x2 = cx + r * Math.cos(e); const y2 = cy + r * Math.sin(e);
+                return `M ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2}`;
+              };
+              let accPct = 0;
+              return (
+                <div className="flex flex-col items-center mt-4">
+                  <svg viewBox="0 0 200 100" className="w-full max-w-[220px]">
+                    {zones.map((z, i) => {
+                      const startDeg = accPct * 180;
+                      accPct += z.pct;
+                      const endDeg = accPct * 180;
+                      return <path key={i} d={arc(startDeg, endDeg)} fill="none" stroke={z.color} strokeWidth={12} strokeLinecap="butt" opacity={0.22} />;
+                    })}
+                    {/* Active arc */}
+                    <path d={arc(0, score * 1.8)} fill="none" stroke={gaugeColor} strokeWidth={12} strokeLinecap="butt" opacity={0.9} />
+                    {/* Needle */}
+                    <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#0c1b38" strokeWidth={2} strokeLinecap="round" />
+                    <circle cx={cx} cy={cy} r={4} fill="#0c1b38" />
+                    {/* Score text */}
+                    <text x={cx} y={cy - 14} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#0a0a0a">{loading ? "—" : score}</text>
+                  </svg>
+                  <p className="mt-2 text-[15px] font-bold tracking-wide" style={{ color: gaugeColor }}>{loading ? "…" : label}</p>
+                  <div className="mt-4 w-full space-y-1.5 border-t border-[#eee9df] pt-4">
+                    {[
+                      { label: "VIX Sentiment", value: Math.round(vixScore), note: `VIX ${vix.toFixed(1)}` },
+                      { label: "Credit Stress",  value: Math.round(hyScore),  note: `HY OAS ${hyOas.toFixed(0)}bps` },
+                      { label: "Yield Curve",    value: Math.round(curveScore), note: `2Y–10Y ${t10y2y >= 0 ? "+" : ""}${t10y2y.toFixed(2)}%` },
+                    ].map((row) => (
+                      <div key={row.label} className="flex items-center gap-2">
+                        <p className="w-28 text-[10px] font-semibold text-[#777] shrink-0">{row.label}</p>
+                        <div className="flex-1 h-[5px] bg-[#eee9df]">
+                          <div className="h-full" style={{ width: `${loading ? 50 : row.value}%`, backgroundColor: row.value >= 55 ? POSITIVE : row.value >= 45 ? WARNING : NEGATIVE }} />
+                        </div>
+                        <p className="w-20 text-right text-[10px] tabular-nums text-[#999] shrink-0">{loading ? "…" : row.note}</p>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              ) : (
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={data?.pressureIndex ?? []} margin={{ top: 6, right: 0, bottom: 0, left: -24 }}>
-                    <CartesianGrid stroke="#eee9df" vertical={false} />
-                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
-                    <YAxis domain={[0, 100]} axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#777" }} />
-                    <Tooltip
-                      contentStyle={{ border: "1px solid #e8e3da", borderRadius: 0, fontSize: 12 }}
-                      formatter={(v: unknown) => [`${Number(v)}/100`, "Pressure"]}
-                    />
-                    <Bar dataKey="value" radius={[0, 0, 0, 0]}>
-                      {(data?.pressureIndex ?? []).map((d, i) => (
-                        <Cell key={i} fill={d.value > 70 ? NEGATIVE : d.value > 50 ? WARNING : NAVY} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              )}
+              );
+            })()}
+          </Card>
+        </div>
+
+        {/* ── Layer 5: Currency Matrix + Commodities ───────────────────── */}
+        <div className="mb-5 grid grid-cols-2 gap-5">
+
+          {/* Currency Matrix */}
+          <Card className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <SectionLabel>Currency Matrix</SectionLabel>
+              <p className="text-[9.5px] text-[#999]">Live · Finnhub · OANDA</p>
             </div>
-            <p className="mt-4 border-t border-[#eee9df] pt-4 text-[12px] font-medium leading-relaxed text-[#666]">
-              {data?.sources.fred
-                ? "Scores computed from VIX level, HY OAS, 10Y yield change, DXY momentum, and oil volatility."
-                : "Connect FRED API to see computed pressure index."}
-            </p>
+            {(data?.forex ?? []).length > 0 ? (
+              <div className="space-y-0">
+                {(data!.forex).map((f) => {
+                  const up = f.pct >= 0;
+                  const color = up ? POSITIVE : NEGATIVE;
+                  return (
+                    <div key={f.pair} className="flex items-center justify-between border-b border-[#f1eee8] py-2.5 last:border-0">
+                      <div>
+                        <p className="text-[12px] font-bold text-[#0a0a0a]">{f.label}</p>
+                        <p className="text-[9.5px] text-[#999] mt-0.5">{f.pair}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">{f.price.toFixed(4)}</p>
+                        <p className="text-[11px] font-bold tabular-nums mt-0.5" style={{ color }}>
+                          {up ? "+" : ""}{f.pct.toFixed(2)}%
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No forex data — check FINNHUB_API_KEY"}</p>
+            )}
+          </Card>
+
+          {/* Commodities Panel */}
+          <Card className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <SectionLabel>Commodities</SectionLabel>
+              <p className="text-[9.5px] text-[#999]">Live · Finnhub OANDA + FRED</p>
+            </div>
+            <div className="space-y-0">
+              {[
+                { label: "Gold",   sub: "XAU/USD · spot",      q: data?.equities.gold,   prefix: "$",  dec: 2 },
+                { label: "Silver", sub: "XAG/USD · spot",      q: data?.equities.silver, prefix: "$",  dec: 3 },
+                { label: "WTI Oil",sub: "Crude Oil · USD/bbl", q: data?.equities.oil,    prefix: "$",  dec: 2 },
+              ].map((row) => {
+                const up = (row.q?.pct ?? 0) >= 0;
+                const color = row.q ? (up ? POSITIVE : NEGATIVE) : "#bbb";
+                return (
+                  <div key={row.label} className="flex items-center justify-between border-b border-[#f1eee8] py-3 last:border-0">
+                    <div>
+                      <p className="text-[12px] font-bold text-[#0a0a0a]">{row.label}</p>
+                      <p className="text-[9.5px] text-[#999] mt-0.5">{row.sub}</p>
+                    </div>
+                    <div className="text-right">
+                      <p className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
+                        {row.q != null ? `${row.prefix}${row.q.price.toFixed(row.dec)}` : "—"}
+                      </p>
+                      {row.q && (
+                        <p className="text-[11px] font-bold tabular-nums mt-0.5" style={{ color }}>
+                          {up ? "+" : ""}{row.q.pct.toFixed(2)}%
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        </div>
+
+        {/* ── Layer 6: Crypto + Global Indices ─────────────────────────── */}
+        <div className="mb-5 grid grid-cols-2 gap-5">
+
+          {/* Crypto Panel */}
+          <Card className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <SectionLabel>Crypto Markets</SectionLabel>
+              <p className="text-[9.5px] text-[#999]">Live · Finnhub · Binance</p>
+            </div>
+            {(data?.crypto ?? []).length > 0 ? (
+              <div className="grid grid-cols-2 gap-3">
+                {(data!.crypto).map((c) => {
+                  const up = c.pct >= 0;
+                  const color = up ? POSITIVE : NEGATIVE;
+                  const bg = up ? "rgba(20,122,79,0.06)" : "rgba(180,35,24,0.06)";
+                  const border = up ? "rgba(20,122,79,0.2)" : "rgba(180,35,24,0.2)";
+                  return (
+                    <div key={c.symbol} className="px-4 py-3" style={{ background: bg, border: `1px solid ${border}` }}>
+                      <p className="text-[11px] font-bold uppercase tracking-[0.12em] text-[#0c1b38]">{c.symbol}</p>
+                      <p className="text-[9px] text-[#999] mt-0.5">{c.name}</p>
+                      <p className="mt-2 text-[16px] font-bold tabular-nums text-[#0a0a0a]">
+                        {c.price >= 1000 ? `$${(c.price / 1000).toFixed(2)}K` : `$${c.price.toFixed(2)}`}
+                      </p>
+                      <p className="text-[12px] font-bold tabular-nums mt-0.5" style={{ color }}>
+                        {up ? "+" : ""}{c.pct.toFixed(2)}%
+                      </p>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No crypto data — check FINNHUB_API_KEY"}</p>
+            )}
+          </Card>
+
+          {/* Global Indices */}
+          <Card className="p-6">
+            <div className="mb-4 flex items-center justify-between">
+              <SectionLabel>Global Indices</SectionLabel>
+              <p className="text-[9.5px] text-[#999]">Live · Finnhub · ETF proxies</p>
+            </div>
+            {(data?.global ?? []).length > 0 ? (
+              <div className="space-y-0">
+                {(data!.global).map((g) => {
+                  const up = g.pct >= 0;
+                  const color = up ? POSITIVE : NEGATIVE;
+                  return (
+                    <div key={g.symbol} className="flex items-center justify-between border-b border-[#f1eee8] py-2.5 last:border-0">
+                      <div>
+                        <p className="text-[12px] font-bold text-[#0a0a0a]">{g.name}</p>
+                        <p className="text-[9.5px] text-[#999] mt-0.5">{g.region}</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">${g.price.toFixed(2)}</p>
+                        <p className="text-[11px] font-bold tabular-nums mt-0.5" style={{ color }}>
+                          {up ? "+" : ""}{g.pct.toFixed(2)}%
+                        </p>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-[12px] text-[#bbb]">{loading ? "Loading…" : "No global data — check FINNHUB_API_KEY"}</p>
+            )}
           </Card>
         </div>
 

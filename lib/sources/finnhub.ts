@@ -131,3 +131,76 @@ export async function fetchQuote(symbol: string): Promise<FinnhubQuote | null> {
     prevClose: data.pc ?? data.c,
   };
 }
+
+// Spot prices for commodities and FX — more current than FRED
+export async function fetchLiveSpotQuotes(): Promise<{
+  gold:  { price: number; change: number; pct: number } | null;
+  oil:   { price: number; change: number; pct: number } | null;
+  dxy:   { price: number; change: number; pct: number } | null;
+  silver:{ price: number; change: number; pct: number } | null;
+}> {
+  const [goldQ, oilQ, uupQ, silverQ] = await Promise.all([
+    fetchQuote("OANDA:XAU_USD"),   // gold spot USD/troy oz
+    fetchQuote("USO"),              // WTI oil ETF proxy (daily)
+    fetchQuote("UUP"),              // PowerShares USD Index Bullish ETF
+    fetchQuote("OANDA:XAG_USD"),   // silver spot USD/troy oz
+  ]);
+  const toQ = (q: FinnhubQuote | null) =>
+    q ? { price: q.price, change: q.change, pct: q.pct } : null;
+  return { gold: toQ(goldQ), oil: toQ(oilQ), dxy: toQ(uupQ), silver: toQ(silverQ) };
+}
+
+// Forex pairs for Currency Matrix
+export async function fetchForexQuotes(): Promise<{ pair: string; label: string; price: number; change: number; pct: number }[]> {
+  const pairs = [
+    { sym: "OANDA:EUR_USD", pair: "EURUSD", label: "EUR / USD" },
+    { sym: "OANDA:GBP_USD", pair: "GBPUSD", label: "GBP / USD" },
+    { sym: "OANDA:USD_JPY", pair: "USDJPY", label: "USD / JPY" },
+    { sym: "OANDA:AUD_USD", pair: "AUDUSD", label: "AUD / USD" },
+    { sym: "OANDA:USD_CHF", pair: "USDCHF", label: "USD / CHF" },
+    { sym: "OANDA:USD_CNH", pair: "USDCNH", label: "USD / CNH" },
+  ];
+  const quotes = await Promise.all(pairs.map((p) => fetchQuote(p.sym).catch(() => null)));
+  return pairs
+    .map((p, i) => {
+      const q = quotes[i];
+      return q ? { pair: p.pair, label: p.label, price: q.price, change: q.change, pct: q.pct } : null;
+    })
+    .filter(Boolean) as { pair: string; label: string; price: number; change: number; pct: number }[];
+}
+
+// Crypto prices via Binance quotes (Finnhub free)
+export async function fetchCryptoQuotes(): Promise<{ symbol: string; name: string; price: number; change: number; pct: number }[]> {
+  const coins = [
+    { sym: "BINANCE:BTCUSDT", symbol: "BTC", name: "Bitcoin" },
+    { sym: "BINANCE:ETHUSDT", symbol: "ETH", name: "Ethereum" },
+    { sym: "BINANCE:SOLUSDT", symbol: "SOL", name: "Solana" },
+    { sym: "BINANCE:BNBUSDT", symbol: "BNB", name: "BNB" },
+  ];
+  const quotes = await Promise.all(coins.map((c) => fetchQuote(c.sym).catch(() => null)));
+  return coins
+    .map((c, i) => {
+      const q = quotes[i];
+      return q ? { symbol: c.symbol, name: c.name, price: q.price, change: q.change, pct: q.pct } : null;
+    })
+    .filter(Boolean) as { symbol: string; name: string; price: number; change: number; pct: number }[];
+}
+
+// Global index ETF proxies
+export async function fetchGlobalIndices(): Promise<{ symbol: string; name: string; region: string; price: number; change: number; pct: number }[]> {
+  const indices = [
+    { sym: "EWG",  symbol: "DAX",    name: "Germany (EWG)",   region: "Europe" },
+    { sym: "EWU",  symbol: "FTSE",   name: "UK (EWU)",        region: "Europe" },
+    { sym: "EWJ",  symbol: "NIKKEI", name: "Japan (EWJ)",     region: "Asia" },
+    { sym: "EWH",  symbol: "HSI",    name: "Hong Kong (EWH)", region: "Asia" },
+    { sym: "EWZ",  symbol: "BOVESPA",name: "Brazil (EWZ)",    region: "EM" },
+    { sym: "EEM",  symbol: "EM",     name: "Emerg. Markets",  region: "EM" },
+  ];
+  const quotes = await Promise.all(indices.map((idx) => fetchQuote(idx.sym).catch(() => null)));
+  return indices
+    .map((idx, i) => {
+      const q = quotes[i];
+      return q ? { symbol: idx.symbol, name: idx.name, region: idx.region, price: q.price, change: q.change, pct: q.pct } : null;
+    })
+    .filter(Boolean) as { symbol: string; name: string; region: string; price: number; change: number; pct: number }[];
+}
