@@ -41,16 +41,20 @@ type FredObs = { date: string; value: string };
 async function fredObs(id: string, limit = 260): Promise<FredObs[]> {
   const key = KEY();
   if (!key) return [];
-  try {
-    const r = await fetch(
-      `${FRED_BASE}?series_id=${id}&api_key=${key}&file_type=json&sort_order=desc&limit=${limit}`,
-      { cache: "no-store" }
-    );
-    if (!r.ok) return [];
-    return ((await r.json()).observations ?? []) as FredObs[];
-  } catch {
-    return [];
+  const url = `${FRED_BASE}?series_id=${id}&api_key=${key}&file_type=json&sort_order=desc&limit=${limit}`;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      if (attempt > 0) await new Promise((r) => setTimeout(r, attempt * 500));
+      const res = await fetch(url, { cache: "no-store" });
+      if (res.status === 429) continue; // rate limited — retry
+      if (!res.ok) return [];
+      const json = await res.json();
+      return (json.observations ?? []) as FredObs[];
+    } catch {
+      // network error — retry
+    }
   }
+  return [];
 }
 
 function validObs(obs: FredObs[]): { date: string; value: number }[] {
@@ -92,12 +96,15 @@ async function diagnoseSeries(
   const latest = valid[0];
   const lastDate = new Date(latest.date);
   const daysSince = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
-  // Monthly series (CPI, PCE, UNRATE, PAYEMS) are always 30–47d stale by design
-  // Quarterly series (GDP) always 60–90d. Treat as stale, not missing.
-  const MONTHLY = ["CPIAUCSL","CPILFESL","PCEPI","PCEPILFE","UNRATE","PAYEMS","DFF"];
+  // Classify staleness by release frequency:
+  // Daily series: fresh ≤5d, stale ≤14d (weekends/holidays), missing >14d
+  // Monthly: fresh ≤35d (just released), stale ≤65d, missing >65d
+  // Quarterly: stale up to 120d
+  const MONTHLY = ["CPIAUCSL","CPILFESL","PCEPI","PCEPILFE","UNRATE","PAYEMS"];
   const QUARTERLY = ["GDPC1"];
-  const staleLimit = QUARTERLY.includes(id) ? 120 : MONTHLY.includes(id) ? 60 : 7;
-  const status: SeriesMeta["status"] = daysSince <= staleLimit ? (daysSince <= 5 ? "fresh" : "stale") : "missing";
+  const freshLimit  = QUARTERLY.includes(id) ? 35  : MONTHLY.includes(id) ? 35  : 5;
+  const staleLimit  = QUARTERLY.includes(id) ? 120 : MONTHLY.includes(id) ? 65  : 14;
+  const status: SeriesMeta["status"] = daysSince <= freshLimit ? "fresh" : daysSince <= staleLimit ? "stale" : "missing";
 
   // Find value ~14 calendar days ago
   const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split("T")[0];
@@ -133,15 +140,31 @@ async function diagnoseSeries(
   return { meta, diagnostic };
 }
 
-// ─── Full audit (all core series in parallel) ─────────────────────────────────
+// ─── Full audit (batched to avoid FRED rate limiting) ────────────────────────
+
+async function batchedDiagnose(
+  series: typeof CORE_SERIES,
+  batchSize = 4
+): Promise<{ meta: SeriesMeta; diagnostic: SeriesDiagnostic | null }[]> {
+  const results: { meta: SeriesMeta; diagnostic: SeriesDiagnostic | null }[] = [];
+  for (let i = 0; i < series.length; i += batchSize) {
+    const batch = series.slice(i, i + batchSize);
+    const batchResults = await Promise.all(
+      batch.map((s) => diagnoseSeries(s.id, s.label, s.asset_class))
+    );
+    results.push(...batchResults);
+    if (i + batchSize < series.length) {
+      await new Promise((r) => setTimeout(r, 300)); // 300ms between batches
+    }
+  }
+  return results;
+}
 
 export async function runDataAudit(): Promise<{
   metas: SeriesMeta[];
   diagnostics: SeriesDiagnostic[];
 }> {
-  const results = await Promise.all(
-    CORE_SERIES.map((s) => diagnoseSeries(s.id, s.label, s.asset_class))
-  );
+  const results = await batchedDiagnose(CORE_SERIES);
 
   return {
     metas: results.map((r) => r.meta),

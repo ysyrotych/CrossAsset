@@ -230,7 +230,7 @@ Generate exactly 5 materially different thesis candidates grounded in the data a
 Score each 0–10 on each dimension. Total score = sum of all dimensions (max 100).
 Return valid JSON only. No markdown.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 4096);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 8192);
   return extractJSON<ThesisSelectionOutput>(text);
 }
 
@@ -289,7 +289,7 @@ REQUIRED_OUTPUT_SCHEMA:
 
 Use only the FRED series IDs listed in AVAILABLE FRED SERIES. Max 8 analysis jobs. Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 4096);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
   return extractJSON<ResearchPlanOutput>(text);
 }
 
@@ -336,7 +336,7 @@ REQUIRED_OUTPUT_SCHEMA:
 
 Interpret only what the supplied results show. Do not invent statistics. thesis_confidence is 0-100. Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 4096);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
   return extractJSON<QuantInterpretationOutput>(text);
 }
 
@@ -386,7 +386,7 @@ REQUIRED_OUTPUT_SCHEMA:
 
 Be rigorous. A weak objection noted honestly is better than a suppressed one. Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 3000);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 5000);
   return extractJSON<AdversarialReviewOutput>(text);
 }
 
@@ -556,7 +556,7 @@ REQUIRED_OUTPUT_SCHEMA:
 
 Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 4096);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
   return extractJSON<{ verified_claims: ClaimRecord[]; blocking_issues: string[] }>(text);
 }
 
