@@ -20,6 +20,9 @@ import type {
   ClaimRecord,
   QuantAnalysisOutput,
   DataAuditOutput,
+  ResearchPlanOutput,
+  ChartsAndIllustrationsOutput,
+  DraftOutput,
 } from "@/lib/pipeline/types";
 import type { JobResult } from "@/lib/pipeline/analysis";
 
@@ -63,16 +66,16 @@ export async function POST(
     status: (saved?.status ?? "in_progress") as "in_progress" | "awaiting_user" | "blocked" | "published",
     cutoff_date: saved?.cutoff_date ?? new Date().toISOString().split("T")[0],
     approval_log: saved?.approval_log ?? [],
-    // Prefer Supabase values; fall back to what the client sent
-    data_audit:      saved?.data_audit      ?? body.data_audit,
-    thesis_candidates: saved?.thesis_candidates ?? body.thesis_candidates,
-    approved_thesis: saved?.approved_thesis ?? body.approved_thesis,
-    research_plan:   saved?.research_plan   ?? body.research_plan,
-    quant_analysis:  saved?.quant_analysis  ?? body.quant_analysis,
-    claim_ledger:    saved?.claim_ledger,
-    quant_results:   saved?.quant_results,
-    drafts:          saved?.drafts          ?? body.drafts,
-    chart_specs:     saved?.chart_specs     ?? body.chart_specs,
+    // Prefer Supabase values; fall back to what the client sent — cast to proper types here
+    data_audit:      (saved?.data_audit      ?? body.data_audit)      as DataAuditOutput | undefined,
+    thesis_candidates: (saved?.thesis_candidates ?? body.thesis_candidates) as unknown,
+    approved_thesis: (saved?.approved_thesis ?? body.approved_thesis) as ThesisCandidate | undefined,
+    research_plan:   (saved?.research_plan   ?? body.research_plan)   as ResearchPlanOutput | undefined,
+    quant_analysis:  (saved?.quant_analysis  ?? body.quant_analysis)  as QuantAnalysisOutput | undefined,
+    claim_ledger:    saved?.claim_ledger                               as ClaimRecord[] | undefined,
+    quant_results:   saved?.quant_results                             as { jobs: JobResult[] } | undefined,
+    drafts:          (saved?.drafts          ?? body.drafts)          as DraftOutput | undefined,
+    chart_specs:     (saved?.chart_specs     ?? body.chart_specs)     as ChartsAndIllustrationsOutput | undefined,
     issue_manifest:  saved?.issue_manifest,
   };
 
@@ -116,7 +119,7 @@ export async function POST(
       ]);
 
       const headlines = news.map((n) => `[${n.source}] ${n.title}`);
-      const thesisOutput = await runThesisSelectionStage(diagnostics, headlines, audit as DataAuditOutput);
+      const thesisOutput = await runThesisSelectionStage(diagnostics, headlines, audit!);
 
       await patchIssue(id, {
         thesis_candidates: thesisOutput,
@@ -243,8 +246,8 @@ export async function POST(
     // ── Stage 5: Draft ───────────────────────────────────────────────────────
     if (stage === "DRAFT") {
       const thesis = existing.approved_thesis;
-      const quant = existing.quant_analysis as QuantAnalysisOutput | undefined;
-      const claims = (existing.claim_ledger as ClaimRecord[]) ?? [];
+      const quant = existing.quant_analysis;
+      const claims = existing.claim_ledger ?? [];
       if (!thesis || !quant) {
         return NextResponse.json({ error: "Complete quantitative analysis first." }, { status: 400 });
       }
@@ -291,7 +294,7 @@ export async function POST(
     if (stage === "CHARTS_AND_ILLUSTRATIONS") {
       const thesis = existing.approved_thesis;
       const plan = existing.research_plan;
-      const quant = existing.quant_analysis as QuantAnalysisOutput | undefined;
+      const quant = existing.quant_analysis;
       if (!thesis || !plan || !quant) {
         return NextResponse.json({ error: "Complete drafting first." }, { status: 400 });
       }
@@ -320,8 +323,8 @@ export async function POST(
       const thesis = existing.approved_thesis;
       const drafts = existing.drafts;
       const charts = existing.chart_specs;
-      const claims = (existing.claim_ledger as ClaimRecord[]) ?? [];
-      const quantResults = (existing.quant_results as { jobs: JobResult[] } | undefined)?.jobs ?? [];
+      const claims = existing.claim_ledger ?? [];
+      const quantResults = existing.quant_results?.jobs ?? [];
 
       if (!thesis || !drafts || !charts) {
         return NextResponse.json({ error: "Complete charts and illustrations first." }, { status: 400 });
