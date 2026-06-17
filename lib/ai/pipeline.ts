@@ -66,9 +66,16 @@ async function callClaude(
 }
 
 function extractJSON<T>(text: string): T {
-  const match = text.match(/\{[\s\S]*\}/);
-  if (!match) throw new Error("No JSON found in Claude response");
-  return JSON.parse(match[0]) as T;
+  // Strip markdown code fences if present
+  const stripped = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const match = stripped.match(/\{[\s\S]*\}/);
+  if (!match) throw new Error(`No JSON found in Claude response. Raw: ${stripped.slice(0, 200)}`);
+  try {
+    return JSON.parse(match[0]) as T;
+  } catch (e) {
+    // If truncated, try to salvage by closing open structures
+    throw new Error(`Claude returned malformed JSON (response may have been cut off — check max_tokens). Parse error: ${e}. Snippet: ${match[0].slice(-200)}`);
+  }
 }
 
 // ─── Master system prompt ─────────────────────────────────────────────────────
@@ -150,7 +157,7 @@ REQUIRED_OUTPUT_SCHEMA:
 
 Return valid JSON only. No markdown.`;
 
-  const text = await callClaude("haiku", MASTER_SYSTEM, userContent, 2048);
+  const text = await callClaude("haiku", MASTER_SYSTEM, userContent, 4096);
   return extractJSON<DataAuditOutput>(text);
 }
 
