@@ -340,27 +340,13 @@ function StagePanel(props: StagePanelProps) {
         </div>
       )}
 
-      {stage === "DATA_AUDIT" && (
-        <DataAuditPanel output={output as unknown as DataAuditOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "THESIS_SELECTION" && (
-        <ThesisPanel output={output as unknown as ThesisSelectionOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "RESEARCH_PLAN" && (
-        <ResearchPlanPanel output={output as unknown as ResearchPlanOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "QUANT_ANALYSIS" && (
-        <QuantPanel output={output as unknown as QuantAnalysisOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "DRAFT" && (
-        <DraftPanel output={output as unknown as DraftOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "CHARTS_AND_ILLUSTRATIONS" && (
-        <ChartsPanel output={output as unknown as ChartsAndIllustrationsOutput | undefined} loading={loading} {...props} />
-      )}
-      {stage === "FINAL_ASSEMBLY" && (
-        <AssemblyPanel output={output as unknown as IssueManifest | undefined} loading={loading} {...props} />
-      )}
+      {stage === "DATA_AUDIT" && <DataAuditPanel {...props} />}
+      {stage === "THESIS_SELECTION" && <ThesisPanel {...props} />}
+      {stage === "RESEARCH_PLAN" && <ResearchPlanPanel {...props} />}
+      {stage === "QUANT_ANALYSIS" && <QuantPanel {...props} />}
+      {stage === "DRAFT" && <DraftPanel {...props} />}
+      {stage === "CHARTS_AND_ILLUSTRATIONS" && <ChartsPanel {...props} />}
+      {stage === "FINAL_ASSEMBLY" && <AssemblyPanel {...props} />}
 
       {lastResponse?.recommended_next_action && !error && (
         <div className="mt-4 text-[12px] text-[#8a7e6c] border-t border-[#e8e3da] pt-4">
@@ -429,7 +415,8 @@ function ApprovalBar({
 
 // ─── Stage 1: Data Audit panel ────────────────────────────────────────────────
 
-function DataAuditPanel({ output, loading, onRun, onApprove, stage }: StagePanelProps & { output: DataAuditOutput | undefined }) {
+function DataAuditPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
+  const output = _output as DataAuditOutput | undefined;
   return (
     <div>
       {!output ? (
@@ -491,7 +478,8 @@ function DataAuditPanel({ output, loading, onRun, onApprove, stage }: StagePanel
 
 // ─── Stage 2: Thesis Selection panel ─────────────────────────────────────────
 
-function ThesisPanel({ output, loading, onRun, onApprove, stage, selectedThesis, setSelectedThesis }: StagePanelProps & { output: ThesisSelectionOutput | undefined }) {
+function ThesisPanel({ output: _output, loading, onRun, onApprove, stage, selectedThesis, setSelectedThesis }: StagePanelProps) {
+  const output = _output as ThesisSelectionOutput | undefined;
   return (
     <div>
       {!output ? (
@@ -562,7 +550,8 @@ function ThesisPanel({ output, loading, onRun, onApprove, stage, selectedThesis,
 
 // ─── Stage 3: Research Plan panel ────────────────────────────────────────────
 
-function ResearchPlanPanel({ output, loading, onRun, onApprove, stage, enabledJobs, setEnabledJobs }: StagePanelProps & { output: ResearchPlanOutput | undefined }) {
+function ResearchPlanPanel({ output: _output, loading, onRun, onApprove, stage, enabledJobs, setEnabledJobs }: StagePanelProps) {
+  const output = _output as ResearchPlanOutput | undefined;
   const toggleJob = (jobId: string) => {
     setEnabledJobs((prev) => {
       const next = new Set(prev);
@@ -621,7 +610,8 @@ function ResearchPlanPanel({ output, loading, onRun, onApprove, stage, enabledJo
 
 // ─── Stage 4: Quant Analysis panel ───────────────────────────────────────────
 
-function QuantPanel({ output, loading, onRun, onApprove, stage }: StagePanelProps & { output: QuantAnalysisOutput | undefined }) {
+function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
+  const output = _output as QuantAnalysisOutput | undefined;
   return (
     <div>
       {!output ? (
@@ -709,7 +699,8 @@ const PAGE_GROUPS: { id: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8"; 
   { id: "pages_7_8", label: "Pages 7–8: Model Lab + Final Page" },
 ];
 
-function DraftPanel({ output, loading, onRun, onApprove, stage, draftGroup, setDraftGroup }: StagePanelProps & { output: DraftOutput | undefined }) {
+function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGroup, setDraftGroup }: StagePanelProps) {
+  const output = _output as DraftOutput | undefined;
   return (
     <div>
       <p className="text-[13px] text-[#8a7e6c] mb-4">
@@ -786,7 +777,8 @@ function DraftPanel({ output, loading, onRun, onApprove, stage, draftGroup, setD
 
 // ─── Stage 6: Charts & Illustrations panel ────────────────────────────────────
 
-function ChartsPanel({ output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId }: StagePanelProps & { output: ChartsAndIllustrationsOutput | undefined }) {
+function ChartsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId }: StagePanelProps) {
+  const output = _output as ChartsAndIllustrationsOutput | undefined;
   return (
     <div>
       {!output ? (
@@ -845,7 +837,8 @@ function ChartsPanel({ output, loading, onRun, onApprove, stage, selectedIllId, 
 
 // ─── Stage 7: Final Assembly panel ───────────────────────────────────────────
 
-function AssemblyPanel({ output, loading, onRun, onApprove, stage }: StagePanelProps & { output: IssueManifest | undefined }) {
+function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
+  const output = _output as IssueManifest | undefined;
   return (
     <div>
       {!output ? (
