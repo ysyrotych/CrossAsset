@@ -341,25 +341,25 @@ function StagePanel(props: StagePanelProps) {
       )}
 
       {stage === "DATA_AUDIT" && (
-        <DataAuditPanel output={output as DataAuditOutput | undefined} loading={loading} {...props} />
+        <DataAuditPanel output={output as unknown as DataAuditOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "THESIS_SELECTION" && (
-        <ThesisPanel output={output as ThesisSelectionOutput | undefined} loading={loading} {...props} />
+        <ThesisPanel output={output as unknown as ThesisSelectionOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "RESEARCH_PLAN" && (
-        <ResearchPlanPanel output={output as ResearchPlanOutput | undefined} loading={loading} {...props} />
+        <ResearchPlanPanel output={output as unknown as ResearchPlanOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "QUANT_ANALYSIS" && (
-        <QuantPanel output={output as QuantAnalysisOutput | undefined} loading={loading} {...props} />
+        <QuantPanel output={output as unknown as QuantAnalysisOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "DRAFT" && (
-        <DraftPanel output={output as DraftOutput | undefined} loading={loading} {...props} />
+        <DraftPanel output={output as unknown as DraftOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "CHARTS_AND_ILLUSTRATIONS" && (
-        <ChartsPanel output={output as ChartsAndIllustrationsOutput | undefined} loading={loading} {...props} />
+        <ChartsPanel output={output as unknown as ChartsAndIllustrationsOutput | undefined} loading={loading} {...props} />
       )}
       {stage === "FINAL_ASSEMBLY" && (
-        <AssemblyPanel output={output as IssueManifest | undefined} loading={loading} {...props} />
+        <AssemblyPanel output={output as unknown as IssueManifest | undefined} loading={loading} {...props} />
       )}
 
       {lastResponse?.recommended_next_action && !error && (
