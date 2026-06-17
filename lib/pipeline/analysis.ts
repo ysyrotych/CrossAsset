@@ -29,7 +29,7 @@ export const CORE_SERIES: { id: string; label: string; asset_class: string }[] =
   { id: "PAYEMS",         label: "Nonfarm Payrolls",         asset_class: "labor" },
   { id: "BAMLH0A0HYM2",   label: "HY OAS (bps)",            asset_class: "credit" },
   { id: "BAMLC0A0CM",     label: "IG OAS (bps)",             asset_class: "credit" },
-  { id: "GOLDPMGBD228NLBM", label: "Gold (London PM Fix)",  asset_class: "commodities" },
+  { id: "GOLDAMGBD228NLBM", label: "Gold (London AM Fix)",  asset_class: "commodities" },
   { id: "DCOILWTICO",     label: "WTI Crude Oil",            asset_class: "commodities" },
   { id: "DTWEXBGS",       label: "USD Trade-Weighted Index", asset_class: "fx" },
 ];
@@ -102,8 +102,10 @@ async function diagnoseSeries(
   // Quarterly: stale up to 120d
   const MONTHLY = ["CPIAUCSL","CPILFESL","PCEPI","PCEPILFE","UNRATE","PAYEMS"];
   const QUARTERLY = ["GDPC1"];
-  const freshLimit  = QUARTERLY.includes(id) ? 35  : MONTHLY.includes(id) ? 35  : 5;
-  const staleLimit  = QUARTERLY.includes(id) ? 120 : MONTHLY.includes(id) ? 65  : 14;
+  // PCE reference dates are start-of-month so always appear 60–90d old at release
+  // GDPC1 reference dates are start-of-quarter so always appear 90–180d old
+  const freshLimit  = QUARTERLY.includes(id) ? 60  : MONTHLY.includes(id) ? 40  : 5;
+  const staleLimit  = QUARTERLY.includes(id) ? 200 : MONTHLY.includes(id) ? 95  : 14;
   const status: SeriesMeta["status"] = daysSince <= freshLimit ? "fresh" : daysSince <= staleLimit ? "stale" : "missing";
 
   // Find value ~14 calendar days ago

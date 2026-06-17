@@ -103,9 +103,8 @@ export default function IssuePipelinePage() {
       if (stageOutputs.DRAFT) body.drafts = stageOutputs.DRAFT;
       if (stageOutputs.CHARTS_AND_ILLUSTRATIONS) body.chart_specs = stageOutputs.CHARTS_AND_ILLUSTRATIONS;
 
-      if (stage === "RESEARCH_PLAN" && selectedThesis) {
-        body.approved_thesis = selectedThesis;
-      }
+      // Always send the approved thesis for every stage (API needs it for stages 3–7)
+      if (selectedThesis) body.approved_thesis = selectedThesis;
       if (stage === "QUANT_ANALYSIS" && enabledJobs.size > 0) {
         body.enabled_jobs = [...enabledJobs];
       }
