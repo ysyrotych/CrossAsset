@@ -14,7 +14,7 @@ export const CORE_SERIES: { id: string; label: string; asset_class: string }[] =
   { id: "DGS10",          label: "10Y Treasury Yield",       asset_class: "rates" },
   { id: "DGS30",          label: "30Y Treasury Yield",       asset_class: "rates" },
   { id: "T10Y2Y",         label: "2s10s Spread",             asset_class: "rates" },
-  { id: "FEDFUNDS",       label: "Fed Funds Rate",           asset_class: "rates" },
+  { id: "DFF",            label: "Fed Funds Rate (daily)",    asset_class: "rates" },
   { id: "DFII10",         label: "10Y Real Yield (TIPS)",    asset_class: "rates" },
   { id: "T10YIE",         label: "10Y Breakeven Inflation",  asset_class: "inflation" },
   { id: "CPIAUCSL",       label: "CPI All Items",            asset_class: "inflation" },
@@ -24,12 +24,12 @@ export const CORE_SERIES: { id: string; label: string; asset_class: string }[] =
   { id: "SP500",          label: "S&P 500",                  asset_class: "equities" },
   { id: "VIXCLS",         label: "VIX",                      asset_class: "equities" },
   { id: "NASDAQCOM",      label: "Nasdaq Composite",         asset_class: "equities" },
-  { id: "GDP",            label: "Real GDP (QoQ ann.)",      asset_class: "growth" },
+  { id: "GDPC1",          label: "Real GDP (quarterly)",      asset_class: "growth" },
   { id: "UNRATE",         label: "Unemployment Rate",        asset_class: "labor" },
   { id: "PAYEMS",         label: "Nonfarm Payrolls",         asset_class: "labor" },
   { id: "BAMLH0A0HYM2",   label: "HY OAS (bps)",            asset_class: "credit" },
   { id: "BAMLC0A0CM",     label: "IG OAS (bps)",             asset_class: "credit" },
-  { id: "GOLDAMGBD228NLBM", label: "Gold (London PM Fix)",  asset_class: "commodities" },
+  { id: "GOLDPMGBD228NLBM", label: "Gold (London PM Fix)",  asset_class: "commodities" },
   { id: "DCOILWTICO",     label: "WTI Crude Oil",            asset_class: "commodities" },
   { id: "DTWEXBGS",       label: "USD Trade-Weighted Index", asset_class: "fx" },
 ];
@@ -92,7 +92,12 @@ async function diagnoseSeries(
   const latest = valid[0];
   const lastDate = new Date(latest.date);
   const daysSince = Math.floor((Date.now() - lastDate.getTime()) / 86400000);
-  const status: SeriesMeta["status"] = daysSince <= 5 ? "fresh" : daysSince <= 30 ? "stale" : "missing";
+  // Monthly series (CPI, PCE, UNRATE, PAYEMS) are always 30–47d stale by design
+  // Quarterly series (GDP) always 60–90d. Treat as stale, not missing.
+  const MONTHLY = ["CPIAUCSL","CPILFESL","PCEPI","PCEPILFE","UNRATE","PAYEMS","DFF"];
+  const QUARTERLY = ["GDPC1"];
+  const staleLimit = QUARTERLY.includes(id) ? 120 : MONTHLY.includes(id) ? 60 : 7;
+  const status: SeriesMeta["status"] = daysSince <= staleLimit ? (daysSince <= 5 ? "fresh" : "stale") : "missing";
 
   // Find value ~14 calendar days ago
   const twoWeeksAgo = new Date(Date.now() - 14 * 86400000).toISOString().split("T")[0];

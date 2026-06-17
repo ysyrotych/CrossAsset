@@ -32,9 +32,16 @@ type StageBody = {
   user_notes?: string;
   // stage-specific params
   approved_thesis?: ThesisCandidate;
-  enabled_jobs?: string[];  // job IDs to keep enabled
+  enabled_jobs?: string[];
   approved_illustration_id?: string;
   page_group?: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8";
+  // client-supplied prior outputs (fallback when Supabase not configured)
+  data_audit?: unknown;
+  thesis_candidates?: unknown;
+  research_plan?: unknown;
+  quant_analysis?: unknown;
+  drafts?: unknown;
+  chart_specs?: unknown;
 };
 
 export async function POST(
@@ -45,14 +52,27 @@ export async function POST(
   const body = (await req.json()) as StageBody;
   const { stage } = body;
 
-  // Load existing project state (may be null if Supabase not configured — work in memory)
-  const existing = await loadIssue(id) ?? {
+  // Load existing project state; merge with client-supplied outputs so pipeline
+  // works without Supabase configured (client passes all prior outputs in body).
+  const saved = await loadIssue(id);
+  const existing = {
     id,
-    created_at: new Date().toISOString(),
-    stage: "DATA_AUDIT" as WorkflowStage,
-    status: "in_progress" as const,
-    cutoff_date: new Date().toISOString().split("T")[0],
-    approval_log: [],
+    created_at: saved?.created_at ?? new Date().toISOString(),
+    stage: (saved?.stage ?? "DATA_AUDIT") as WorkflowStage,
+    status: (saved?.status ?? "in_progress") as "in_progress" | "awaiting_user" | "blocked" | "published",
+    cutoff_date: saved?.cutoff_date ?? new Date().toISOString().split("T")[0],
+    approval_log: saved?.approval_log ?? [],
+    // Prefer Supabase values; fall back to what the client sent
+    data_audit:      saved?.data_audit      ?? body.data_audit,
+    thesis_candidates: saved?.thesis_candidates ?? body.thesis_candidates,
+    approved_thesis: saved?.approved_thesis ?? body.approved_thesis,
+    research_plan:   saved?.research_plan   ?? body.research_plan,
+    quant_analysis:  saved?.quant_analysis  ?? body.quant_analysis,
+    claim_ledger:    saved?.claim_ledger,
+    quant_results:   saved?.quant_results,
+    drafts:          saved?.drafts          ?? body.drafts,
+    chart_specs:     saved?.chart_specs     ?? body.chart_specs,
+    issue_manifest:  saved?.issue_manifest,
   };
 
   try {

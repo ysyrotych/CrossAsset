@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useCallback } from "react";
+import AppShell from "@/components/layout/AppShell";
 import type {
   WorkflowStage,
   DataAuditOutput,
@@ -94,6 +95,14 @@ export default function IssuePipelinePage() {
     try {
       const body: Record<string, unknown> = { stage, ...extra };
 
+      // Pass all prior stage outputs so the API works without Supabase
+      if (stageOutputs.DATA_AUDIT) body.data_audit = stageOutputs.DATA_AUDIT;
+      if (stageOutputs.THESIS_SELECTION) body.thesis_candidates = stageOutputs.THESIS_SELECTION;
+      if (stageOutputs.RESEARCH_PLAN) body.research_plan = stageOutputs.RESEARCH_PLAN;
+      if (stageOutputs.QUANT_ANALYSIS) body.quant_analysis = stageOutputs.QUANT_ANALYSIS;
+      if (stageOutputs.DRAFT) body.drafts = stageOutputs.DRAFT;
+      if (stageOutputs.CHARTS_AND_ILLUSTRATIONS) body.chart_specs = stageOutputs.CHARTS_AND_ILLUSTRATIONS;
+
       if (stage === "RESEARCH_PLAN" && selectedThesis) {
         body.approved_thesis = selectedThesis;
       }
@@ -164,7 +173,7 @@ export default function IssuePipelinePage() {
   // ─── Render ───────────────────────────────────────────────────────────────
 
   return (
-    <div className="flex gap-0 -mx-10 -my-10 min-h-screen">
+    <AppShell><div className="flex gap-0 -mx-10 -my-10 min-h-screen">
       {/* Left sidebar — stage progress */}
       <aside className="w-52 shrink-0 border-r border-[#e8e3da] bg-[#faf9f7] px-4 py-8">
         <p className="text-[10px] tracking-[0.2em] uppercase text-[#8a7e6c] font-semibold mb-6">
@@ -246,7 +255,7 @@ export default function IssuePipelinePage() {
           />
         )}
       </div>
-    </div>
+    </div></AppShell>
   );
 }
 
