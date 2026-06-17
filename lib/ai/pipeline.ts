@@ -564,7 +564,7 @@ export async function runFactCheckStage(
     id: c.claim_id,
     text: c.text.slice(0, 60),
     status: c.status,
-    result: c.result?.slice(0, 40),
+    result: String(c.result ?? "").slice(0, 40),
   }));
   const compressedJobs = jobResults.slice(0, 10).map((j) => ({
     id: j.job_id,
