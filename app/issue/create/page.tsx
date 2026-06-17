@@ -1175,6 +1175,7 @@ function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage,
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<Record<string, string>>({});
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
+  const [coverImage, setCoverImage] = useState<string | null>(null);
 
   function copyPrompt(id: string, prompt: string) {
     navigator.clipboard.writeText(prompt).then(() => {
@@ -1190,6 +1191,44 @@ function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage,
 
   return (
     <div>
+      {/* ── Cover page image ── */}
+      <div className="mb-6">
+        <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-2">Cover Page Image</p>
+        {coverImage ? (
+          <div className="relative rounded overflow-hidden border border-[#e8e3da]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img src={coverImage} alt="Cover" className="w-full max-h-72 object-cover" />
+            <button
+              onClick={() => setCoverImage(null)}
+              className="absolute top-2 right-2 px-2 py-0.5 text-[10px] bg-white border border-[#e8e3da] rounded text-[#5a4f3f] hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+            >
+              Remove
+            </button>
+          </div>
+        ) : (
+          <label className="flex flex-col items-center justify-center gap-2 border-2 border-dashed border-[#c8bfad] rounded-sm p-6 cursor-pointer hover:border-[#0c1b38] hover:bg-[#faf9f7] transition-colors group">
+            <div className="w-10 h-10 rounded-full bg-[#f0ede8] flex items-center justify-center group-hover:bg-[#e8e3da] transition-colors">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#8a7e6c" strokeWidth="1.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+            </div>
+            <span className="text-[12px] text-[#5a4f3f] font-medium">Upload cover page image</span>
+            <span className="text-[10px] text-[#8a7e6c]">Generated from ChatGPT · PNG, JPG, WebP</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) setCoverImage(URL.createObjectURL(f));
+              }}
+            />
+          </label>
+        )}
+      </div>
+
+      <div className="border-t border-[#e8e3da] pt-5 mb-5">
+        <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-1">Editorial Illustrations</p>
+      </div>
+
       {concepts.length === 0 ? (
         <div>
           <p className="text-[13px] text-[#8a7e6c] mb-4">
