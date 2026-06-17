@@ -225,7 +225,7 @@ export interface IssueManifest {
   cutoff_date: string;
   pages: SectionDraft[];
   charts: ChartSpec[];
-  approved_illustration: IllustrationConcept;
+  approved_illustration?: IllustrationConcept;
   claim_ledger: ClaimRecord[];
   fact_check_ledger: VerificationRecord[];
   quality_score: number;
