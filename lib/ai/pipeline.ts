@@ -416,14 +416,24 @@ export async function runDraftStage(
   claimLedger: ClaimRecord[],
   pageGroup: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8"
 ): Promise<DraftOutput> {
+  const GROUP_PAGES: Record<string, [number, number]> = {
+    pages_1_2: [1, 2],
+    pages_3_4: [3, 4],
+    pages_5_6: [5, 6],
+    pages_7_8: [7, 8],
+  };
+  const [pageA, pageB] = GROUP_PAGES[pageGroup];
+
   const pageInstructions: Record<string, string> = {
-    pages_1_2: "Page 1: Cover + Executive Thesis (title, one-sentence thesis, 3 conclusions, regime label). Page 2: Macro Regime (growth/inflation/labor/policy/liquidity/financial conditions — what changed in 2 weeks).",
-    pages_3_4: "Pages 3-4: The Big Research Idea — conventional view → CrossAsset hypothesis → quantitative evidence → cross-asset transmission → invalidation condition. This is the intellectual center. 4-6 charts referenced.",
-    pages_5_6: "Page 5: Market Pricing vs Reality table (variable / current data / market pricing / CrossAsset estimate / gap) + cross-asset consequence matrix. Page 6: Cross-Asset Command Center (rates / equities / credit / FX / commodities — one chart and one conclusion each).",
-    pages_7_8: "Page 7: Model Lab (one transparent model, current output, limitations) + Scenario table (4 scenarios with probabilities). Page 8: One signature chart + Watchlist (3 indicators, 2 catalysts, 1 thesis risk, 1 next-issue question).",
+    pages_1_2: `Page ${pageA}: Cover + Executive Thesis (title, one-sentence thesis, 3 conclusions, regime label). Page ${pageB}: Macro Regime (growth/inflation/labor/policy/liquidity/financial conditions — what changed in 2 weeks).`,
+    pages_3_4: `Page ${pageA}: The Big Research Idea, part 1 — conventional view → CrossAsset hypothesis → quantitative evidence. Page ${pageB}: Cross-asset transmission → invalidation condition. This is the intellectual center. 4-6 charts referenced.`,
+    pages_5_6: `Page ${pageA}: Market Pricing vs Reality table (variable / current data / market pricing / CrossAsset estimate / gap) + cross-asset consequence matrix. Page ${pageB}: Cross-Asset Command Center (rates / equities / credit / FX / commodities — one chart and one conclusion each).`,
+    pages_7_8: `Page ${pageA}: Model Lab (one transparent model, current output, limitations) + Scenario table (4 scenarios with probabilities). Page ${pageB}: One signature chart + Watchlist (3 indicators, 2 catalysts, 1 thesis risk, 1 next-issue question).`,
   };
 
   const userContent = `CURRENT_STAGE: DRAFT_${pageGroup.toUpperCase()}
+
+CRITICAL: You must output EXACTLY 2 sections. Section 1 must have "page": ${pageA}. Section 2 must have "page": ${pageB}. Do not use any other page numbers.
 
 APPROVED THESIS: ${approvedThesis.one_sentence}
 FALSIFICATION CONDITION: ${approvedThesis.falsification_condition}
@@ -448,27 +458,48 @@ WRITING RULES FOR THIS DRAFT:
 - Reference charts as [CHART: CH-001] inline where data supports a claim. Never decorate — only place a chart reference where it genuinely adds precision.
 - Target prose density: every sentence either advances the argument or it should not exist.
 
-REQUIRED_OUTPUT_SCHEMA:
+REQUIRED_OUTPUT_SCHEMA (use EXACTLY these page numbers — ${pageA} and ${pageB}):
 {
   "sections": [
     {
-      "page": 1,
-      "section_id": "string",
+      "page": ${pageA},
+      "section_id": "SEC-${pageA}",
       "title": "string",
-      "prose": "string (full reader-facing text for this page)",
+      "prose": "string (full reader-facing text, minimum 400 words)",
+      "word_count": 0,
+      "claim_ids": ["string"],
+      "chart_refs": ["string"]
+    },
+    {
+      "page": ${pageB},
+      "section_id": "SEC-${pageB}",
+      "title": "string",
+      "prose": "string (full reader-facing text, minimum 400 words)",
       "word_count": 0,
       "claim_ids": ["string"],
       "chart_refs": ["string"]
     }
   ],
   "total_word_count": 0,
-  "page_count": 0
+  "page_count": 2
 }
 
 Return valid JSON only. No markdown outside JSON.`;
 
   const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
-  return extractJSON<DraftOutput>(text);
+  const result = extractJSON<DraftOutput>(text);
+
+  // Enforce correct page numbers regardless of what Claude returned
+  const corrected = result.sections.map((s, i) => ({
+    ...s,
+    page: i === 0 ? pageA : pageB,
+    section_id: s.section_id || `SEC-${i === 0 ? pageA : pageB}`,
+  }));
+  return {
+    sections: corrected,
+    total_word_count: corrected.reduce((a, s) => a + (s.word_count || 0), 0),
+    page_count: corrected.length,
+  };
 }
 
 // ─── Stage 6A: Chart specs only (separate call to stay under token limit) ──────
