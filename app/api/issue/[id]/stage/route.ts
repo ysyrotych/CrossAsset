@@ -47,8 +47,10 @@ type StageBody = {
   thesis_candidates?: unknown;
   research_plan?: unknown;
   quant_analysis?: unknown;
+  claim_ledger?: unknown;
   drafts?: unknown;
   chart_specs?: unknown;
+  illustrations?: unknown;
 };
 
 export async function POST(
@@ -75,7 +77,12 @@ export async function POST(
     approved_thesis: (saved?.approved_thesis ?? body.approved_thesis) as ThesisCandidate | undefined,
     research_plan:   (saved?.research_plan   ?? body.research_plan)   as ResearchPlanOutput | undefined,
     quant_analysis:  (saved?.quant_analysis  ?? body.quant_analysis)  as QuantAnalysisOutput | undefined,
-    claim_ledger:    saved?.claim_ledger                               as ClaimRecord[] | undefined,
+    // claim_ledger: prefer Supabase, then explicit client body field, then extract from quant_analysis
+    claim_ledger: (
+      saved?.claim_ledger ??
+      body.claim_ledger ??
+      (body.quant_analysis as QuantAnalysisOutput | undefined)?.claim_ledger
+    ) as ClaimRecord[] | undefined,
     quant_results:   saved?.quant_results                             as { jobs: JobResult[] } | undefined,
     drafts:          (saved?.drafts          ?? body.drafts)          as DraftOutput | undefined,
     chart_specs:     (saved?.chart_specs     ?? body.chart_specs)     as ChartsAndIllustrationsOutput | undefined,

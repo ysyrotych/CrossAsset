@@ -128,9 +128,16 @@ export default function IssuePipelinePage() {
       if (stageOutputs.DATA_AUDIT) body.data_audit = stageOutputs.DATA_AUDIT;
       if (stageOutputs.THESIS_SELECTION) body.thesis_candidates = stageOutputs.THESIS_SELECTION;
       if (stageOutputs.RESEARCH_PLAN) body.research_plan = stageOutputs.RESEARCH_PLAN;
-      if (stageOutputs.QUANT_ANALYSIS) body.quant_analysis = stageOutputs.QUANT_ANALYSIS;
+      if (stageOutputs.QUANT_ANALYSIS) {
+        body.quant_analysis = stageOutputs.QUANT_ANALYSIS;
+        // claim_ledger and quant_results live inside quant_analysis — extract them explicitly
+        // so the FINAL_ASSEMBLY stage can pass them to fact-check without Supabase
+        const qa = stageOutputs.QUANT_ANALYSIS as QuantAnalysisOutput;
+        if (qa?.claim_ledger?.length) body.claim_ledger = qa.claim_ledger;
+      }
       if (stageOutputs.DRAFT) body.drafts = stageOutputs.DRAFT;
       if (stageOutputs.CHARTS_AND_ILLUSTRATIONS) body.chart_specs = stageOutputs.CHARTS_AND_ILLUSTRATIONS;
+      if (stageOutputs.ILLUSTRATIONS) body.illustrations = stageOutputs.ILLUSTRATIONS;
 
       // Always send the approved thesis for every stage (API needs it for stages 3–7)
       if (selectedThesis) body.approved_thesis = selectedThesis;
@@ -959,62 +966,171 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
   );
 }
 
-// ─── Mini chart component ─────────────────────────────────────────────────────
+// ─── Institutional chart component ───────────────────────────────────────────
 
 type ChartPt = { date: string; value: number };
 type SeriesData = Record<string, ChartPt[]>;
 
-function MiniChart({ chartType, seriesIds }: { chartType: string; seriesIds: string[] }) {
+const SERIES_COLORS = ["#0c1b38", "#b5813c", "#5a7a9a", "#2d5016", "#8a4a2a"];
+const SERIES_LABELS: Record<string, string> = {
+  DGS2: "2Y Yield", DGS5: "5Y Yield", DGS10: "10Y Yield", DGS30: "30Y Yield",
+  T10Y2Y: "2s10s", DFF: "Fed Funds", DFII10: "10Y Real", T10YIE: "10Y BEI",
+  CPIAUCSL: "CPI", CPILFESL: "Core CPI", PCEPI: "PCE", PCEPILFE: "Core PCE",
+  SP500: "S&P 500", VIXCLS: "VIX", NASDAQCOM: "Nasdaq",
+  GDPC1: "Real GDP", UNRATE: "Unemployment", PAYEMS: "Payrolls",
+  BAMLH0A0HYM2: "HY OAS", BAMLC0A0CM: "IG OAS",
+  DCOILBRENTEU: "Brent", DCOILWTICO: "WTI", DTWEXBGS: "USD Index",
+};
+
+function fmt(v: number): string {
+  if (Math.abs(v) >= 1000) return v.toLocaleString("en-US", { maximumFractionDigits: 0 });
+  if (Math.abs(v) >= 10) return v.toFixed(2);
+  return v.toFixed(3);
+}
+
+function InstitutionalChart({ chartType, seriesIds, title }: { chartType: string; seriesIds: string[]; title: string }) {
   const [data, setData] = useState<SeriesData | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [status, setStatus] = useState<"idle" | "loading" | "done" | "error">("idle");
   const fetchedRef = useRef(false);
+  const ids = seriesIds.slice(0, 3);
 
   useEffect(() => {
-    if (fetchedRef.current || seriesIds.length === 0) return;
+    if (fetchedRef.current || ids.length === 0) return;
     fetchedRef.current = true;
-    setLoading(true);
-    fetch(`/api/issue/chart-data?series=${seriesIds.slice(0, 3).join(",")}&limit=90`)
+    setStatus("loading");
+    fetch(`/api/issue/chart-data?series=${ids.join(",")}&limit=252`)
       .then((r) => r.json())
-      .then((d: SeriesData) => setData(d))
-      .catch(() => setData({}))
-      .finally(() => setLoading(false));
-  }, [seriesIds]);
+      .then((d: SeriesData) => { setData(d); setStatus("done"); })
+      .catch(() => setStatus("error"));
+  }, [ids.join(",")]);
 
-  if (loading) return <div className="h-28 flex items-center justify-center text-[10px] text-[#8a7e6c]">Loading chart…</div>;
-  if (!data) return null;
+  if (status === "idle" || status === "loading") {
+    return (
+      <div className="h-48 flex flex-col items-center justify-center bg-[#faf9f7] border border-[#eee8df] rounded mt-2">
+        <div className="w-4 h-4 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin mb-2" />
+        <span className="text-[10px] text-[#8a7e6c]">Fetching {ids.join(", ")}…</span>
+      </div>
+    );
+  }
+  if (status === "error" || !data) {
+    return <div className="h-12 flex items-center justify-center text-[10px] text-red-400 mt-2">Chart data unavailable</div>;
+  }
 
-  // Align all series by date
+  // Align series by date — take dates present in any series
   const allDates = Array.from(new Set(Object.values(data).flat().map((p) => p.date))).sort();
-  const chartData = allDates.map((date) => {
-    const pt: Record<string, string | number> = { date: date.slice(5) }; // MM-DD
-    for (const id of seriesIds.slice(0, 3)) {
-      const match = data[id]?.find((p) => p.date === date);
-      if (match) pt[id] = parseFloat(match.value.toFixed(3));
+  if (allDates.length === 0) {
+    return <div className="h-12 flex items-center justify-center text-[10px] text-[#8a7e6c] mt-2">No data returned for {ids.join(", ")}</div>;
+  }
+
+  // Downsample to ~120 points max
+  const step = Math.max(1, Math.floor(allDates.length / 120));
+  const sampled = allDates.filter((_, i) => i % step === 0 || i === allDates.length - 1);
+
+  const chartData = sampled.map((date) => {
+    const pt: Record<string, string | number> = { date };
+    for (const id of ids) {
+      // Find closest date on or before this date
+      const series = data[id] ?? [];
+      const match = series.find((p) => p.date <= date) ?? series[series.length - 1];
+      if (match) pt[id] = match.value;
     }
     return pt;
-  }).filter((_, i, arr) => i % Math.max(1, Math.floor(arr.length / 60)) === 0); // downsample to ~60 pts
+  });
 
-  const COLORS = ["#0c1b38", "#b5813c", "#8a7e6c"];
+  // Check if series are on wildly different scales — if so, normalize each to % change from first value
+  const ranges = ids.map((id) => {
+    const vals = chartData.map((d) => d[id] as number).filter((v) => v != null && !isNaN(v));
+    if (vals.length === 0) return 0;
+    return Math.max(...vals) - Math.min(...vals);
+  }).filter((r) => r > 0);
+  const maxRange = Math.max(...ranges);
+  const minRange = Math.min(...ranges);
+  const needsNorm = ids.length > 1 && maxRange / Math.max(minRange, 0.001) > 10;
+
+  let displayData = chartData;
+  if (needsNorm) {
+    const firstVals: Record<string, number> = {};
+    for (const id of ids) {
+      const first = chartData.find((d) => d[id] != null)?.[id] as number;
+      if (first) firstVals[id] = first;
+    }
+    displayData = chartData.map((d) => {
+      const pt: Record<string, string | number> = { date: d.date };
+      for (const id of ids) {
+        const v = d[id] as number;
+        if (v != null && firstVals[id]) pt[id] = parseFloat(((v / firstVals[id] - 1) * 100).toFixed(2));
+      }
+      return pt;
+    });
+  }
+
+  const tickFormatter = (date: string) => {
+    const d = new Date(date);
+    return `${d.toLocaleString("en-US", { month: "short" })} '${String(d.getFullYear()).slice(2)}`;
+  };
+
   const ChartEl = chartType === "bar" ? BarChart : chartType === "area" ? AreaChart : LineChart;
+  const yLabel = needsNorm ? "% chg" : undefined;
 
   return (
-    <div className="h-32 mt-2">
-      <ResponsiveContainer width="100%" height="100%">
-        <ChartEl data={chartData}>
-          <XAxis dataKey="date" tick={{ fontSize: 8, fill: "#8a7e6c" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
-          <YAxis tick={{ fontSize: 8, fill: "#8a7e6c" }} tickLine={false} axisLine={false} width={32} />
-          <Tooltip contentStyle={{ fontSize: 10, padding: "4px 8px", background: "#faf9f7", border: "1px solid #e8e3da", borderRadius: 2 }} />
-          {seriesIds.slice(0, 3).map((id, i) =>
-            chartType === "bar" ? (
-              <Bar key={id} dataKey={id} fill={COLORS[i]} opacity={0.8} />
-            ) : chartType === "area" ? (
-              <Area key={id} dataKey={id} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={0.1} strokeWidth={1.5} dot={false} />
-            ) : (
-              <Line key={id} dataKey={id} stroke={COLORS[i]} strokeWidth={1.5} dot={false} />
-            )
-          )}
-        </ChartEl>
-      </ResponsiveContainer>
+    <div className="mt-3 bg-white border border-[#e8e3da] rounded p-3">
+      {/* Source line */}
+      <div className="flex items-center gap-3 mb-2 flex-wrap">
+        {ids.map((id, i) => (
+          <div key={id} className="flex items-center gap-1">
+            <div className="w-3 h-0.5" style={{ backgroundColor: SERIES_COLORS[i] }} />
+            <span className="text-[9px] text-[#8a7e6c] font-mono">{SERIES_LABELS[id] ?? id}</span>
+          </div>
+        ))}
+        {needsNorm && <span className="text-[9px] text-[#b5813c] ml-auto">Normalized (% change from start)</span>}
+      </div>
+      <div className="h-44">
+        <ResponsiveContainer width="100%" height="100%">
+          <ChartEl data={displayData} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+            <defs>
+              {ids.map((id, i) => (
+                <linearGradient key={id} id={`grad-${id}`} x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor={SERIES_COLORS[i]} stopOpacity={0.15} />
+                  <stop offset="95%" stopColor={SERIES_COLORS[i]} stopOpacity={0} />
+                </linearGradient>
+              ))}
+            </defs>
+            <XAxis
+              dataKey="date"
+              tickFormatter={tickFormatter}
+              tick={{ fontSize: 9, fill: "#8a7e6c" }}
+              tickLine={false}
+              axisLine={{ stroke: "#e8e3da" }}
+              interval="preserveStartEnd"
+              minTickGap={60}
+            />
+            <YAxis
+              domain={["auto", "auto"]}
+              tick={{ fontSize: 9, fill: "#8a7e6c" }}
+              tickLine={false}
+              axisLine={false}
+              width={yLabel ? 42 : 36}
+              tickFormatter={(v: number) => fmt(v)}
+              label={yLabel ? { value: yLabel, angle: -90, position: "insideLeft", fontSize: 8, fill: "#8a7e6c" } : undefined}
+            />
+            <Tooltip
+              contentStyle={{ fontSize: 11, padding: "6px 10px", background: "#fff", border: "1px solid #e8e3da", borderRadius: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
+              labelFormatter={(label: string) => new Date(label).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              formatter={(value: number, name: string) => [fmt(value) + (needsNorm ? "%" : ""), SERIES_LABELS[name] ?? name]}
+            />
+            {ids.map((id, i) =>
+              chartType === "bar" ? (
+                <Bar key={id} dataKey={id} fill={SERIES_COLORS[i]} opacity={0.75} radius={[2, 2, 0, 0]} />
+              ) : chartType === "area" ? (
+                <Area key={id} dataKey={id} stroke={SERIES_COLORS[i]} fill={`url(#grad-${id})`} strokeWidth={1.5} dot={false} connectNulls />
+              ) : (
+                <Line key={id} dataKey={id} stroke={SERIES_COLORS[i]} strokeWidth={1.5} dot={false} connectNulls activeDot={{ r: 3 }} />
+              )
+            )}
+          </ChartEl>
+        </ResponsiveContainer>
+      </div>
+      <p className="text-[9px] text-[#b0a898] mt-1">Source: FRED / Yahoo Finance · {allDates[0]} – {allDates[allDates.length - 1]}</p>
     </div>
   );
 }
@@ -1039,7 +1155,7 @@ function ChartsPanel({ output: _output, loading, onRun, onApprove, stage }: Stag
                 <p className="text-[12px] text-[#1a1208] font-medium mt-0.5">{c.conclusion_title}</p>
                 {c.subtitle && <p className="text-[11px] text-[#5a4f3f]">{c.subtitle}</p>}
                 <p className="text-[10px] text-[#8a7e6c] mt-1">{c.series.map((s) => s.id).join(", ")}</p>
-                <MiniChart chartType={c.chart_type} seriesIds={c.series.map((s) => s.id)} />
+                <InstitutionalChart chartType={c.chart_type} seriesIds={c.series.map((s) => s.id)} title={c.conclusion_title} />
               </div>
             ))}
           </div>
