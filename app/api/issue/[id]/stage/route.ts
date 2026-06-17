@@ -15,6 +15,9 @@ import {
   runAssemblyStage,
 } from "@/lib/ai/pipeline";
 import { fetchFinancialNews } from "@/lib/sources/newsapi";
+import { fetchMacroData } from "@/lib/sources/fred";
+import { fetchLiveSpotQuotes, fetchGlobalIndices, fetchMarketNews } from "@/lib/sources/finnhub";
+import { fetchBlsData } from "@/lib/sources/bls";
 import type {
   WorkflowStage,
   ThesisCandidate,
@@ -42,6 +45,7 @@ type StageBody = {
   approved_illustration_id?: string;
   page_group?: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8";
   incorporate_feedback?: string[];
+  force_live_refresh?: boolean;
   // client-supplied prior outputs (fallback when Supabase not configured)
   data_audit?: unknown;
   thesis_candidates?: unknown;
@@ -192,6 +196,29 @@ export async function POST(
         (j) => enabledIds ? enabledIds.includes(j.job_id) : j.enabled !== false
       );
 
+      // If user requested a live refresh, fetch all data sources fresh in parallel
+      let liveDataContext: Record<string, unknown> | undefined;
+      if (body.force_live_refresh) {
+        const [macroData, spotQuotes, globalIndices, marketNews, blsData, newsItems] = await Promise.allSettled([
+          fetchMacroData(),
+          fetchLiveSpotQuotes(),
+          fetchGlobalIndices(),
+          fetchMarketNews(),
+          fetchBlsData(),
+          fetchFinancialNews(),
+        ]);
+        liveDataContext = {
+          macro: macroData.status === "fulfilled" ? macroData.value : null,
+          spot_quotes: spotQuotes.status === "fulfilled" ? spotQuotes.value : null,
+          global_indices: globalIndices.status === "fulfilled" ? globalIndices.value : null,
+          market_news: marketNews.status === "fulfilled" ? marketNews.value : null,
+          bls: blsData.status === "fulfilled" ? blsData.value : null,
+          news: newsItems.status === "fulfilled" ? newsItems.value : null,
+          refreshed_at: new Date().toISOString(),
+        };
+        await patchIssue(id, { quant_results: { live_refresh: liveDataContext } });
+      }
+
       // Run deterministic calculations — NO LLM for calculations
       const jobResults: JobResult[] = await Promise.all(
         enabledJobs.map((j) =>
@@ -216,7 +243,7 @@ export async function POST(
 
       // Two separate Claude calls — adversarial has NO access to interpretation conclusions
       const [interpretation, adversarial] = await Promise.all([
-        runQuantInterpretationStage(thesis, jobResults, enabledJobs, body.incorporate_feedback),
+        runQuantInterpretationStage(thesis, jobResults, enabledJobs, body.incorporate_feedback, liveDataContext),
         runAdversarialStage(thesis, jobResults),
       ]);
 

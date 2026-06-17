@@ -791,6 +791,7 @@ function ResearchPlanPanel({ output: _output, loading, onRun, onApprove, stage, 
 function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
   const output = _output as QuantAnalysisOutput | undefined;
   const [selectedObjIds, setSelectedObjIds] = React.useState<Set<string>>(new Set());
+  const [userNote, setUserNote] = React.useState("");
 
   const toggleObj = (id: string) => setSelectedObjIds((prev) => {
     const next = new Set(prev);
@@ -800,10 +801,16 @@ function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: Stage
 
   const handleImprove = () => {
     if (!output) return;
-    const selected = output.adversarial.objections
+    const objFeedback = output.adversarial.objections
       .filter((o) => selectedObjIds.has(o.id))
       .map((o) => o.description);
-    onRun(stage, { incorporate_feedback: selected });
+    const allFeedback = [...objFeedback, ...(userNote.trim() ? [userNote.trim()] : [])];
+    onRun(stage, { incorporate_feedback: allFeedback, force_live_refresh: true });
+  };
+
+  const handleLiveRefresh = () => {
+    const allFeedback = userNote.trim() ? [userNote.trim()] : [];
+    onRun(stage, { incorporate_feedback: allFeedback, force_live_refresh: true });
   };
 
   return (
@@ -878,35 +885,61 @@ function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: Stage
             </div>
           )}
 
-          {/* Improve: select objections to address then regenerate */}
-          <div className="mt-5 border border-[#e8e3da] rounded-sm p-4 bg-[#faf9f7]">
-            <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-2">
-              Incorporate Feedback & Improve
-            </p>
-            <p className="text-[11px] text-[#8a7e6c] mb-3">Select adversarial objections to address, then regenerate the interpretation with those corrections built in.</p>
-            <div className="space-y-1.5 mb-3">
-              {output.adversarial.objections.map((o) => (
-                <label key={o.id} className="flex items-start gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedObjIds.has(o.id)}
-                    onChange={() => toggleObj(o.id)}
-                    className="mt-0.5 shrink-0"
-                  />
-                  <span className="text-[11px] text-[#3d3528] leading-snug">
-                    <span className={`font-semibold ${o.severity === "fatal" ? "text-red-600" : o.severity === "moderate" ? "text-amber-600" : "text-[#8a7e6c]"}`}>[{o.severity}]</span>{" "}
-                    {o.description}
-                  </span>
-                </label>
-              ))}
+          {/* Improve: live data refresh + user feedback + objection selection */}
+          <div className="mt-5 border border-[#e8e3da] rounded-sm p-4 bg-[#faf9f7] space-y-4">
+            <div>
+              <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-1">
+                Fix / Update Analysis
+              </p>
+              <p className="text-[10px] text-[#8a7e6c] mb-2">
+                Re-fetches ALL live data (FRED, Yahoo Finance, Finnhub, BLS) then re-runs the analysis from scratch with your instructions.
+              </p>
+              <textarea
+                value={userNote}
+                onChange={(e) => setUserNote(e.target.value)}
+                placeholder="What to fix, e.g. &quot;The yield spread numbers look wrong, re-check and update all figures&quot; or &quot;Add analysis on credit spreads&quot;"
+                rows={3}
+                className="w-full text-[12px] text-[#3d3528] border border-[#d6cfc4] rounded-sm px-3 py-2 bg-white resize-none focus:outline-none focus:border-[#0c1b38]"
+              />
+              <button
+                onClick={handleLiveRefresh}
+                disabled={loading}
+                className="mt-2 px-4 py-2 bg-[#0c1b38] text-white text-[12px] font-medium rounded-sm hover:bg-[#162d5a] disabled:opacity-40 transition-colors"
+              >
+                {loading ? "Fetching live data & re-running…" : "⟳ Refresh Live Data & Re-run"}
+              </button>
             </div>
-            <button
-              onClick={handleImprove}
-              disabled={loading || selectedObjIds.size === 0}
-              className="px-4 py-2 bg-[#5a3e28] text-white text-[12px] font-medium rounded-sm hover:bg-[#6e4d32] disabled:opacity-40 transition-colors"
-            >
-              {loading ? "Improving…" : `Incorporate ${selectedObjIds.size} Selected & Regenerate`}
-            </button>
+
+            {output.adversarial.objections.length > 0 && (
+              <div>
+                <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-2">
+                  Or address specific objections
+                </p>
+                <div className="space-y-1.5 mb-3">
+                  {output.adversarial.objections.map((o) => (
+                    <label key={o.id} className="flex items-start gap-2 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={selectedObjIds.has(o.id)}
+                        onChange={() => toggleObj(o.id)}
+                        className="mt-0.5 shrink-0"
+                      />
+                      <span className="text-[11px] text-[#3d3528] leading-snug">
+                        <span className={`font-semibold ${o.severity === "fatal" ? "text-red-600" : o.severity === "moderate" ? "text-amber-600" : "text-[#8a7e6c]"}`}>[{o.severity}]</span>{" "}
+                        {o.description}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+                <button
+                  onClick={handleImprove}
+                  disabled={loading || (selectedObjIds.size === 0 && !userNote.trim())}
+                  className="px-4 py-2 bg-[#5a3e28] text-white text-[12px] font-medium rounded-sm hover:bg-[#6e4d32] disabled:opacity-40 transition-colors"
+                >
+                  {loading ? "Improving…" : `Incorporate ${selectedObjIds.size > 0 ? `${selectedObjIds.size} Objections` : "Feedback"} + Refresh Data`}
+                </button>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -965,30 +998,40 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
         })}
       </div>
 
-      {output && output.sections.length > 0 && (
-        <div className="space-y-4 mb-4">
-          {output.sections.map((s) => (
-            <div key={s.section_id} className="border border-[#e8e3da] rounded-sm p-4 bg-white">
-              <div className="flex items-center justify-between mb-2">
-                <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide">Page {s.page}</p>
-                <p className="text-[10px] text-[#8a7e6c]">{s.word_count}w</p>
+      {output && output.sections.length > 0 && (() => {
+        const groupSections = output.sections.filter((s) => {
+          if (draftGroup === "pages_1_2") return s.page <= 2;
+          if (draftGroup === "pages_3_4") return s.page >= 3 && s.page <= 4;
+          if (draftGroup === "pages_5_6") return s.page >= 5 && s.page <= 6;
+          return s.page >= 7;
+        });
+        return (
+          <div className="space-y-4 mb-4">
+            {groupSections.length === 0 ? (
+              <p className="text-[12px] text-[#8a7e6c] italic">This page group hasn&apos;t been drafted yet. Click the button below to draft it.</p>
+            ) : groupSections.map((s) => (
+              <div key={s.section_id} className="border border-[#e8e3da] rounded-sm p-4 bg-white">
+                <div className="flex items-center justify-between mb-2">
+                  <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide">Page {s.page}</p>
+                  <p className="text-[10px] text-[#8a7e6c]">{s.word_count}w</p>
+                </div>
+                <p className="text-[13px] font-semibold text-[#1a1208] mb-2">{s.title}</p>
+                <p className="text-[12px] text-[#5a4f3f] leading-relaxed whitespace-pre-wrap">
+                  {expandedPages.has(s.page) ? s.prose : `${s.prose.slice(0, 400)}${s.prose.length > 400 ? "…" : ""}`}
+                </p>
+                {s.prose.length > 400 && (
+                  <button onClick={() => togglePage(s.page)} className="mt-1 text-[11px] text-[#0c1b38] hover:underline">
+                    {expandedPages.has(s.page) ? "Show less" : "Show full page ↓"}
+                  </button>
+                )}
               </div>
-              <p className="text-[13px] font-semibold text-[#1a1208] mb-2">{s.title}</p>
-              <p className="text-[12px] text-[#5a4f3f] leading-relaxed whitespace-pre-wrap">
-                {expandedPages.has(s.page) ? s.prose : `${s.prose.slice(0, 400)}${s.prose.length > 400 ? "…" : ""}`}
-              </p>
-              {s.prose.length > 400 && (
-                <button onClick={() => togglePage(s.page)} className="mt-1 text-[11px] text-[#0c1b38] hover:underline">
-                  {expandedPages.has(s.page) ? "Show less" : "Show full page ↓"}
-                </button>
-              )}
-            </div>
-          ))}
-          <p className="text-[12px] text-[#8a7e6c]">
-            {output.page_count}/8 pages · {output.total_word_count} words
-          </p>
-        </div>
-      )}
+            ))}
+            <p className="text-[12px] text-[#8a7e6c]">
+              {output.page_count}/8 pages total · {output.total_word_count} words
+            </p>
+          </div>
+        );
+      })()}
 
       <div className="flex items-center gap-3 mt-4 flex-wrap">
         <button

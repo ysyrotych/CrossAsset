@@ -309,12 +309,16 @@ export async function runQuantInterpretationStage(
   approvedThesis: ThesisCandidate,
   jobResults: JobResult[],
   enabledJobs: AnalysisJob[],
-  incorporateFeedback?: string[]
+  incorporateFeedback?: string[],
+  liveDataContext?: Record<string, unknown>
 ): Promise<QuantInterpretationOutput> {
   const feedbackBlock = incorporateFeedback?.length
-    ? `\nINSTRUCTOR FEEDBACK TO INCORPORATE:\n${incorporateFeedback.map((f, i) => `${i + 1}. ${f}`).join("\n")}\nAddress each point above explicitly in your findings.\n`
+    ? `\nUSER INSTRUCTIONS TO IMPLEMENT:\n${incorporateFeedback.map((f, i) => `${i + 1}. ${f}`).join("\n")}\nAddress each point above explicitly and update your findings accordingly.\n`
     : "";
-  const userContent = `CURRENT_STAGE: QUANT_INTERPRETATION${feedbackBlock}
+  const liveBlock = liveDataContext
+    ? `\nFRESH LIVE DATA (just fetched — use these figures, they supersede any stale numbers):\nMACRO SNAPSHOT: ${JSON.stringify(liveDataContext.macro ?? {})}\nSPOT QUOTES: ${JSON.stringify(liveDataContext.spot_quotes ?? {})}\nGLOBAL INDICES: ${JSON.stringify(liveDataContext.global_indices ?? {})}\nRECENT MARKET NEWS: ${JSON.stringify((liveDataContext.market_news as unknown[] ?? []).slice(0, 10))}\nBLS LABOR DATA: ${JSON.stringify(liveDataContext.bls ?? {})}\nNEWS HEADLINES: ${JSON.stringify((liveDataContext.news as unknown[] ?? []).slice(0, 15))}\nData refreshed at: ${liveDataContext.refreshed_at}\n`
+    : "";
+  const userContent = `CURRENT_STAGE: QUANT_INTERPRETATION${feedbackBlock}${liveBlock}
 
 APPROVED THESIS: ${approvedThesis.one_sentence}
 FALSIFICATION CONDITION: ${approvedThesis.falsification_condition}
