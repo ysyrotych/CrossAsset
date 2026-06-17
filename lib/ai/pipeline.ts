@@ -298,9 +298,13 @@ Use only the FRED series IDs listed in AVAILABLE FRED SERIES. Max 8 analysis job
 export async function runQuantInterpretationStage(
   approvedThesis: ThesisCandidate,
   jobResults: JobResult[],
-  enabledJobs: AnalysisJob[]
+  enabledJobs: AnalysisJob[],
+  incorporateFeedback?: string[]
 ): Promise<QuantInterpretationOutput> {
-  const userContent = `CURRENT_STAGE: QUANT_INTERPRETATION
+  const feedbackBlock = incorporateFeedback?.length
+    ? `\nINSTRUCTOR FEEDBACK TO INCORPORATE:\n${incorporateFeedback.map((f, i) => `${i + 1}. ${f}`).join("\n")}\nAddress each point above explicitly in your findings.\n`
+    : "";
+  const userContent = `CURRENT_STAGE: QUANT_INTERPRETATION${feedbackBlock}
 
 APPROVED THESIS: ${approvedThesis.one_sentence}
 FALSIFICATION CONDITION: ${approvedThesis.falsification_condition}
@@ -449,55 +453,97 @@ Return valid JSON only. No markdown outside JSON.`;
   return extractJSON<DraftOutput>(text);
 }
 
-// ─── Stage 6: Charts & Illustrations ─────────────────────────────────────────
+// ─── Stage 6A: Chart specs only (separate call to stay under token limit) ──────
+
+export async function runChartSpecsStage(
+  approvedThesis: ThesisCandidate,
+  researchPlan: ResearchPlanOutput,
+  findings: QuantInterpretationOutput
+): Promise<ChartsAndIllustrationsOutput["charts"]> {
+  const userContent = `CURRENT_STAGE: CHART_SPECS
+
+THESIS: ${approvedThesis.one_sentence}
+
+PROPOSED CHARTS: ${researchPlan.proposed_charts.map((c) => `${c.chart_id}: ${c.question}`).join("; ")}
+PRIORITY CHARTS FROM ANALYSIS: ${findings.primary_charts.join(", ")}
+
+FRED SERIES AVAILABLE: DGS2,DGS5,DGS10,DGS30,T10Y2Y,DFF,DFII10,T10YIE,CPIAUCSL,CPILFESL,PCEPI,PCEPILFE,SP500,VIXCLS,NASDAQCOM,GDPC1,UNRATE,PAYEMS,BAMLH0A0HYM2,BAMLC0A0CM,DCOILWTICO,DCOILBRENTEU,DTWEXBGS
+
+OUTPUT: A JSON array of chart objects (NOT wrapped in an object):
+[
+  {
+    "chart_id": "CH-001",
+    "page": 1,
+    "conclusion_title": "MUST state the finding not the variable name",
+    "chart_type": "line|bar|scatter|area",
+    "series": [{"id":"FRED_ID","label":"short label","color":"#hex"}],
+    "y_axis": "unit",
+    "annotation": "under 8 words or null",
+    "source_footer": "FRED"
+  }
+]
+
+RULES: Max 6 charts. Every string under 15 words. Return the array only — no wrapper object.`;
+
+  const text = await callClaude("haiku", MASTER_SYSTEM, userContent, 4096);
+  // Response is a bare array
+  const stripped = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const match = stripped.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error(`No chart array in response: ${stripped.slice(0, 200)}`);
+  return JSON.parse(match[0]);
+}
+
+// ─── Stage 6B: Illustration concepts only (separate call) ────────────────────
+
+export async function runIllustrationStage(
+  approvedThesis: ThesisCandidate
+): Promise<{ concepts: ChartsAndIllustrationsOutput["illustration_concepts"]; recommended_id: string }> {
+  const userContent = `CURRENT_STAGE: ILLUSTRATION_CONCEPTS
+
+THESIS: ${approvedThesis.one_sentence}
+CONVENTIONAL VIEW: ${approvedThesis.conventional_view}
+MECHANISM: ${approvedThesis.differentiated_view}
+
+Generate 3 illustration concepts expressing this thesis mechanism through different visual metaphors.
+Style: dark navy linework, warm ivory background, single accent color, dry intelligent wit.
+
+OUTPUT: A JSON array of exactly 3 illustration objects:
+[
+  {
+    "illustration_id": "ILL-001",
+    "concept_name": "short name",
+    "economic_mechanism": "one sentence — what economic force is being shown",
+    "visual_metaphor": "one sentence — the central image or scene",
+    "key_objects": ["object 1", "object 2", "object 3"],
+    "prohibited_elements": ["no literal dollar signs", "no stock tickers"],
+    "illustrator_brief": "3 sentences: what to draw, composition, mood. Style: dark navy linework on ivory, one warm accent, minimal, intelligent wit.",
+    "placement": "cover",
+    "aspect_ratio": "16:9"
+  }
+]
+
+Return the array only. No wrapper object.`;
+
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 4096);
+  const stripped = text.replace(/```(?:json)?\s*/gi, "").replace(/```/g, "").trim();
+  const match = stripped.match(/\[[\s\S]*\]/);
+  if (!match) throw new Error(`No illustration array in response: ${stripped.slice(0, 200)}`);
+  const concepts = JSON.parse(match[0]);
+  return { concepts, recommended_id: concepts[0]?.illustration_id ?? "ILL-001" };
+}
+
+// ─── Stage 6: Combined (used by route for backwards compat) ──────────────────
 
 export async function runChartsStage(
   approvedThesis: ThesisCandidate,
   researchPlan: ResearchPlanOutput,
   findings: QuantInterpretationOutput
 ): Promise<ChartsAndIllustrationsOutput> {
-  const userContent = `CURRENT_STAGE: CHARTS_AND_ILLUSTRATIONS
-
-APPROVED THESIS: ${approvedThesis.one_sentence}
-
-PROPOSED CHARTS FROM RESEARCH PLAN:
-${JSON.stringify(researchPlan.proposed_charts, null, 2)}
-
-PRIMARY CHARTS RECOMMENDED BY ANALYSIS:
-${findings.primary_charts.join(", ")}
-
-AVAILABLE FRED SERIES (for chart data): DGS2, DGS5, DGS10, DGS30, T10Y2Y, FEDFUNDS, DFII10, T10YIE, CPIAUCSL, CPILFESL, PCEPI, PCEPILFE, SP500, VIXCLS, NASDAQCOM, GDP, UNRATE, PAYEMS, BAMLH0A0HYM2, BAMLC0A0CM, GOLDAMGBD228NLBM, DCOILWTICO, DTWEXBGS
-
-REQUIRED_OUTPUT_SCHEMA:
-{
-  "charts": [
-    {
-      "chart_id": "CH-001",
-      "page": 1,
-      "conclusion_title": "string — MUST state the finding, not the variable name",
-      "chart_type": "line|bar|scatter|area|composed",
-      "series": [{"id":"FRED_SERIES_ID","label":"string","color":"#hex"}],
-      "y_axis": "unit label",
-      "annotations": ["1 annotation max, under 10 words"],
-      "source_footer": "FRED"
-    }
-  ],
-  "illustration_concepts": [
-    {
-      "illustration_id": "ILL-001",
-      "concept_name": "string",
-      "visual_metaphor": "1 sentence",
-      "illustrator_brief": "3 sentences max — style: dark navy linework, ivory background, dry humor",
-      "placement": "cover|page_2|page_7"
-    }
-  ],
-  "recommended_illustration_id": "ILL-001"
-}
-
-BREVITY RULES: Max 8 charts. Exactly 3 illustration concepts. Every string field max 20 words. No recharts_config. Return valid JSON only.`;
-
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 8192);
-  return extractJSON<ChartsAndIllustrationsOutput>(text);
+  const [charts, { concepts, recommended_id }] = await Promise.all([
+    runChartSpecsStage(approvedThesis, researchPlan, findings),
+    runIllustrationStage(approvedThesis),
+  ]);
+  return { charts, illustration_concepts: concepts, recommended_illustration_id: recommended_id };
 }
 
 // ─── Stage 7: Fact-Check + Assembly ──────────────────────────────────────────

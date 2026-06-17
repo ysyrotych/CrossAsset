@@ -8,6 +8,8 @@ import {
   runQuantInterpretationStage,
   runAdversarialStage,
   runDraftStage,
+  runChartSpecsStage,
+  runIllustrationStage,
   runChartsStage,
   runFactCheckStage,
   runAssemblyStage,
@@ -39,6 +41,7 @@ type StageBody = {
   enabled_jobs?: string[];
   approved_illustration_id?: string;
   page_group?: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8";
+  incorporate_feedback?: string[];
   // client-supplied prior outputs (fallback when Supabase not configured)
   data_audit?: unknown;
   thesis_candidates?: unknown;
@@ -206,7 +209,7 @@ export async function POST(
 
       // Two separate Claude calls — adversarial has NO access to interpretation conclusions
       const [interpretation, adversarial] = await Promise.all([
-        runQuantInterpretationStage(thesis, jobResults, enabledJobs),
+        runQuantInterpretationStage(thesis, jobResults, enabledJobs, body.incorporate_feedback),
         runAdversarialStage(thesis, jobResults),
       ]);
 
@@ -299,7 +302,14 @@ export async function POST(
         return NextResponse.json({ error: "Complete drafting first." }, { status: 400 });
       }
 
-      const chartOutput = await runChartsStage(thesis, plan, quant.interpretation);
+      // Run charts and illustrations as TWO separate calls to stay under token limit
+      const charts = await runChartSpecsStage(thesis, plan, quant.interpretation);
+      const existing_specs = existing.chart_specs;
+      const chartOutput = {
+        charts,
+        illustration_concepts: existing_specs?.illustration_concepts ?? [],
+        recommended_illustration_id: existing_specs?.recommended_illustration_id ?? "",
+      };
 
       await patchIssue(id, {
         chart_specs: chartOutput,
@@ -311,10 +321,36 @@ export async function POST(
         issue_id: id,
         stage: "CHARTS_AND_ILLUSTRATIONS",
         status: "awaiting_user",
-        stage_summary: `${chartOutput.charts.length} charts planned. ${chartOutput.illustration_concepts.length} illustration concepts. Recommended: ${chartOutput.recommended_illustration_id}.`,
+        stage_summary: `${charts.length} charts planned.`,
         output: chartOutput,
         approval_required: true,
-        recommended_next_action: "Approve charts and select an illustration concept to proceed to final assembly.",
+        recommended_next_action: "Review charts, then generate illustrations in the next step.",
+      });
+    }
+
+    // ── Stage 6B: Illustrations (separate stage) ─────────────────────────────
+    if (stage === "ILLUSTRATIONS") {
+      const thesis = existing.approved_thesis;
+      if (!thesis) return NextResponse.json({ error: "No approved thesis." }, { status: 400 });
+
+      const { concepts, recommended_id } = await runIllustrationStage(thesis);
+      const existingCharts = existing.chart_specs;
+      const merged = {
+        charts: existingCharts?.charts ?? [],
+        illustration_concepts: concepts,
+        recommended_illustration_id: recommended_id,
+      };
+
+      await patchIssue(id, { chart_specs: merged, stage: "ILLUSTRATIONS" as WorkflowStage, status: "awaiting_user" });
+
+      return NextResponse.json({
+        issue_id: id,
+        stage: "ILLUSTRATIONS",
+        status: "awaiting_user",
+        stage_summary: `${concepts.length} illustration concepts generated.`,
+        output: merged,
+        approval_required: true,
+        recommended_next_action: "Select an illustration concept and approve to proceed to final assembly.",
       });
     }
 

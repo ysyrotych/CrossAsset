@@ -17,19 +17,22 @@ import type {
 
 // ─── Stage metadata ───────────────────────────────────────────────────────────
 
-const STAGES: { id: WorkflowStage; label: string; description: string }[] = [
-  { id: "DATA_AUDIT",              label: "Data Audit",         description: "Check data coverage and freshness" },
-  { id: "THESIS_SELECTION",        label: "Thesis",             description: "Generate and select the issue thesis" },
-  { id: "RESEARCH_PLAN",           label: "Research Plan",      description: "Design analysis and chart strategy" },
-  { id: "QUANT_ANALYSIS",          label: "Analysis",           description: "Run calculations + adversarial review" },
-  { id: "DRAFT",                   label: "Draft",              description: "Write all 8 pages" },
-  { id: "CHARTS_AND_ILLUSTRATIONS",label: "Charts",             description: "Chart specs + illustration brief" },
-  { id: "FINAL_ASSEMBLY",          label: "Final Proof",        description: "Fact-check, assemble, quality score" },
+// Add ILLUSTRATIONS as its own stage between Charts and Final
+const STAGES: { id: WorkflowStage | "ILLUSTRATIONS"; label: string; description: string }[] = [
+  { id: "DATA_AUDIT",              label: "Data Audit",     description: "Check data coverage and freshness" },
+  { id: "THESIS_SELECTION",        label: "Thesis",         description: "Generate and select the issue thesis" },
+  { id: "RESEARCH_PLAN",           label: "Research Plan",  description: "Design analysis and chart strategy" },
+  { id: "QUANT_ANALYSIS",          label: "Analysis",       description: "Run calculations + adversarial review" },
+  { id: "DRAFT",                   label: "Draft",          description: "Write all 8 pages" },
+  { id: "CHARTS_AND_ILLUSTRATIONS",label: "Charts",         description: "Chart specifications" },
+  { id: "ILLUSTRATIONS",           label: "Illustrations",  description: "3 illustration concepts for the artist" },
+  { id: "FINAL_ASSEMBLY",          label: "Final Proof",    description: "Fact-check, assemble, quality score" },
 ];
 
 const STAGE_ORDER = STAGES.map((s) => s.id);
+type AnyStage = WorkflowStage | "ILLUSTRATIONS";
 
-function stageIndex(s: WorkflowStage) {
+function stageIndex(s: AnyStage) {
   return STAGE_ORDER.indexOf(s);
 }
 
@@ -49,14 +52,39 @@ interface ApiResponse {
 
 // ─── Main page ────────────────────────────────────────────────────────────────
 
+// ─── Mock data for dev test mode ─────────────────────────────────────────────
+
+const MOCK_THESIS: ThesisCandidate = {
+  thesis_id: "TH-DEV",
+  title: "[DEV] Fed Credibility Repricing",
+  one_sentence: "Markets are repricing the Fed reaction function, not growth deterioration.",
+  conventional_view: "Rally driven by growth fears.",
+  differentiated_view: "Warsh appointment signals hawkish credibility shift; front-end repricing.",
+  evidence_available: ["DGS2 z-score elevated", "Real yields stable"],
+  evidence_needed: ["Confirmed 30Y z-score data"],
+  cross_asset_transmission: "Rates → credit → equities → FX",
+  falsification_condition: "2Y yield drops below 4% without Fed pivot",
+  scores: { importance: 8, timeliness: 9, originality: 8, testability: 8, evidence_quality: 7, cross_asset_relevance: 9, visual_potential: 8, reader_interest: 8, falsifiability: 9, page_fit: 9 },
+  total_score: 83,
+};
+
+const MOCK_OUTPUTS: Partial<Record<AnyStage, unknown>> = {
+  DATA_AUDIT: { coverage: [], asset_class_coverage: {}, missing_series: [], data_quality_issues: [], usable_universe: ["DGS2","DGS10","SP500","BAMLH0A0HYM2"], readiness: "pass_with_gaps", blocking_gaps: [] },
+  THESIS_SELECTION: { candidates: [MOCK_THESIS], recommended_id: "TH-DEV", recommendation_rationale: "Dev mode mock." },
+  RESEARCH_PLAN: { hypothesis: "Dev mode hypothesis.", alternative_hypotheses: [], analysis_jobs: [], proposed_charts: [{ chart_id: "CH-001", type: "line", question: "2Y yield trend", series: ["DGS2"] }], page_allocation: {}, stop_conditions: [] },
+  QUANT_ANALYSIS: { interpretation: { findings: [], thesis_confidence: 70, key_evidence: ["DGS2 elevated"], primary_charts: ["CH-001"], overall_assessment: "Dev mode." }, adversarial: { objections: [], tests_performed: [], findings_that_survive: [], findings_that_fail: [], revised_confidence: 65, recommendation: "publish", summary: "Dev mode adversarial." }, claim_ledger: [], merged_confidence: 68, fatal_objections: [] },
+  DRAFT: { sections: [{ page: 1, section_id: "S1", title: "Dev Cover", prose: "This is a development test draft. The full prose would appear here in production.", word_count: 18, claim_ids: [], chart_refs: [] }], total_word_count: 18, page_count: 1 },
+};
+
 export default function IssuePipelinePage() {
   const [issueId, setIssueId] = useState<string | null>(null);
-  const [currentStage, setCurrentStage] = useState<WorkflowStage>("DATA_AUDIT");
-  const [completedStages, setCompletedStages] = useState<WorkflowStage[]>([]);
-  const [stageOutputs, setStageOutputs] = useState<Partial<Record<WorkflowStage, unknown>>>({});
+  const [currentStage, setCurrentStage] = useState<AnyStage>("DATA_AUDIT");
+  const [completedStages, setCompletedStages] = useState<AnyStage[]>([]);
+  const [stageOutputs, setStageOutputs] = useState<Partial<Record<AnyStage, unknown>>>({});
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastResponse, setLastResponse] = useState<ApiResponse | null>(null);
+  const [testMode, setTestMode] = useState(false);
 
   // Thesis selection state
   const [selectedThesis, setSelectedThesis] = useState<ThesisCandidate | null>(null);
@@ -88,7 +116,7 @@ export default function IssuePipelinePage() {
 
   // ─── Run a stage ──────────────────────────────────────────────────────────
 
-  const runStage = useCallback(async (stage: WorkflowStage, extra: Record<string, unknown> = {}) => {
+  const runStage = useCallback(async (stage: AnyStage, extra: Record<string, unknown> = {}) => {
     if (!issueId) return;
     setLoading(true);
     setError(null);
@@ -142,9 +170,9 @@ export default function IssuePipelinePage() {
       }
 
       // Auto-select recommended illustration
-      if (stage === "CHARTS_AND_ILLUSTRATIONS" && data.output) {
+      if ((stage === "CHARTS_AND_ILLUSTRATIONS" || stage === "ILLUSTRATIONS") && data.output) {
         const co = data.output as ChartsAndIllustrationsOutput;
-        setSelectedIllId(co.recommended_illustration_id);
+        if (co.recommended_illustration_id) setSelectedIllId(co.recommended_illustration_id);
       }
 
     } catch (e) {
@@ -154,19 +182,40 @@ export default function IssuePipelinePage() {
     }
   }, [issueId, selectedThesis, enabledJobs, draftGroup, selectedIllId, completedStages]);
 
-  const approveAndAdvance = useCallback(async (stage: WorkflowStage) => {
+  // Activate test mode: pre-populate stages 1-5 with mock data and jump to Charts
+  const activateTestMode = useCallback(async () => {
+    setTestMode(true);
+    setSelectedThesis(MOCK_THESIS);
+    setStageOutputs(MOCK_OUTPUTS);
+    setCompletedStages(["DATA_AUDIT","THESIS_SELECTION","RESEARCH_PLAN","QUANT_ANALYSIS","DRAFT"]);
+    setCurrentStage("CHARTS_AND_ILLUSTRATIONS");
+    setError(null);
+    // Create a real issue ID if we don't have one
+    if (!issueId) {
+      try {
+        const r = await fetch("/api/issue", { method: "POST" });
+        const data = await r.json() as { id: string };
+        setIssueId(data.id);
+      } catch { /* ignore */ }
+    }
+  }, [issueId]);
+
+  const approveAndAdvance = useCallback((stage: AnyStage) => {
     if (!issueId) return;
-    // Record approval
-    await fetch(`/api/issue/${issueId}/stage`, {
+    // Advance UI immediately — don't wait for API
+    setCompletedStages((prev) => prev.includes(stage) ? prev : [...prev, stage]);
+    const nextIdx = stageIndex(stage as WorkflowStage) + 1;
+    if (nextIdx < STAGES.length) {
+      setCurrentStage(STAGES[nextIdx].id);
+      setError(null);
+      setLastResponse(null);
+    }
+    // Record approval in background
+    fetch(`/api/issue/${issueId}/stage`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ stage, action: "approve" }),
-    });
-    // Advance UI
-    const nextIdx = stageIndex(stage) + 1;
-    if (nextIdx < STAGES.length) {
-      setCurrentStage(STAGES[nextIdx].id);
-    }
+    }).catch(console.error);
   }, [issueId]);
 
   // ─── Render ───────────────────────────────────────────────────────────────
@@ -230,7 +279,7 @@ export default function IssuePipelinePage() {
       {/* Main panel */}
       <div className="flex-1 overflow-auto px-10 py-8">
         {!issueId ? (
-          <StartPanel onStart={createIssue} loading={loading} />
+          <StartPanel onStart={createIssue} onTestMode={activateTestMode} loading={loading} />
         ) : (
           <StagePanel
             stage={currentStage}
@@ -260,7 +309,7 @@ export default function IssuePipelinePage() {
 
 // ─── Start panel ──────────────────────────────────────────────────────────────
 
-function StartPanel({ onStart, loading }: { onStart: () => void; loading: boolean }) {
+function StartPanel({ onStart, onTestMode, loading }: { onStart: () => void; onTestMode: () => void; loading: boolean }) {
   return (
     <div className="max-w-xl">
       <p className="text-[10px] tracking-[0.25em] uppercase text-[#8a7e6c] mb-3">CrossAsset</p>
@@ -292,13 +341,23 @@ function StartPanel({ onStart, loading }: { onStart: () => void; loading: boolea
           </div>
         ))}
       </div>
-      <button
-        onClick={onStart}
-        disabled={loading}
-        className="px-6 py-3 bg-[#0c1b38] text-white text-[13px] font-medium rounded-sm hover:bg-[#162d5a] disabled:opacity-50 transition-colors"
-      >
-        {loading ? "Creating issue…" : "Start New Issue"}
-      </button>
+      <div className="flex items-center gap-3">
+        <button
+          onClick={onStart}
+          disabled={loading}
+          className="px-6 py-3 bg-[#0c1b38] text-white text-[13px] font-medium rounded-sm hover:bg-[#162d5a] disabled:opacity-50 transition-colors"
+        >
+          {loading ? "Creating issue…" : "Start New Issue"}
+        </button>
+        <button
+          onClick={onTestMode}
+          disabled={loading}
+          className="px-5 py-3 border border-[#c8bfad] text-[#5a4f3f] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] disabled:opacity-50 transition-colors"
+          title="Skip stages 1–5 with mock data and jump directly to Charts for testing"
+        >
+          Dev: Skip to Charts →
+        </button>
+      </div>
     </div>
   );
 }
@@ -306,7 +365,7 @@ function StartPanel({ onStart, loading }: { onStart: () => void; loading: boolea
 // ─── Stage panel router ───────────────────────────────────────────────────────
 
 interface StagePanelProps {
-  stage: WorkflowStage;
+  stage: AnyStage;
   issueId: string;
   output: unknown;
   lastResponse: ApiResponse | null;
@@ -320,10 +379,10 @@ interface StagePanelProps {
   setDraftGroup: (g: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8") => void;
   selectedIllId: string | null;
   setSelectedIllId: (id: string | null) => void;
-  onRun: (stage: WorkflowStage, extra?: Record<string, unknown>) => void;
-  onApprove: (stage: WorkflowStage) => void;
-  completedStages: WorkflowStage[];
-  allOutputs: Partial<Record<WorkflowStage, unknown>>;
+  onRun: (stage: AnyStage, extra?: Record<string, unknown>) => void;
+  onApprove: (stage: AnyStage) => void;
+  completedStages: AnyStage[];
+  allOutputs: Partial<Record<AnyStage, unknown>>;
 }
 
 function StagePanel(props: StagePanelProps) {
@@ -362,6 +421,7 @@ function StagePanel(props: StagePanelProps) {
       {stage === "QUANT_ANALYSIS" && <QuantPanel {...props} />}
       {stage === "DRAFT" && <DraftPanel {...props} />}
       {stage === "CHARTS_AND_ILLUSTRATIONS" && <ChartsPanel {...props} />}
+      {stage === "ILLUSTRATIONS" && <IllustrationsPanel {...props} />}
       {stage === "FINAL_ASSEMBLY" && <AssemblyPanel {...props} />}
 
       {lastResponse?.recommended_next_action && !error && (
@@ -386,11 +446,11 @@ function ApprovalBar({
   disabled = false,
   extra,
 }: {
-  stage: WorkflowStage;
+  stage: AnyStage;
   hasOutput: boolean;
   loading: boolean;
-  onRun: (stage: WorkflowStage, extra?: Record<string, unknown>) => void;
-  onApprove: (stage: WorkflowStage) => void;
+  onRun: (stage: AnyStage, extra?: Record<string, unknown>) => void;
+  onApprove: (stage: AnyStage) => void;
   approveLabel?: string;
   runLabel?: string;
   disabled?: boolean;
@@ -628,6 +688,22 @@ function ResearchPlanPanel({ output: _output, loading, onRun, onApprove, stage, 
 
 function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
   const output = _output as QuantAnalysisOutput | undefined;
+  const [selectedObjIds, setSelectedObjIds] = React.useState<Set<string>>(new Set());
+
+  const toggleObj = (id: string) => setSelectedObjIds((prev) => {
+    const next = new Set(prev);
+    next.has(id) ? next.delete(id) : next.add(id);
+    return next;
+  });
+
+  const handleImprove = () => {
+    if (!output) return;
+    const selected = output.adversarial.objections
+      .filter((o) => selectedObjIds.has(o.id))
+      .map((o) => o.description);
+    onRun(stage, { incorporate_feedback: selected });
+  };
+
   return (
     <div>
       {!output ? (
@@ -699,9 +775,40 @@ function QuantPanel({ output: _output, loading, onRun, onApprove, stage }: Stage
               {output.fatal_objections.map((o, i) => <p key={i}>• {o}</p>)}
             </div>
           )}
+
+          {/* Improve: select objections to address then regenerate */}
+          <div className="mt-5 border border-[#e8e3da] rounded-sm p-4 bg-[#faf9f7]">
+            <p className="text-[11px] font-semibold text-[#3d3528] uppercase tracking-wide mb-2">
+              Incorporate Feedback & Improve
+            </p>
+            <p className="text-[11px] text-[#8a7e6c] mb-3">Select adversarial objections to address, then regenerate the interpretation with those corrections built in.</p>
+            <div className="space-y-1.5 mb-3">
+              {output.adversarial.objections.map((o) => (
+                <label key={o.id} className="flex items-start gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={selectedObjIds.has(o.id)}
+                    onChange={() => toggleObj(o.id)}
+                    className="mt-0.5 shrink-0"
+                  />
+                  <span className="text-[11px] text-[#3d3528] leading-snug">
+                    <span className={`font-semibold ${o.severity === "fatal" ? "text-red-600" : o.severity === "moderate" ? "text-amber-600" : "text-[#8a7e6c]"}`}>[{o.severity}]</span>{" "}
+                    {o.description}
+                  </span>
+                </label>
+              ))}
+            </div>
+            <button
+              onClick={handleImprove}
+              disabled={loading || selectedObjIds.size === 0}
+              className="px-4 py-2 bg-[#5a3e28] text-white text-[12px] font-medium rounded-sm hover:bg-[#6e4d32] disabled:opacity-40 transition-colors"
+            >
+              {loading ? "Improving…" : `Incorporate ${selectedObjIds.size} Selected & Regenerate`}
+            </button>
+          </div>
         </div>
       )}
-      <ApprovalBar stage={stage} hasOutput={!!output} loading={loading} onRun={onRun} onApprove={onApprove} runLabel="Run Analysis" />
+      <ApprovalBar stage={stage} hasOutput={!!output} loading={loading} onRun={onRun} onApprove={onApprove} runLabel="Run Analysis" disabled={output?.fatal_objections.length ? output.fatal_objections.length > 0 : false} />
     </div>
   );
 }
@@ -717,6 +824,12 @@ const PAGE_GROUPS: { id: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8"; 
 
 function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGroup, setDraftGroup }: StagePanelProps) {
   const output = _output as DraftOutput | undefined;
+  const [expandedPages, setExpandedPages] = React.useState<Set<number>>(new Set());
+  const togglePage = (page: number) => setExpandedPages((prev) => {
+    const next = new Set(prev);
+    next.has(page) ? next.delete(page) : next.add(page);
+    return next;
+  });
   return (
     <div>
       <p className="text-[13px] text-[#8a7e6c] mb-4">
@@ -760,8 +873,13 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
               </div>
               <p className="text-[13px] font-semibold text-[#1a1208] mb-2">{s.title}</p>
               <p className="text-[12px] text-[#5a4f3f] leading-relaxed whitespace-pre-wrap">
-                {s.prose.slice(0, 400)}{s.prose.length > 400 ? "…" : ""}
+                {expandedPages.has(s.page) ? s.prose : `${s.prose.slice(0, 400)}${s.prose.length > 400 ? "…" : ""}`}
               </p>
+              {s.prose.length > 400 && (
+                <button onClick={() => togglePage(s.page)} className="mt-1 text-[11px] text-[#0c1b38] hover:underline">
+                  {expandedPages.has(s.page) ? "Show less" : "Show full page ↓"}
+                </button>
+              )}
             </div>
           ))}
           <p className="text-[12px] text-[#8a7e6c]">
@@ -791,39 +909,59 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
   );
 }
 
-// ─── Stage 6: Charts & Illustrations panel ────────────────────────────────────
+// ─── Stage 6: Charts panel ────────────────────────────────────────────────────
 
-function ChartsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId }: StagePanelProps) {
+function ChartsPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
   const output = _output as ChartsAndIllustrationsOutput | undefined;
   return (
     <div>
       {!output ? (
         <p className="text-[13px] text-[#8a7e6c] mb-4">
-          Claude generates chart specifications with conclusion-led titles, plus 3 illustration concepts for a human illustrator.
+          Claude generates chart specifications with conclusion-led titles. Illustration concepts are generated in the next stage.
         </p>
       ) : (
         <div>
           <p className="text-[12px] font-medium text-[#3d3528] mb-3">{output.charts.length} Charts</p>
-          <div className="space-y-2 mb-6">
+          <div className="space-y-2 mb-4">
             {output.charts.map((c) => (
               <div key={c.chart_id} className="border border-[#e8e3da] rounded p-3 bg-white">
-                <div className="flex items-start justify-between gap-2">
-                  <div>
-                    <p className="text-[10px] font-mono text-[#8a7e6c]">{c.chart_id} · p{c.page} · {c.chart_type}</p>
-                    <p className="text-[12px] text-[#1a1208] font-medium mt-0.5">{c.conclusion_title}</p>
-                    {c.subtitle && <p className="text-[11px] text-[#5a4f3f]">{c.subtitle}</p>}
-                  </div>
-                </div>
+                <p className="text-[10px] font-mono text-[#8a7e6c]">{c.chart_id} · p{c.page} · {c.chart_type}</p>
+                <p className="text-[12px] text-[#1a1208] font-medium mt-0.5">{c.conclusion_title}</p>
+                {c.subtitle && <p className="text-[11px] text-[#5a4f3f]">{c.subtitle}</p>}
                 <p className="text-[10px] text-[#8a7e6c] mt-1">
                   {c.series.map((s) => s.id).join(", ")}
                 </p>
               </div>
             ))}
           </div>
+        </div>
+      )}
+      <ApprovalBar stage={stage} hasOutput={!!output} loading={loading} onRun={onRun} onApprove={onApprove} runLabel="Generate Chart Specs" />
+    </div>
+  );
+}
 
-          <p className="text-[12px] font-medium text-[#3d3528] mb-3">Illustration Concepts (select one)</p>
+// ─── Stage 7: Illustrations panel ────────────────────────────────────────────
+
+function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId, allOutputs }: StagePanelProps) {
+  // Illustrations output is stored on the ILLUSTRATIONS stage output, but
+  // illustration_concepts may also come from CHARTS_AND_ILLUSTRATIONS if the
+  // old combined path was used.
+  const raw = (_output ?? allOutputs["CHARTS_AND_ILLUSTRATIONS"]) as ChartsAndIllustrationsOutput | undefined;
+  const concepts = raw?.illustration_concepts ?? [];
+  const recommended = raw?.recommended_illustration_id ?? "";
+
+  return (
+    <div>
+      {concepts.length === 0 ? (
+        <p className="text-[13px] text-[#8a7e6c] mb-4">
+          Claude generates 3 editorial illustration concepts. You select one and hand the brief to your illustrator.
+        </p>
+      ) : (
+        <div>
+          <p className="text-[12px] font-medium text-[#3d3528] mb-3">Select an illustration concept</p>
           <div className="space-y-3 mb-4">
-            {output.illustration_concepts.map((ill) => (
+            {concepts.map((ill) => (
               <button
                 key={ill.illustration_id}
                 onClick={() => setSelectedIllId(ill.illustration_id)}
@@ -835,18 +973,36 @@ function ChartsPanel({ output: _output, loading, onRun, onApprove, stage, select
               >
                 <div className="flex items-center justify-between mb-1">
                   <p className="text-[12px] font-semibold text-[#1a1208]">{ill.concept_name}</p>
-                  {ill.illustration_id === output.recommended_illustration_id && (
+                  {ill.illustration_id === recommended && (
                     <span className="text-[9px] bg-[#0c1b38] text-white px-2 py-0.5 rounded-full">Recommended</span>
                   )}
                 </div>
                 <p className="text-[11px] text-[#5a4f3f] mb-2">{ill.visual_metaphor}</p>
-                <p className="text-[11px] text-[#8a7e6c] leading-relaxed">{ill.illustrator_brief.slice(0, 200)}…</p>
+                <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide mb-1">Economic mechanism</p>
+                <p className="text-[11px] text-[#3d3528] mb-2">{ill.economic_mechanism}</p>
+                <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide mb-1">Illustrator brief</p>
+                <p className="text-[11px] text-[#5a4f3f] leading-relaxed">{ill.illustrator_brief}</p>
+                {ill.key_objects?.length > 0 && (
+                  <p className="text-[10px] text-[#8a7e6c] mt-2">Key objects: {ill.key_objects.join(", ")}</p>
+                )}
               </button>
             ))}
           </div>
+          {!selectedIllId && (
+            <p className="text-[12px] text-amber-700 mb-2">Select a concept to approve and continue.</p>
+          )}
         </div>
       )}
-      <ApprovalBar stage={stage} hasOutput={!!output} loading={loading} onRun={onRun} onApprove={onApprove} runLabel="Generate Charts & Illustrations" />
+      <ApprovalBar
+        stage={stage}
+        hasOutput={concepts.length > 0}
+        loading={loading}
+        onRun={onRun}
+        onApprove={onApprove}
+        runLabel="Generate Illustration Concepts"
+        approveLabel="Approve Illustration & Continue"
+        disabled={concepts.length > 0 && !selectedIllId}
+      />
     </div>
   );
 }
