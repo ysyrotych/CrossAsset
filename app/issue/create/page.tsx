@@ -1154,7 +1154,7 @@ function InstitutionalChart({ chartType, seriesIds, title }: { chartType: string
             />
             <Tooltip
               contentStyle={{ fontSize: 11, padding: "6px 10px", background: "#fff", border: "1px solid #e8e3da", borderRadius: 3, boxShadow: "0 2px 8px rgba(0,0,0,0.08)" }}
-              labelFormatter={(label: string) => new Date(label).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
+              labelFormatter={(label) => new Date(String(label)).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}
               formatter={(value: number, name: string) => [fmt(value) + (needsNorm ? "%" : ""), SERIES_LABELS[name] ?? name]}
             />
             {ids.map((id, i) =>
