@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useEffect, useRef } from "react";
+import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import AppShell from "@/components/layout/AppShell";
 import type {
   WorkflowStage,
@@ -431,6 +432,33 @@ function StagePanel(props: StagePanelProps) {
       )}
     </div>
   );
+}
+
+// ─── Download helpers ─────────────────────────────────────────────────────────
+
+function downloadWord(filename: string, html: string) {
+  const blob = new Blob(
+    [`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>${filename}</title><style>body{font-family:Garamond,serif;font-size:12pt;line-height:1.6;margin:2cm}h1{font-size:22pt}h2{font-size:16pt}p{margin-bottom:0.8em}</style></head><body>${html}</body></html>`],
+    { type: "application/msword" }
+  );
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = `${filename}.doc`;
+  a.click();
+}
+
+function downloadPDF(printHtml: string, filename: string) {
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${filename}</title><style>
+    body{font-family:Garamond,serif;font-size:12pt;line-height:1.6;margin:2cm;color:#1a1208}
+    h1{font-size:22pt;font-family:Georgia,serif;margin-bottom:0.3em}
+    h2{font-size:14pt;margin-top:1.5em;margin-bottom:0.3em;border-bottom:1px solid #ccc;padding-bottom:0.2em}
+    p{margin-bottom:0.8em}
+    .meta{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:0.1em}
+    @media print{body{margin:1.5cm}}
+  </style></head><body>${printHtml}<script>window.onload=function(){window.print()}<\/script></body></html>`);
+  win.document.close();
 }
 
 // ─── Shared approval buttons ──────────────────────────────────────────────────
@@ -888,7 +916,7 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
         </div>
       )}
 
-      <div className="flex items-center gap-3 mt-4">
+      <div className="flex items-center gap-3 mt-4 flex-wrap">
         <button
           onClick={() => onRun(stage)}
           disabled={loading}
@@ -904,7 +932,89 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
             All 8 Pages Done — Approve
           </button>
         )}
+        {output && output.sections.length > 0 && (
+          <>
+            <button
+              onClick={() => {
+                const html = output.sections.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose.replace(/\n/g, "</p><p>")}</p>`).join("");
+                downloadWord("CrossAsset-Draft", `<h1>CrossAsset Draft</h1><p class="meta">${output.total_word_count} words · ${output.page_count} pages</p>${html}`);
+              }}
+              className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
+            >
+              ↓ Word
+            </button>
+            <button
+              onClick={() => {
+                const html = output.sections.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose.replace(/\n/g, "</p><p>")}</p>`).join("");
+                downloadPDF(`<h1>CrossAsset Draft</h1><p class="meta">${output.total_word_count} words · ${output.page_count} pages</p>${html}`, "CrossAsset Draft");
+              }}
+              className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
+            >
+              ↓ PDF
+            </button>
+          </>
+        )}
       </div>
+    </div>
+  );
+}
+
+// ─── Mini chart component ─────────────────────────────────────────────────────
+
+type ChartPt = { date: string; value: number };
+type SeriesData = Record<string, ChartPt[]>;
+
+function MiniChart({ chartType, seriesIds }: { chartType: string; seriesIds: string[] }) {
+  const [data, setData] = useState<SeriesData | null>(null);
+  const [loading, setLoading] = useState(false);
+  const fetchedRef = useRef(false);
+
+  useEffect(() => {
+    if (fetchedRef.current || seriesIds.length === 0) return;
+    fetchedRef.current = true;
+    setLoading(true);
+    fetch(`/api/issue/chart-data?series=${seriesIds.slice(0, 3).join(",")}&limit=90`)
+      .then((r) => r.json())
+      .then((d: SeriesData) => setData(d))
+      .catch(() => setData({}))
+      .finally(() => setLoading(false));
+  }, [seriesIds]);
+
+  if (loading) return <div className="h-28 flex items-center justify-center text-[10px] text-[#8a7e6c]">Loading chart…</div>;
+  if (!data) return null;
+
+  // Align all series by date
+  const allDates = Array.from(new Set(Object.values(data).flat().map((p) => p.date))).sort();
+  const chartData = allDates.map((date) => {
+    const pt: Record<string, string | number> = { date: date.slice(5) }; // MM-DD
+    for (const id of seriesIds.slice(0, 3)) {
+      const match = data[id]?.find((p) => p.date === date);
+      if (match) pt[id] = parseFloat(match.value.toFixed(3));
+    }
+    return pt;
+  }).filter((_, i, arr) => i % Math.max(1, Math.floor(arr.length / 60)) === 0); // downsample to ~60 pts
+
+  const COLORS = ["#0c1b38", "#b5813c", "#8a7e6c"];
+  const ChartEl = chartType === "bar" ? BarChart : chartType === "area" ? AreaChart : LineChart;
+
+  return (
+    <div className="h-32 mt-2">
+      <ResponsiveContainer width="100%" height="100%">
+        <ChartEl data={chartData}>
+          <XAxis dataKey="date" tick={{ fontSize: 8, fill: "#8a7e6c" }} tickLine={false} axisLine={false} interval="preserveStartEnd" />
+          <YAxis tick={{ fontSize: 8, fill: "#8a7e6c" }} tickLine={false} axisLine={false} width={32} />
+          <Tooltip contentStyle={{ fontSize: 10, padding: "4px 8px", background: "#faf9f7", border: "1px solid #e8e3da", borderRadius: 2 }} />
+          {seriesIds.slice(0, 3).map((id, i) =>
+            chartType === "bar" ? (
+              <Bar key={id} dataKey={id} fill={COLORS[i]} opacity={0.8} />
+            ) : chartType === "area" ? (
+              <Area key={id} dataKey={id} stroke={COLORS[i]} fill={COLORS[i]} fillOpacity={0.1} strokeWidth={1.5} dot={false} />
+            ) : (
+              <Line key={id} dataKey={id} stroke={COLORS[i]} strokeWidth={1.5} dot={false} />
+            )
+          )}
+        </ChartEl>
+      </ResponsiveContainer>
     </div>
   );
 }
@@ -922,15 +1032,14 @@ function ChartsPanel({ output: _output, loading, onRun, onApprove, stage }: Stag
       ) : (
         <div>
           <p className="text-[12px] font-medium text-[#3d3528] mb-3">{output.charts.length} Charts</p>
-          <div className="space-y-2 mb-4">
+          <div className="space-y-3 mb-4">
             {output.charts.map((c) => (
               <div key={c.chart_id} className="border border-[#e8e3da] rounded p-3 bg-white">
                 <p className="text-[10px] font-mono text-[#8a7e6c]">{c.chart_id} · p{c.page} · {c.chart_type}</p>
                 <p className="text-[12px] text-[#1a1208] font-medium mt-0.5">{c.conclusion_title}</p>
                 {c.subtitle && <p className="text-[11px] text-[#5a4f3f]">{c.subtitle}</p>}
-                <p className="text-[10px] text-[#8a7e6c] mt-1">
-                  {c.series.map((s) => s.id).join(", ")}
-                </p>
+                <p className="text-[10px] text-[#8a7e6c] mt-1">{c.series.map((s) => s.id).join(", ")}</p>
+                <MiniChart chartType={c.chart_type} seriesIds={c.series.map((s) => s.id)} />
               </div>
             ))}
           </div>
@@ -944,49 +1053,129 @@ function ChartsPanel({ output: _output, loading, onRun, onApprove, stage }: Stag
 // ─── Stage 7: Illustrations panel ────────────────────────────────────────────
 
 function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId, allOutputs }: StagePanelProps) {
-  // Illustrations output is stored on the ILLUSTRATIONS stage output, but
-  // illustration_concepts may also come from CHARTS_AND_ILLUSTRATIONS if the
-  // old combined path was used.
   const raw = (_output ?? allOutputs["CHARTS_AND_ILLUSTRATIONS"]) as ChartsAndIllustrationsOutput | undefined;
   const concepts = raw?.illustration_concepts ?? [];
   const recommended = raw?.recommended_illustration_id ?? "";
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+  const [uploadedImages, setUploadedImages] = useState<Record<string, string>>({});
+  const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
+
+  function copyPrompt(id: string, prompt: string) {
+    navigator.clipboard.writeText(prompt).then(() => {
+      setCopiedId(id);
+      setTimeout(() => setCopiedId(null), 2000);
+    });
+  }
+
+  function handleImageUpload(id: string, file: File) {
+    const url = URL.createObjectURL(file);
+    setUploadedImages((prev) => ({ ...prev, [id]: url }));
+  }
 
   return (
     <div>
       {concepts.length === 0 ? (
-        <p className="text-[13px] text-[#8a7e6c] mb-4">
-          Claude generates 3 editorial illustration concepts. You select one and hand the brief to your illustrator.
-        </p>
+        <div>
+          <p className="text-[13px] text-[#8a7e6c] mb-4">
+            Claude generates 3 Economist-style illustration concepts with ChatGPT image prompts. Copy the prompt, generate in ChatGPT, upload the image here, then approve.
+          </p>
+          <div className="text-[12px] text-[#5a4f3f] border border-[#e8e3da] rounded p-3 bg-[#faf9f7] mb-4 space-y-1">
+            <p className="font-medium text-[#1a1208]">Workflow:</p>
+            <p>1. Generate concepts below</p>
+            <p>2. Copy the ChatGPT prompt for your chosen concept</p>
+            <p>3. Paste into ChatGPT (GPT-4o with image generation) or DALL-E</p>
+            <p>4. Upload the generated image here</p>
+            <p>5. Approve & continue to final proof</p>
+          </div>
+        </div>
       ) : (
         <div>
-          <p className="text-[12px] font-medium text-[#3d3528] mb-3">Select an illustration concept</p>
-          <div className="space-y-3 mb-4">
-            {concepts.map((ill) => (
-              <button
-                key={ill.illustration_id}
-                onClick={() => setSelectedIllId(ill.illustration_id)}
-                className={`w-full text-left border rounded-sm p-4 transition-all ${
-                  selectedIllId === ill.illustration_id
-                    ? "border-[#0c1b38] bg-[#0c1b38]/5"
-                    : "border-[#e8e3da] bg-white hover:border-[#c8bfad]"
-                }`}
-              >
-                <div className="flex items-center justify-between mb-1">
-                  <p className="text-[12px] font-semibold text-[#1a1208]">{ill.concept_name}</p>
-                  {ill.illustration_id === recommended && (
-                    <span className="text-[9px] bg-[#0c1b38] text-white px-2 py-0.5 rounded-full">Recommended</span>
+          <p className="text-[12px] font-medium text-[#3d3528] mb-1">3 Economist-Style Concepts</p>
+          <p className="text-[11px] text-[#8a7e6c] mb-4">Each has a ready-to-paste ChatGPT prompt. Generate the image, upload it below, then approve.</p>
+          <div className="space-y-4 mb-4">
+            {concepts.map((ill) => {
+              const isSelected = selectedIllId === ill.illustration_id;
+              const prompt = ill.chatgpt_image_prompt ?? `Editorial illustration in The Economist style, minimalist, 3 colors only (navy blue, ivory white, warm gold accent), clean white background, simple bold linework, dry wit, no text. ${ill.visual_metaphor}. ${ill.illustrator_brief}`;
+              return (
+                <div
+                  key={ill.illustration_id}
+                  onClick={() => setSelectedIllId(ill.illustration_id)}
+                  className={`border rounded-sm p-4 cursor-pointer transition-all ${
+                    isSelected ? "border-[#0c1b38] bg-[#0c1b38]/5" : "border-[#e8e3da] bg-white hover:border-[#c8bfad]"
+                  }`}
+                >
+                  <div className="flex items-start justify-between mb-2">
+                    <div>
+                      <p className="text-[12px] font-semibold text-[#1a1208]">{ill.concept_name}</p>
+                      {ill.illustration_id === recommended && (
+                        <span className="text-[9px] bg-[#0c1b38] text-white px-2 py-0.5 rounded-full mt-0.5 inline-block">Recommended</span>
+                      )}
+                    </div>
+                    <div className={`w-4 h-4 rounded-full border-2 shrink-0 mt-0.5 ${isSelected ? "border-[#0c1b38] bg-[#0c1b38]" : "border-[#c8bfad]"}`} />
+                  </div>
+
+                  <p className="text-[11px] text-[#5a4f3f] italic mb-1">"{ill.visual_metaphor}"</p>
+                  {ill.wit_explanation && (
+                    <p className="text-[10px] text-[#8a7e6c] mb-2">Why it works: {ill.wit_explanation}</p>
                   )}
+                  <p className="text-[10px] text-[#8a7e6c] mb-1">Mechanism: {ill.economic_mechanism}</p>
+
+                  {/* ChatGPT prompt block */}
+                  <div className="mt-3 border border-[#e0dbd2] rounded bg-[#faf9f7] p-3" onClick={(e) => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-1.5">
+                      <p className="text-[10px] font-semibold text-[#3d3528] uppercase tracking-wide">ChatGPT Image Prompt</p>
+                      <div className="flex gap-2">
+                        <button
+                          onClick={() => setExpandedPrompt(expandedPrompt === ill.illustration_id ? null : ill.illustration_id)}
+                          className="text-[10px] text-[#8a7e6c] hover:text-[#3d3528]"
+                        >
+                          {expandedPrompt === ill.illustration_id ? "Hide" : "Show"}
+                        </button>
+                        <button
+                          onClick={() => copyPrompt(ill.illustration_id, prompt)}
+                          className="text-[10px] px-2 py-0.5 bg-[#0c1b38] text-white rounded hover:bg-[#162d5a] transition-colors"
+                        >
+                          {copiedId === ill.illustration_id ? "Copied!" : "Copy Prompt"}
+                        </button>
+                      </div>
+                    </div>
+                    {expandedPrompt === ill.illustration_id && (
+                      <p className="text-[10px] text-[#5a4f3f] leading-relaxed font-mono">{prompt}</p>
+                    )}
+                  </div>
+
+                  {/* Image upload */}
+                  <div className="mt-3" onClick={(e) => e.stopPropagation()}>
+                    {uploadedImages[ill.illustration_id] ? (
+                      <div className="relative">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img
+                          src={uploadedImages[ill.illustration_id]}
+                          alt={ill.concept_name}
+                          className="w-full max-h-64 object-contain rounded border border-[#e8e3da] bg-white"
+                        />
+                        <button
+                          onClick={() => setUploadedImages((prev) => { const n = {...prev}; delete n[ill.illustration_id]; return n; })}
+                          className="absolute top-2 right-2 text-[10px] px-2 py-0.5 bg-white border border-[#e8e3da] rounded text-[#5a4f3f] hover:bg-red-50 hover:border-red-200 hover:text-red-600 transition-colors"
+                        >
+                          Remove
+                        </button>
+                      </div>
+                    ) : (
+                      <label className="flex items-center gap-2 text-[11px] text-[#8a7e6c] border border-dashed border-[#c8bfad] rounded px-3 py-2 cursor-pointer hover:border-[#0c1b38] hover:text-[#3d3528] transition-colors">
+                        <span>Upload image from ChatGPT →</span>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          className="hidden"
+                          onChange={(e) => { const f = e.target.files?.[0]; if (f) handleImageUpload(ill.illustration_id, f); }}
+                        />
+                      </label>
+                    )}
+                  </div>
                 </div>
-                <p className="text-[11px] text-[#5a4f3f] mb-2">{ill.visual_metaphor}</p>
-                <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide mb-1">Economic mechanism</p>
-                <p className="text-[11px] text-[#3d3528] mb-2">{ill.economic_mechanism}</p>
-                <p className="text-[10px] text-[#8a7e6c] uppercase tracking-wide mb-1">Illustrator brief</p>
-                <p className="text-[11px] text-[#5a4f3f] leading-relaxed">{ill.illustrator_brief}</p>
-                {ill.key_objects?.length > 0 && (
-                  <p className="text-[10px] text-[#8a7e6c] mt-2">Key objects: {ill.key_objects.join(", ")}</p>
-                )}
-              </button>
-            ))}
+              );
+            })}
           </div>
           {!selectedIllId && (
             <p className="text-[12px] text-amber-700 mb-2">Select a concept to approve and continue.</p>
@@ -1114,6 +1303,28 @@ function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage }: St
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] disabled:opacity-40 transition-colors"
             >
               {loading ? "Re-assembling…" : "Re-run Fact-Check"}
+            </button>
+            <button
+              onClick={() => {
+                const pages = output.pages ?? [];
+                const pagesHtml = pages.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose?.replace(/\n/g, "</p><p>") ?? ""}</p>`).join("");
+                const html = `<h1>${output.title}</h1><p class="meta">${output.thesis}</p><p class="meta">Quality Score: ${output.quality_score}/100 · Cutoff: ${output.cutoff_date}</p><hr/>${pagesHtml}<h2>Web Excerpt</h2><p>${output.web_excerpt ?? ""}</p>`;
+                downloadWord(`CrossAsset-${output.issue_id ?? "Issue"}`, html);
+              }}
+              className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
+            >
+              ↓ Word
+            </button>
+            <button
+              onClick={() => {
+                const pages = output.pages ?? [];
+                const pagesHtml = pages.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose?.replace(/\n/g, "</p><p>") ?? ""}</p>`).join("");
+                const html = `<h1>${output.title}</h1><p class="meta">${output.thesis}</p><p class="meta">Quality Score: ${output.quality_score}/100 · Cutoff: ${output.cutoff_date}</p><hr/>${pagesHtml}<h2>Web Excerpt</h2><p>${output.web_excerpt ?? ""}</p>`;
+                downloadPDF(html, output.title ?? "CrossAsset Issue");
+              }}
+              className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
+            >
+              ↓ PDF
             </button>
           </>
         )}

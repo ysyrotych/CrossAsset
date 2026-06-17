@@ -186,10 +186,12 @@ export interface IllustrationConcept {
   concept_name: string;
   economic_mechanism: string;
   visual_metaphor: string;
-  composition: string;
+  wit_explanation?: string;
+  composition?: string;
   key_objects: string[];
   prohibited_elements: string[];
   illustrator_brief: string;
+  chatgpt_image_prompt?: string;
   placement: "cover" | "page_2" | "page_7" | "page_8" | "sidebar";
   aspect_ratio: string;
 }

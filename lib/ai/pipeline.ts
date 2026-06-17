@@ -504,21 +504,27 @@ THESIS: ${approvedThesis.one_sentence}
 CONVENTIONAL VIEW: ${approvedThesis.conventional_view}
 MECHANISM: ${approvedThesis.differentiated_view}
 
-Generate 3 illustration concepts expressing this thesis mechanism through different visual metaphors.
-Style: dark navy linework, warm ivory background, single accent color, dry intelligent wit.
+Generate 3 illustration concepts. TARGET STYLE: The Economist magazine cover illustrations.
+Characteristics: dry wit, minimal linework, one clever visual metaphor that makes a reader smile AND think.
+Think Economist covers — a central character or object in an absurd-but-precise situation that encodes the macro thesis.
+Must be: instantly readable, funny-smart (not corny), something people would share on LinkedIn/Twitter.
+Technically: 2-3 colors max (navy + ivory + one accent), no text in image, clean white/ivory background, simple geometry.
+Each concept must encode a DIFFERENT visual metaphor for the same thesis.
 
 OUTPUT: A JSON array of exactly 3 illustration objects:
 [
   {
     "illustration_id": "ILL-001",
-    "concept_name": "short name",
-    "economic_mechanism": "one sentence — what economic force is being shown",
-    "visual_metaphor": "one sentence — the central image or scene",
+    "concept_name": "short punchy name",
+    "economic_mechanism": "one sentence — the exact economic dynamic being visualized",
+    "visual_metaphor": "one sentence — the clever central image/scene (make it witty)",
+    "wit_explanation": "one sentence — why this image is funny/smart, what the joke is",
     "key_objects": ["object 1", "object 2", "object 3"],
-    "prohibited_elements": ["no literal dollar signs", "no stock tickers"],
-    "illustrator_brief": "3 sentences: what to draw, composition, mood. Style: dark navy linework on ivory, one warm accent, minimal, intelligent wit.",
+    "prohibited_elements": ["no literal dollar signs", "no stock tickers", "no bar charts inside the illustration"],
+    "illustrator_brief": "3 sentences describing exactly what to draw and the composition. Reference the Economist aesthetic explicitly.",
+    "chatgpt_image_prompt": "A detailed DALL-E / GPT-4o image generation prompt. Start with: 'Editorial illustration in The Economist style, minimalist, 3 colors only (navy blue, ivory white, warm gold accent), clean white background, simple bold linework, dry wit, no text...' then describe the exact scene.",
     "placement": "cover",
-    "aspect_ratio": "16:9"
+    "aspect_ratio": "1:1"
   }
 ]
 
@@ -553,6 +559,19 @@ export async function runFactCheckStage(
   claimLedger: ClaimRecord[],
   jobResults: JobResult[]
 ): Promise<{ verified_claims: ClaimRecord[]; blocking_issues: string[] }> {
+  // Compress inputs to stay well under 8192 output token limit
+  const compressedClaims = claimLedger.slice(0, 20).map((c) => ({
+    id: c.claim_id,
+    text: c.text.slice(0, 60),
+    status: c.status,
+    result: c.result?.slice(0, 40),
+  }));
+  const compressedJobs = jobResults.slice(0, 10).map((j) => ({
+    id: j.job_id,
+    stat: j.key_stat?.slice(0, 60),
+    ok: !j.error,
+  }));
+
   const userContent = `CURRENT_STAGE: FACT_CHECK
 
 THREE-PASS VERIFICATION:
@@ -560,14 +579,14 @@ Pass 1 — Data Auditor: verify raw values, dates, units
 Pass 2 — Analytical Reviewer: recalculate key values independently
 Pass 3 — Editorial Fact-Checker: check prose matches data
 
-DRAFT PROSE SUMMARY:
-${drafts.sections.map((s) => `[Page ${s.page}] ${s.title}: ${s.prose.slice(0, 300)}...`).join("\n\n")}
+DRAFT TITLES:
+${drafts.sections.map((s) => `[p${s.page}] ${s.title}`).join("\n")}
 
-CLAIM LEDGER TO VERIFY:
-${JSON.stringify(claimLedger, null, 2)}
+CLAIM LEDGER (${claimLedger.length} claims — top 20 shown):
+${JSON.stringify(compressedClaims)}
 
-ANALYSIS RESULTS (ground truth):
-${JSON.stringify(jobResults.map((j) => ({ job_id: j.job_id, key_stat: j.key_stat, summary: j.summary })), null, 2)}
+ANALYSIS GROUND TRUTH:
+${JSON.stringify(compressedJobs)}
 
 REQUIRED_OUTPUT_SCHEMA:
 {
