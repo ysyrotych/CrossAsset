@@ -19,6 +19,7 @@ import type {
   AnalysisJob,
   ClaimRecord,
   QuantAnalysisOutput,
+  DataAuditOutput,
 } from "@/lib/pipeline/types";
 import type { JobResult } from "@/lib/pipeline/analysis";
 
@@ -115,7 +116,7 @@ export async function POST(
       ]);
 
       const headlines = news.map((n) => `[${n.source}] ${n.title}`);
-      const thesisOutput = await runThesisSelectionStage(diagnostics, headlines, audit);
+      const thesisOutput = await runThesisSelectionStage(diagnostics, headlines, audit as DataAuditOutput);
 
       await patchIssue(id, {
         thesis_candidates: thesisOutput,
