@@ -474,41 +474,29 @@ REQUIRED_OUTPUT_SCHEMA:
     {
       "chart_id": "CH-001",
       "page": 1,
-      "conclusion_title": "string (MUST state the finding, not just name the variable)",
-      "subtitle": "string (optional additional context)",
+      "conclusion_title": "string — MUST state the finding, not the variable name",
       "chart_type": "line|bar|scatter|area|composed",
-      "series": [{"id":"FRED_SERIES_ID","label":"string","transform":"string","color":"#hex"}],
-      "x_axis": "date",
-      "y_axis": "string (unit label)",
-      "y_axis_right": "string (optional second axis label)",
-      "annotations": ["string"],
-      "source_footer": "string",
-      "recharts_config": {},
-      "caveats": ["string"]
+      "series": [{"id":"FRED_SERIES_ID","label":"string","color":"#hex"}],
+      "y_axis": "unit label",
+      "annotations": ["1 annotation max, under 10 words"],
+      "source_footer": "FRED"
     }
   ],
   "illustration_concepts": [
     {
       "illustration_id": "ILL-001",
       "concept_name": "string",
-      "economic_mechanism": "string (the mechanism being illustrated)",
-      "visual_metaphor": "string (the central image)",
-      "composition": "string (what the viewer sees)",
-      "key_objects": ["string"],
-      "prohibited_elements": ["string"],
-      "illustrator_brief": "string (detailed brief for a human illustrator — style: dark navy linework, warm ivory background, one accent color, minimal and elegant, dry intelligent humor)",
-      "placement": "cover|page_2|page_7|page_8|sidebar",
-      "aspect_ratio": "16:9|4:3|1:1|2:3"
+      "visual_metaphor": "1 sentence",
+      "illustrator_brief": "3 sentences max — style: dark navy linework, ivory background, dry humor",
+      "placement": "cover|page_2|page_7"
     }
   ],
   "recommended_illustration_id": "ILL-001"
 }
 
-Generate 10-14 charts total (some on page 6 will be small). Chart conclusion_title MUST state the finding.
-Generate exactly 3 illustration concepts, each expressing the thesis mechanism through a different visual metaphor.
-Return valid JSON only.`;
+BREVITY RULES: Max 8 charts. Exactly 3 illustration concepts. Every string field max 20 words. No recharts_config. Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 8192);
   return extractJSON<ChartsAndIllustrationsOutput>(text);
 }
 
@@ -620,7 +608,7 @@ REQUIRED_OUTPUT_SCHEMA:
 ready_to_publish must be false if quality_score < 85 or any blocking_issues exist.
 Return valid JSON only.`;
 
-  const text = await callClaude("haiku", MASTER_SYSTEM, userContent, 3000);
+  const text = await callClaude("haiku", MASTER_SYSTEM, userContent, 4096);
   const manifest = extractJSON<IssueManifest>(text);
 
   // Attach full content
