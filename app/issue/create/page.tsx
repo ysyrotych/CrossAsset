@@ -96,6 +96,9 @@ export default function IssuePipelinePage() {
   const [draftGroup, setDraftGroup] = useState<"pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8">("pages_1_2");
   // Illustration selection
   const [selectedIllId, setSelectedIllId] = useState<string | null>(null);
+  // Uploaded images lifted from IllustrationsPanel so downloads can access them
+  const [coverImage, setCoverImage] = useState<string | null>(null);
+  const [illImageSrc, setIllImageSrc] = useState<string | null>(null);
 
   // ─── Create issue ─────────────────────────────────────────────────────────
 
@@ -305,6 +308,10 @@ export default function IssuePipelinePage() {
             setDraftGroup={setDraftGroup}
             selectedIllId={selectedIllId}
             setSelectedIllId={setSelectedIllId}
+            coverImage={coverImage}
+            setCoverImage={setCoverImage}
+            illImageSrc={illImageSrc}
+            setIllImageSrc={setIllImageSrc}
             onRun={runStage}
             onApprove={approveAndAdvance}
             completedStages={completedStages}
@@ -388,6 +395,10 @@ interface StagePanelProps {
   setDraftGroup: (g: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8") => void;
   selectedIllId: string | null;
   setSelectedIllId: (id: string | null) => void;
+  coverImage: string | null;
+  setCoverImage: (url: string | null) => void;
+  illImageSrc: string | null;
+  setIllImageSrc: (url: string | null) => void;
   onRun: (stage: AnyStage, extra?: Record<string, unknown>) => void;
   onApprove: (stage: AnyStage) => void;
   completedStages: AnyStage[];
@@ -453,8 +464,19 @@ function downloadWord(manifest: IssueManifest) {
   a.click();
 }
 
-function downloadPDF(manifest: IssueManifest, coverImageUrl?: string) {
-  const html = generatePrintHTML(manifest, coverImageUrl);
+async function downloadPDF(manifest: IssueManifest, coverImageUrl?: string, illImageUrl?: string, chartSpecs?: ChartsAndIllustrationsOutput["charts"]) {
+  // Fetch chart data for all charts so we can embed real graphs in the PDF
+  let chartData: Record<string, Record<string, {date: string; value: number}[]>> = {};
+  if (chartSpecs && chartSpecs.length > 0) {
+    for (const chart of chartSpecs.slice(0, 8)) {
+      const seriesIds = chart.series.map((s) => s.id).slice(0, 3);
+      try {
+        const r = await fetch(`/api/issue/chart-data?series=${seriesIds.join(",")}&limit=252`);
+        if (r.ok) chartData[chart.chart_id] = await r.json();
+      } catch { /* skip */ }
+    }
+  }
+  const html = generatePrintHTML(manifest, coverImageUrl, illImageUrl, chartSpecs, chartData);
   const win = window.open("", "_blank");
   if (!win) return;
   win.document.write(html);
@@ -1207,14 +1229,13 @@ function ChartsPanel({ output: _output, loading, onRun, onApprove, stage }: Stag
 
 // ─── Stage 7: Illustrations panel ────────────────────────────────────────────
 
-function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId, allOutputs }: StagePanelProps) {
+function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage, selectedIllId, setSelectedIllId, allOutputs, coverImage, setCoverImage, illImageSrc, setIllImageSrc }: StagePanelProps) {
   const raw = (_output ?? allOutputs["CHARTS_AND_ILLUSTRATIONS"]) as ChartsAndIllustrationsOutput | undefined;
   const concepts = raw?.illustration_concepts ?? [];
   const recommended = raw?.recommended_illustration_id ?? "";
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [uploadedImages, setUploadedImages] = useState<Record<string, string>>({});
   const [expandedPrompt, setExpandedPrompt] = useState<string | null>(null);
-  const [coverImage, setCoverImage] = useState<string | null>(null);
 
   function copyPrompt(id: string, prompt: string) {
     navigator.clipboard.writeText(prompt).then(() => {
@@ -1226,6 +1247,8 @@ function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage,
   function handleImageUpload(id: string, file: File) {
     const url = URL.createObjectURL(file);
     setUploadedImages((prev) => ({ ...prev, [id]: url }));
+    // If this is the selected concept, lift to parent for PDF export
+    if (id === selectedIllId || !selectedIllId) setIllImageSrc(url);
   }
 
   return (
@@ -1293,7 +1316,10 @@ function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage,
               return (
                 <div
                   key={ill.illustration_id}
-                  onClick={() => setSelectedIllId(ill.illustration_id)}
+                  onClick={() => {
+                    setSelectedIllId(ill.illustration_id);
+                    if (uploadedImages[ill.illustration_id]) setIllImageSrc(uploadedImages[ill.illustration_id]);
+                  }}
                   className={`border rounded-sm p-4 cursor-pointer transition-all ${
                     isSelected ? "border-[#0c1b38] bg-[#0c1b38]/5" : "border-[#e8e3da] bg-white hover:border-[#c8bfad]"
                   }`}
@@ -1392,7 +1418,7 @@ function IllustrationsPanel({ output: _output, loading, onRun, onApprove, stage,
 
 // ─── Stage 7: Final Assembly panel ───────────────────────────────────────────
 
-function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage }: StagePanelProps) {
+function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage, coverImage, illImageSrc, allOutputs }: StagePanelProps) {
   const output = _output as IssueManifest | undefined;
   return (
     <div>
@@ -1505,7 +1531,10 @@ function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage }: St
               ↓ Word
             </button>
             <button
-              onClick={() => downloadPDF(output)}
+              onClick={() => {
+                const chartSpecs = (allOutputs["CHARTS_AND_ILLUSTRATIONS"] as ChartsAndIllustrationsOutput | undefined)?.charts ?? [];
+                downloadPDF(output, coverImage ?? undefined, illImageSrc ?? undefined, chartSpecs);
+              }}
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
             >
               ↓ PDF
