@@ -31,7 +31,7 @@ import type { JobResult } from "@/lib/pipeline/analysis";
 export const dynamic = "force-dynamic";
 
 type StageBody = {
-  stage: WorkflowStage;
+  stage: WorkflowStage | "ILLUSTRATIONS";
   // approval actions
   action?: "approve" | "approve_with_edits" | "request_alternatives" | "return_to_previous" | "auto_continue";
   selected_id?: string;
