@@ -174,25 +174,33 @@ export default function IssuePipelinePage() {
           {STAGES.map((s, i) => {
             const done = completedStages.includes(s.id);
             const active = currentStage === s.id;
+            // Only allow navigating to completed stages or the current active stage
+            const locked = !done && !active;
             return (
               <button
                 key={s.id}
-                onClick={() => setCurrentStage(s.id)}
+                onClick={() => {
+                  if (locked) return;
+                  setCurrentStage(s.id);
+                  setError(null);
+                  setLastResponse(null);
+                }}
+                disabled={locked}
                 className={`w-full text-left px-3 py-2.5 rounded-sm transition-all ${
                   active
                     ? "bg-[#0c1b38] text-white"
                     : done
-                    ? "text-[#2d5016] hover:bg-[#f0f0eb]"
-                    : "text-[#8a7e6c] hover:bg-[#f0f0eb]"
+                    ? "text-[#2d5016] hover:bg-[#f0f0eb] cursor-pointer"
+                    : "text-[#c8bfad] cursor-default"
                 }`}
               >
                 <div className="flex items-center gap-2">
-                  <span className={`w-4 h-4 rounded-full border flex items-center justify-center text-[9px] shrink-0 ${
+                  <span className={`w-5 h-5 rounded-full border flex items-center justify-center text-[9px] shrink-0 ${
                     done
                       ? "bg-[#2d5016] border-[#2d5016] text-white"
                       : active
                       ? "bg-white border-white text-[#0c1b38]"
-                      : "border-[#c8bfad] text-[#8a7e6c]"
+                      : "border-[#ddd8ce] text-[#c8bfad]"
                   }`}>
                     {done ? "✓" : i + 1}
                   </span>
@@ -206,7 +214,7 @@ export default function IssuePipelinePage() {
         {issueId && (
           <div className="mt-8 pt-6 border-t border-[#e8e3da]">
             <p className="text-[9px] text-[#8a7e6c] uppercase tracking-widest mb-1">Issue ID</p>
-            <p className="text-[10px] text-[#3d3528] font-mono break-all">{issueId}</p>
+            <p className="text-[10px] text-[#3d3528] font-mono truncate" title={issueId ?? ""}>{issueId}</p>
           </div>
         )}
       </aside>
