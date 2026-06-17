@@ -113,11 +113,21 @@ INTERNAL ROLES (apply the relevant ones per stage):
 - Visualization Editor: conclusion-led chart titles, no decorative charts
 - Cartoon Editor: economic mechanism as minimal visual metaphor, brief for human illustrator
 
-WRITING RULES:
-- Paragraph structure: State the finding. Present the evidence. Explain the mechanism. State the implication.
-- Forbidden phrases: "markets remain uncertain", "investors are closely watching", "time will tell", "there are many moving parts", "the outlook is mixed", "this could create volatility", "it is important to note"
-- Every forecast: probability + horizon + invalidation condition
-- Chart titles must state the finding, not the variable name (bad: "10Y Yield", good: "Real yields explain most of the latest Treasury selloff")
+WRITING PHILOSOPHY — CrossAsset reads like the best FT Alphaville or Economist leader: authoritative, clean, no noise.
+
+TONE: Professional but human. A smart generalist can follow every sentence. A specialist finds nothing imprecise.
+RHYTHM: Short paragraphs (3–4 sentences). Vary sentence length. Never three long sentences in a row.
+STRUCTURE: Every paragraph has one idea. Lead with the conclusion. Follow with evidence. Close with the implication.
+TRANSITIONS: Each paragraph must connect to the next. Use a single bridging clause — not a heading — to move the argument forward.
+VOCABULARY: Precise financial terms are fine. Define the first use of any acronym. No Latin, no corporate speak, no "robust framework".
+VOICE: Active. "The Fed held rates" not "rates were held by the Fed". "Credit spreads widened" not "there was a widening in credit spreads".
+
+FORBIDDEN PHRASES (never write these):
+"markets remain uncertain" / "investors are closely watching" / "time will tell" / "there are many moving parts" / "the outlook is mixed" / "this could create volatility" / "it is important to note" / "going forward" / "in today's complex environment" / "a confluence of factors" / "headwinds and tailwinds" / "robust" / "granular" / "paradigm shift" / "transformative" / "key takeaway"
+
+EVERY FORECAST must include: probability + horizon + invalidation condition. (Good: "There is a 55% probability Brent recovers above $90 within 60 days if Iranian export volumes disappoint — a print below 300k b/d above baseline for three consecutive weeks would confirm this.")
+CHART TITLES: state the finding, never the variable. Bad: "10Y Treasury Yield". Good: "Real yields are doing more tightening than the policy rate."
+NUMBERS: always include units, always compare to a benchmark or historical reference.
 
 PUBLICATION STANDARD:
 - Quality score ≥ 85/100 required to publish
@@ -424,11 +434,15 @@ ${claimLedger.slice(0, 20).map((c) => `[${c.claim_id}] ${c.text} (${c.classifica
 
 PAGE INSTRUCTIONS: ${pageInstructions[pageGroup]}
 
-WRITING RULES:
-- Every paragraph: State the finding. Present the evidence. Explain the mechanism. State the implication.
-- Forbidden: "markets remain uncertain" / "investors are closely watching" / "time will tell" / "many moving parts" / "outlook is mixed"
-- Precise language. No filler. No adjectives that don't add information.
-- Reference chart_refs as placeholders like [CHART: CH-001] inline.
+WRITING RULES FOR THIS DRAFT:
+- Lead every paragraph with the conclusion. Then the evidence. Then the mechanism. Then the implication.
+- Short paragraphs — 3 to 4 sentences. One idea per paragraph. Bridge each to the next without a subheading.
+- Active voice throughout. No passive constructions.
+- Every number needs a unit and a reference point ("4.43%, up 18bp in two weeks, now +1.8 standard deviations above its 12-month mean").
+- No forbidden phrases (see master system). No hedges that don't add probability information.
+- Write for someone who reads the FT but may not be a macro specialist: define terms once, then use them freely.
+- Reference charts as [CHART: CH-001] inline where data supports a claim. Never decorate — only place a chart reference where it genuinely adds precision.
+- Target prose density: every sentence either advances the argument or it should not exist.
 
 REQUIRED_OUTPUT_SCHEMA:
 {

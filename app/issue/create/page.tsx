@@ -3,6 +3,7 @@
 import React, { useState, useCallback, useEffect, useRef } from "react";
 import { LineChart, Line, BarChart, Bar, AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import AppShell from "@/components/layout/AppShell";
+import { generatePrintHTML, generateWordHTML } from "@/lib/print/template";
 import type {
   WorkflowStage,
   DataAuditOutput,
@@ -443,28 +444,72 @@ function StagePanel(props: StagePanelProps) {
 
 // ─── Download helpers ─────────────────────────────────────────────────────────
 
-function downloadWord(filename: string, html: string) {
-  const blob = new Blob(
-    [`<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'><head><meta charset='utf-8'><title>${filename}</title><style>body{font-family:Garamond,serif;font-size:12pt;line-height:1.6;margin:2cm}h1{font-size:22pt}h2{font-size:16pt}p{margin-bottom:0.8em}</style></head><body>${html}</body></html>`],
-    { type: "application/msword" }
-  );
+function downloadWord(manifest: IssueManifest) {
+  const html = generateWordHTML(manifest);
+  const blob = new Blob([html], { type: "application/msword" });
   const a = document.createElement("a");
   a.href = URL.createObjectURL(blob);
-  a.download = `${filename}.doc`;
+  a.download = `CrossAsset-${manifest.issue_id ?? "Issue"}.doc`;
   a.click();
 }
 
-function downloadPDF(printHtml: string, filename: string) {
+function downloadPDF(manifest: IssueManifest, coverImageUrl?: string) {
+  const html = generatePrintHTML(manifest, coverImageUrl);
   const win = window.open("", "_blank");
   if (!win) return;
-  win.document.write(`<!DOCTYPE html><html><head><meta charset="utf-8"><title>${filename}</title><style>
-    body{font-family:Garamond,serif;font-size:12pt;line-height:1.6;margin:2cm;color:#1a1208}
-    h1{font-size:22pt;font-family:Georgia,serif;margin-bottom:0.3em}
-    h2{font-size:14pt;margin-top:1.5em;margin-bottom:0.3em;border-bottom:1px solid #ccc;padding-bottom:0.2em}
-    p{margin-bottom:0.8em}
-    .meta{font-size:9pt;color:#888;text-transform:uppercase;letter-spacing:0.1em}
-    @media print{body{margin:1.5cm}}
-  </style></head><body>${printHtml}<script>window.onload=function(){window.print()}<\/script></body></html>`);
+  win.document.write(html);
+  win.document.close();
+}
+
+// Draft-only download (no manifest yet — build a minimal one from draft output)
+function downloadDraftWord(draft: DraftOutput, thesis?: string) {
+  const pseudo = {
+    issue_id: "DRAFT",
+    title: thesis ?? "CrossAsset Draft",
+    thesis: thesis ?? "",
+    regime_label: "",
+    cutoff_date: new Date().toISOString().split("T")[0],
+    pages: draft.sections,
+    charts: [],
+    quality_score: 0,
+    quality_breakdown: {},
+    web_excerpt: "",
+    watchlist: { indicators: [], catalysts: [], risks: [], next_issue_question: "" },
+    ready_to_publish: false,
+    blocking_issues: [],
+    claim_ledger: [],
+    fact_check_ledger: [],
+  } as IssueManifest;
+  const html = generateWordHTML(pseudo);
+  const blob = new Blob([html], { type: "application/msword" });
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(blob);
+  a.download = "CrossAsset-Draft.doc";
+  a.click();
+}
+
+function downloadDraftPDF(draft: DraftOutput, thesis?: string) {
+  const pseudo = {
+    issue_id: "DRAFT",
+    title: thesis ?? "CrossAsset Draft",
+    thesis: thesis ?? "",
+    regime_label: "",
+    cutoff_date: new Date().toISOString().split("T")[0],
+    pages: draft.sections,
+    charts: [],
+    quality_score: 0,
+    quality_breakdown: {},
+    web_excerpt: "",
+    watchlist: { indicators: [], catalysts: [], risks: [], next_issue_question: "" },
+    ready_to_publish: false,
+    blocking_issues: [],
+    claim_ledger: [],
+    fact_check_ledger: [],
+  } as IssueManifest;
+  const html = generatePrintHTML(pseudo);
+  const win = window.open("", "_blank");
+  if (!win) return;
+  win.document.write(html);
   win.document.close();
 }
 
@@ -857,7 +902,7 @@ const PAGE_GROUPS: { id: "pages_1_2" | "pages_3_4" | "pages_5_6" | "pages_7_8"; 
   { id: "pages_7_8", label: "Pages 7–8: Model Lab + Final Page" },
 ];
 
-function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGroup, setDraftGroup }: StagePanelProps) {
+function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGroup, setDraftGroup, selectedThesis }: StagePanelProps) {
   const output = _output as DraftOutput | undefined;
   const [expandedPages, setExpandedPages] = React.useState<Set<number>>(new Set());
   const togglePage = (page: number) => setExpandedPages((prev) => {
@@ -942,19 +987,13 @@ function DraftPanel({ output: _output, loading, onRun, onApprove, stage, draftGr
         {output && output.sections.length > 0 && (
           <>
             <button
-              onClick={() => {
-                const html = output.sections.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose.replace(/\n/g, "</p><p>")}</p>`).join("");
-                downloadWord("CrossAsset-Draft", `<h1>CrossAsset Draft</h1><p class="meta">${output.total_word_count} words · ${output.page_count} pages</p>${html}`);
-              }}
+              onClick={() => downloadDraftWord(output, selectedThesis?.one_sentence)}
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
             >
               ↓ Word
             </button>
             <button
-              onClick={() => {
-                const html = output.sections.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose.replace(/\n/g, "</p><p>")}</p>`).join("");
-                downloadPDF(`<h1>CrossAsset Draft</h1><p class="meta">${output.total_word_count} words · ${output.page_count} pages</p>${html}`, "CrossAsset Draft");
-              }}
+              onClick={() => downloadDraftPDF(output, selectedThesis?.one_sentence)}
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
             >
               ↓ PDF
@@ -1460,23 +1499,13 @@ function AssemblyPanel({ output: _output, loading, onRun, onApprove, stage }: St
               {loading ? "Re-assembling…" : "Re-run Fact-Check"}
             </button>
             <button
-              onClick={() => {
-                const pages = output.pages ?? [];
-                const pagesHtml = pages.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose?.replace(/\n/g, "</p><p>") ?? ""}</p>`).join("");
-                const html = `<h1>${output.title}</h1><p class="meta">${output.thesis}</p><p class="meta">Quality Score: ${output.quality_score}/100 · Cutoff: ${output.cutoff_date}</p><hr/>${pagesHtml}<h2>Web Excerpt</h2><p>${output.web_excerpt ?? ""}</p>`;
-                downloadWord(`CrossAsset-${output.issue_id ?? "Issue"}`, html);
-              }}
+              onClick={() => downloadWord(output)}
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
             >
               ↓ Word
             </button>
             <button
-              onClick={() => {
-                const pages = output.pages ?? [];
-                const pagesHtml = pages.map((s) => `<h2>Page ${s.page}: ${s.title}</h2><p>${s.prose?.replace(/\n/g, "</p><p>") ?? ""}</p>`).join("");
-                const html = `<h1>${output.title}</h1><p class="meta">${output.thesis}</p><p class="meta">Quality Score: ${output.quality_score}/100 · Cutoff: ${output.cutoff_date}</p><hr/>${pagesHtml}<h2>Web Excerpt</h2><p>${output.web_excerpt ?? ""}</p>`;
-                downloadPDF(html, output.title ?? "CrossAsset Issue");
-              }}
+              onClick={() => downloadPDF(output)}
               className="px-4 py-2.5 border border-[#e8e3da] text-[#3d3528] text-[13px] font-medium rounded-sm hover:bg-[#f5f3ef] transition-colors"
             >
               ↓ PDF
