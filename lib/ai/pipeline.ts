@@ -317,26 +317,26 @@ REQUIRED_OUTPUT_SCHEMA:
     {
       "finding_id": "FND-001",
       "job_id": "JOB-001",
-      "description": "string",
-      "primary_result": "string",
-      "economic_meaning": "string",
+      "description": "1 sentence max",
+      "primary_result": "1 number or short phrase",
+      "economic_meaning": "1 sentence max",
       "statistical_significance": "high|moderate|low|na",
       "economic_significance": "high|moderate|low",
       "supports_thesis": "yes|partially|no|unclear",
       "claim_classification": "OBSERVED|CALCULATED|ESTIMATED|INFERRED",
-      "chart_recommendation": "string",
-      "limitation": "string"
+      "chart_recommendation": "chart type and series only, no prose",
+      "limitation": "1 sentence max"
     }
   ],
   "thesis_confidence": 0,
-  "key_evidence": ["string"],
-  "primary_charts": ["string"],
-  "overall_assessment": "string"
+  "key_evidence": ["3 items max, each under 15 words"],
+  "primary_charts": ["chart IDs only"],
+  "overall_assessment": "2 sentences max"
 }
 
-Interpret only what the supplied results show. Do not invent statistics. thesis_confidence is 0-100. Return valid JSON only.`;
+BREVITY RULES: Every string field max 25 words. Max 6 findings. Return valid JSON only. Do not invent statistics.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 6000);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 8192);
   return extractJSON<QuantInterpretationOutput>(text);
 }
 
@@ -384,9 +384,9 @@ REQUIRED_OUTPUT_SCHEMA:
   "summary": "string"
 }
 
-Be rigorous. A weak objection noted honestly is better than a suppressed one. Return valid JSON only.`;
+BREVITY RULES: Max 5 objections. Every string field max 20 words. Return valid JSON only.`;
 
-  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 5000);
+  const text = await callClaude("sonnet", MASTER_SYSTEM, userContent, 8192);
   return extractJSON<AdversarialReviewOutput>(text);
 }
 

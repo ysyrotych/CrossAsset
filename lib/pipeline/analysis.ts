@@ -29,7 +29,7 @@ export const CORE_SERIES: { id: string; label: string; asset_class: string }[] =
   { id: "PAYEMS",         label: "Nonfarm Payrolls",         asset_class: "labor" },
   { id: "BAMLH0A0HYM2",   label: "HY OAS (bps)",            asset_class: "credit" },
   { id: "BAMLC0A0CM",     label: "IG OAS (bps)",             asset_class: "credit" },
-  { id: "GOLDAMGBD228NLBM", label: "Gold (London AM Fix)",  asset_class: "commodities" },
+  { id: "DCOILBRENTEU",    label: "Brent Crude Oil",         asset_class: "commodities" },
   { id: "DCOILWTICO",     label: "WTI Crude Oil",            asset_class: "commodities" },
   { id: "DTWEXBGS",       label: "USD Trade-Weighted Index", asset_class: "fx" },
 ];
