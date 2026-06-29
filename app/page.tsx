@@ -861,9 +861,9 @@ export default function DashboardPage() {
               const vixScore   = Math.max(0, Math.min(100, ((40 - vix)     / 30) * 100));  // 100 at VIX=10, 0 at VIX=40
               const hyScore    = Math.max(0, Math.min(100, ((650 - hyOas)  / 400) * 100)); // 100 at 250bps, 0 at 650bps
               const curveScore = Math.max(0, Math.min(100, ((t10y2y + 0.8) / 2.8) * 100)); // 100 at +2%, 0 at -0.8%
-              const dxyScore   = Math.max(0, Math.min(100, 50 - dxyPct * 12));             // falling USD = greed
-              const goldScore  = Math.max(0, Math.min(100, 50 - goldPct * 8));             // rising gold = fear
-              const spScore    = Math.max(0, Math.min(100, 50 + spPct * 10));              // rising stocks = greed
+              const dxyScore   = Math.max(0, Math.min(100, 50 - dxyPct * 8));              // falling USD = greed (reduced sensitivity vs daily noise)
+              const goldScore  = Math.max(0, Math.min(100, 50 - goldPct * 6));             // rising gold = fear (reduced sensitivity)
+              const spScore    = Math.max(0, Math.min(100, 50 + spPct * 8));               // rising stocks = greed (reduced sensitivity)
 
               const score = loading ? 50 : Math.round(
                 vixScore * 0.28 + hyScore * 0.22 + curveScore * 0.18 +
@@ -872,29 +872,30 @@ export default function DashboardPage() {
               const label = score >= 75 ? "Extreme Greed" : score >= 58 ? "Greed" : score >= 42 ? "Neutral" : score >= 25 ? "Fear" : "Extreme Fear";
               const gaugeColor = score >= 58 ? POSITIVE : score >= 42 ? WARNING : NEGATIVE;
 
+              // Half-circle gauge: score 0 = LEFT (180°), 50 = TOP (270°), 100 = RIGHT (360°)
+              // angle = (180 + score × 1.8)°; clockwise sweep (SVG sweep=1) traces the upper semicircle
               const cx = 100; const cy = 90; const r = 72;
-              const angleDeg = (score / 100) * 180 - 90;
-              const rad = (angleDeg * Math.PI) / 180;
-              const nx = cx + r * Math.cos(rad); const ny = cy + r * Math.sin(rad);
-              const arc = (startA: number, endA: number) => {
-                const s = ((startA - 90) * Math.PI) / 180;
-                const e = ((endA   - 90) * Math.PI) / 180;
-                return `M ${cx + r * Math.cos(s)} ${cy + r * Math.sin(s)} A ${r} ${r} 0 0 1 ${cx + r * Math.cos(e)} ${cy + r * Math.sin(e)}`;
+              const scoreToRad = (s: number) => (180 + s * 1.8) * Math.PI / 180;
+              const scorePt    = (s: number) => ({ x: cx + r * Math.cos(scoreToRad(s)), y: cy + r * Math.sin(scoreToRad(s)) });
+              const arc = (s1: number, s2: number) => {
+                const p1 = scorePt(s1), p2 = scorePt(s2);
+                return `M ${p1.x.toFixed(2)} ${p1.y.toFixed(2)} A ${r} ${r} 0 0 1 ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
               };
+              const { x: nx, y: ny } = scorePt(score);
               const zones = [
-                { color: NEGATIVE, pct: 0.25 }, { color: "#e57a3b", pct: 0.20 },
-                { color: WARNING,  pct: 0.10 }, { color: "#5f9e6e",  pct: 0.20 },
-                { color: POSITIVE, pct: 0.25 },
+                { color: NEGATIVE,   s: 0,  e: 25  },
+                { color: "#e57a3b",  s: 25, e: 45  },
+                { color: WARNING,    s: 45, e: 55  },
+                { color: "#5f9e6e", s: 55, e: 75  },
+                { color: POSITIVE,   s: 75, e: 100 },
               ];
-              let acc = 0;
               return (
                 <div className="flex flex-col items-center mt-3">
                   <svg viewBox="0 0 200 100" className="w-full max-w-[220px]">
-                    {zones.map((z, i) => {
-                      const s = acc * 180; acc += z.pct; const e = acc * 180;
-                      return <path key={i} d={arc(s, e)} fill="none" stroke={z.color} strokeWidth={12} opacity={0.22} />;
-                    })}
-                    <path d={arc(0, score * 1.8)} fill="none" stroke={gaugeColor} strokeWidth={12} opacity={0.9} />
+                    {zones.map((z, i) => (
+                      <path key={i} d={arc(z.s, z.e)} fill="none" stroke={z.color} strokeWidth={12} opacity={0.22} />
+                    ))}
+                    <path d={arc(0, score)} fill="none" stroke={gaugeColor} strokeWidth={12} opacity={0.9} />
                     <line x1={cx} y1={cy} x2={nx} y2={ny} stroke="#0c1b38" strokeWidth={2} strokeLinecap="round" />
                     <circle cx={cx} cy={cy} r={4} fill="#0c1b38" />
                     <text x={cx} y={cy - 14} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#0a0a0a">{loading ? "—" : score}</text>
