@@ -265,6 +265,72 @@ function YieldTip({ active, payload }: { active?: boolean; payload?: { name: str
   );
 }
 
+// ── Brief body — lightweight markdown renderer ────────────────────────────────
+
+function BriefBody({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const nodes: React.ReactNode[] = [];
+
+  const renderInline = (s: string, key: number): React.ReactNode => {
+    // Handle **bold** spans
+    const parts = s.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <span key={key}>
+        {parts.map((p, i) =>
+          p.startsWith("**") && p.endsWith("**")
+            ? <strong key={i} className="font-semibold text-[#0a0a0a]">{p.slice(2, -2)}</strong>
+            : p
+        )}
+      </span>
+    );
+  };
+
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      nodes.push(<div key={i} className="h-3" />);
+    } else if (trimmed.startsWith("**") && trimmed.endsWith("**") && !trimmed.slice(2, -2).includes("**")) {
+      // Section header like **SECTION TITLE**
+      nodes.push(
+        <p key={i} className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#0c1b38] mt-5 mb-2 first:mt-0">
+          {trimmed.slice(2, -2)}
+        </p>
+      );
+    } else if (trimmed.startsWith("Subject:")) {
+      nodes.push(
+        <p key={i} className="text-[12px] font-semibold text-[#0c1b38] mb-3 bg-[#eef1f8] border border-[#c8d0e8] px-3 py-2 rounded-md">
+          {trimmed}
+        </p>
+      );
+    } else if (trimmed.startsWith("• ") || trimmed.startsWith("- ")) {
+      const content = trimmed.slice(2);
+      nodes.push(
+        <div key={i} className="flex items-start gap-2 py-0.5">
+          <span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" />
+          <p className="text-[12.5px] text-[#333] leading-[1.7]">{renderInline(content, i)}</p>
+        </div>
+      );
+    } else if (/^\d+\.\s/.test(trimmed)) {
+      const num     = trimmed.match(/^(\d+)\./)?.[1] ?? "";
+      const content = trimmed.replace(/^\d+\.\s*/, "");
+      nodes.push(
+        <div key={i} className="flex items-start gap-2.5 py-0.5">
+          <span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span>
+          <p className="text-[12.5px] text-[#333] leading-[1.7]">{renderInline(content, i)}</p>
+        </div>
+      );
+    } else if (trimmed.startsWith("---")) {
+      nodes.push(<hr key={i} className="border-[#ebebeb] my-3" />);
+    } else {
+      nodes.push(
+        <p key={i} className="text-[12.5px] text-[#1a1a1a] leading-[1.8]">{renderInline(trimmed, i)}</p>
+      );
+    }
+  });
+
+  return <div className="space-y-[2px]">{nodes}</div>;
+}
+
 // ── Main page ─────────────────────────────────────────────────────────────────
 
 export default function MorningPage() {
@@ -310,26 +376,206 @@ export default function MorningPage() {
     setBriefType(type);
     setBrief("");
 
-    const q  = data.quotes;
-    const rg = regime(q);
-    const ctx = [
-      `Date: ${new Date().toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}`,
-      `Market Regime: ${rg.label}`,
-      `US Futures: S&P ${pp(q["ES=F"]?.changePct ?? 0)} | Nasdaq ${pp(q["NQ=F"]?.changePct ?? 0)} | Russell ${pp(q["RTY=F"]?.changePct ?? 0)} | Dow ${pp(q["YM=F"]?.changePct ?? 0)}`,
-      `Rates: 10Y ${(q["^TNX"]?.price ?? 0).toFixed(2)}% (${pp(q["^TNX"]?.changePct ?? 0)}) | 5Y ${(q["^FVX"]?.price ?? 0).toFixed(2)}% | 30Y ${(q["^TYX"]?.price ?? 0).toFixed(2)}%`,
-      `VIX: ${(q["^VIX"]?.price ?? 0).toFixed(2)} (${pp(q["^VIX"]?.changePct ?? 0)})`,
-      `DXY: ${pp(q["DX-Y.NYB"]?.changePct ?? 0)} | Gold: ${pp(q["GC=F"]?.changePct ?? 0)} | WTI Crude: ${pp(q["CL=F"]?.changePct ?? 0)} | BTC: ${pp(q["BTC-USD"]?.changePct ?? 0)}`,
-      `EUR/USD: ${pp(q["EURUSD=X"]?.changePct ?? 0)} | GBP/USD: ${pp(q["GBPUSD=X"]?.changePct ?? 0)} | USD/JPY: ${pp(q["JPY=X"]?.changePct ?? 0)}`,
-      `Portfolio: ${PORTFOLIO.filter(s => q[s]).map(s => `${s} ${pp(q[s].changePct)}`).join(" | ")}`,
-    ].join("\n");
+    const q   = data.quotes;
+    const rg  = regime(q);
+    const now = new Date();
+
+    // Helper: format a quote row as "SYMBOL: $price (daily chg: +X.XX%)"
+    // Using explicit wording to prevent Claude from misreading % as bps
+    const qline = (sym: string, label: string, unit = "") => {
+      const d = q[sym];
+      if (!d) return `${label}: N/A`;
+      const chgSign = d.changePct >= 0 ? "+" : "";
+      const absChg  = Math.abs(d.change) < 10 ? d.change.toFixed(3) : d.change.toFixed(2);
+      return `${label}: ${d.price.toFixed(unit === "%" ? 2 : 2)}${unit}  [daily change: ${chgSign}${absChg}${unit}, ${chgSign}${d.changePct.toFixed(2)} percent]`;
+    };
+
+    const spread = q["^TNX"] && q["^IRX"]
+      ? (q["^TNX"].price - q["^IRX"].price).toFixed(2)
+      : "N/A";
+
+    const sectorCtx = SECTORS
+      .filter(s => q[s.sym])
+      .map(s => `${s.label}: ${q[s.sym].changePct >= 0 ? "+" : ""}${q[s.sym].changePct.toFixed(2)} percent`)
+      .join(", ");
+
+    const portfolioCtx = PORTFOLIO
+      .filter(s => q[s])
+      .map(s => {
+        const d   = q[s];
+        const sign = d.changePct >= 0 ? "+" : "";
+        return `${s} $${d.price.toFixed(2)} (${sign}${d.changePct.toFixed(2)} percent today, prev close $${d.prev.toFixed(2)})`;
+      })
+      .join("\n  ");
+
+    const newsCtx = data.news.length > 0
+      ? data.news.slice(0, 12).map((n, i) =>
+          `${i + 1}. [${n.source}]${n.related ? ` [${n.related}]` : ""} ${n.headline}`
+        ).join("\n  ")
+      : "No live news (Finnhub key not configured)";
+
+    const earningsCtx = data.earnings.length > 0
+      ? data.earnings.slice(0, 8).map(e =>
+          `${e.symbol} (${e.date}, ${e.hour === "amc" ? "after close" : e.hour === "bmo" ? "before open" : "TBD"}${e.epsEstimate != null ? `, EPS est $${e.epsEstimate.toFixed(2)}` : ""})`
+        ).join(", ")
+      : "None in next 7 days";
+
+    const calCtx = data.upcomingEvents.slice(0, 5)
+      .map(e => `${e.date} — ${e.label} [${e.impact} impact]`)
+      .join("\n  ");
+
+    const ctx = `
+=== MARKET DATA SNAPSHOT ===
+Date/Time: ${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
+Detected Regime: ${rg.label}
+
+IMPORTANT NOTE: All "percent" values are percentage points (e.g. "+1.27 percent" means +1.27%). Do NOT convert to basis points.
+
+--- US EQUITY FUTURES ---
+${qline("ES=F",  "S&P 500 Futures")}
+${qline("NQ=F",  "Nasdaq 100 Futures")}
+${qline("RTY=F", "Russell 2000 Futures")}
+${qline("YM=F",  "Dow Jones Futures")}
+
+--- RATES & CREDIT ---
+${qline("^TNX",  "10Y Treasury Yield", "%")}
+${qline("^TYX",  "30Y Treasury Yield", "%")}
+${qline("^FVX",  "5Y Treasury Yield",  "%")}
+${qline("^IRX",  "3M T-Bill Yield",    "%")}
+3M–10Y Spread: ${spread}% ${parseFloat(spread) < 0 ? "(INVERTED)" : "(normal)"}
+${qline("^VIX",  "VIX (Fear Index)")}
+
+--- FX ---
+${qline("DX-Y.NYB", "DXY (Dollar Index)")}
+${qline("EURUSD=X", "EUR/USD")}
+${qline("GBPUSD=X", "GBP/USD")}
+${qline("JPY=X",    "USD/JPY")}
+${qline("CNHUSD=X", "CNH/USD")}
+
+--- COMMODITIES & CRYPTO ---
+${qline("CL=F",    "WTI Crude Oil $/bbl")}
+${qline("GC=F",    "Gold $/oz")}
+${qline("SI=F",    "Silver $/oz")}
+${qline("HG=F",    "Copper $/lb")}
+${qline("NG=F",    "Natural Gas")}
+${qline("BTC-USD", "Bitcoin USD")}
+${qline("ETH-USD", "Ethereum USD")}
+
+--- GLOBAL EQUITIES ---
+Europe: FTSE ${q["^FTSE"] ? (q["^FTSE"].changePct >= 0 ? "+" : "") + q["^FTSE"].changePct.toFixed(2) + "%" : "N/A"} | DAX ${q["^GDAXI"] ? (q["^GDAXI"].changePct >= 0 ? "+" : "") + q["^GDAXI"].changePct.toFixed(2) + "%" : "N/A"} | CAC ${q["^FCHI"] ? (q["^FCHI"].changePct >= 0 ? "+" : "") + q["^FCHI"].changePct.toFixed(2) + "%" : "N/A"}
+Asia: Nikkei ${q["^N225"] ? (q["^N225"].changePct >= 0 ? "+" : "") + q["^N225"].changePct.toFixed(2) + "%" : "N/A"} | HSI ${q["^HSI"] ? (q["^HSI"].changePct >= 0 ? "+" : "") + q["^HSI"].changePct.toFixed(2) + "%" : "N/A"} | Shanghai ${q["000001.SS"] ? (q["000001.SS"].changePct >= 0 ? "+" : "") + q["000001.SS"].changePct.toFixed(2) + "%" : "N/A"}
+
+--- US SECTOR ROTATION ---
+${sectorCtx}
+
+--- PORTFOLIO HOLDINGS (personal portfolio) ---
+  ${portfolioCtx}
+
+--- MACRO CALENDAR ---
+  ${calCtx || "No major events this week"}
+
+--- EARNINGS THIS WEEK ---
+${earningsCtx}
+
+--- LIVE NEWS HEADLINES (last 48h) ---
+  ${newsCtx}
+`.trim();
+
+    const todayDate = now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const todayShort = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+
+    const systemRole = `You are a senior macro strategist at a top-tier asset manager with 20 years of experience. You write institutional-grade morning briefs read by portfolio managers and senior traders. Your analysis is precise, data-driven, and actionable. You cite exact prices and percentage moves from the data provided. You identify cross-asset relationships, regime dynamics, and specific risk/opportunity setups. You never make up numbers — you only use the exact figures from the data snapshot.`;
 
     const prompts: Record<string, string> = {
-      exec:
-        `You are a senior macro strategist at a top hedge fund. Write exactly 2 sharp, punchy sentences summarizing today's most important market dynamic. Be concrete and specific — mention actual levels/moves. No fluff.\n\nMarket data:\n${ctx}`,
-      full:
-        `You are a senior macro strategist writing a morning brief for institutional equity traders. Write exactly 4 tight paragraphs:\n\n1. REGIME & TONE — Overall market character and what's driving it today\n2. RATES & FX — Key rate/yield/dollar dynamics and what they signal\n3. PORTFOLIO IMPLICATIONS — Specifically discuss META, AMZN, NVDA, AAPL, PYPL, HOOD, APLD given today's tape\n4. WATCH LIST — 3 specific things to watch today with concrete levels\n\nBe direct, institutional, specific. No hedging language. Max 350 words.\n\nData:\n${ctx}`,
-      email:
-        `You are a senior macro strategist. Write a concise morning market email to send to your trading desk. Format:\n\nSubject: [Morning Brief — ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric" })}]\n\n[Greeting]\n\n**Key Numbers:**\n[bullet points of the 6 most important moves]\n\n**The Story:**\n[2-3 sentences on the key theme]\n\n**Portfolio Watch:**\n[2-3 sentences on holdings given today's tape, be specific]\n\n**What to Watch:**\n[2-3 bullet points]\n\nHave a great trading day.\n[Sign-off]\n\nData:\n${ctx}`,
+      exec: `${systemRole}
+
+${ctx}
+
+Write exactly 3 sentences (no more, no less) for the morning executive summary. Requirements:
+- Sentence 1: The single most important market dynamic right now, with exact numbers
+- Sentence 2: The cross-asset signal that confirms or complicates the picture
+- Sentence 3: The key risk or watch level for today
+Be specific. Use exact prices and exact percentage moves from the data. No vague language.`,
+
+      full: `${systemRole}
+
+${ctx}
+
+Write a comprehensive institutional morning brief for ${todayDate}. Structure exactly as follows:
+
+**MARKET REGIME & OPENING TONE**
+[2-3 paragraphs] Characterize today's market environment precisely. What is the dominant theme? Is this risk-on/risk-off, rotation, squeeze, macro-driven or micro-driven? Cite exact futures levels and moves. Discuss what the VIX level and its move imply about investor positioning. Comment on breadth (large vs small cap divergence, sector dispersion). What does the overnight tape in Asia/Europe tell us about global sentiment?
+
+**RATES, FX & MACRO**
+[2 paragraphs] Analyze the rates complex in depth. Where is the 10Y vs 30Y vs 3M, what does the curve shape signal? Is real yield moving? What does DXY weakness/strength mean for risk assets and EM? Comment on any currency pairs with notable moves. Any commodity signals (oil, gold, copper) worth flagging as macro indicators?
+
+**CROSS-ASSET SIGNALS**
+[1 paragraph] Identify 2-3 key cross-asset relationships playing out today. Examples: gold vs rates, crude vs DXY, crypto vs Nasdaq, credit spreads implied by equity vol. What is the market pricing in for the next 30-60 days based on current positioning?
+
+**PORTFOLIO IMPLICATIONS**
+[2 paragraphs] Go through each portfolio holding with a notable move or setup. For each relevant name: what is the stock doing, why (sector theme / macro driver / company-specific), and what is the trading implication? Specifically analyze: META, AMZN, NVDA, AAPL, PYPL, HOOD, APLD, UBER, DUOL. Use EXACT prices and moves from the data.
+
+**SECTOR ROTATION MAP**
+[1 paragraph] Which sectors are leading/lagging and what does the rotation tell us about investor conviction? Is this growth vs value, cyclical vs defensive, or sector-specific? What are the 2-3 sectors to be positioned in today and why?
+
+**KEY RISKS & CATALYST WATCH**
+[bulleted list] 5 specific things to monitor today:
+• [Item 1 with exact level]
+• [Item 2 with exact level]
+• [Item 3 with exact level]
+• [Item 4]
+• [Item 5]
+
+**NEWS HIGHLIGHTS**
+[bulleted list] Pull out the 4-5 most market-moving news items from the headlines provided and explain their market implication in 1 sentence each.
+
+Write with institutional authority. Use exact numbers from the data. No hedging or vague language. Total length: 600-800 words.`,
+
+      email: `${systemRole}
+
+${ctx}
+
+Write a professional morning market email from a senior strategist to the trading desk. ${todayDate}.
+
+Subject: Morning Brief — ${todayShort} | ${regime(q).label}
+
+Good morning,
+
+[Write a 2-sentence opening capturing the most important thing happening right now, with exact numbers]
+
+**OVERNIGHT SNAPSHOT**
+[6-8 bullet points, each with exact prices/moves — futures, rates, key FX, commodities, crypto. Format: • Asset: Level (Daily Change)]
+
+**THE DOMINANT THEME**
+[3-4 sentences explaining the main story driving markets today. Cross-asset perspective. What is the market telling us?]
+
+**RATES & MACRO SIGNAL**
+[2-3 sentences on the rates/FX complex and macro implications]
+
+**PORTFOLIO WATCH**
+[Go through portfolio names with notable moves. Format as bullet points: • TICKER $price (+X.XX%) — one sentence on driver and implication]
+
+**SECTOR ROTATION**
+[2 sentences on which sectors are leading/lagging and what that tells us]
+
+**NEWS DRIVING FLOW**
+[3-4 bullet points on most important headlines and their market implications]
+
+**CALENDAR RISK**
+[Any important data/events coming up this week that could move markets]
+
+**WATCH LIST — TODAY**
+• [Specific level 1]
+• [Specific level 2]
+• [Specific level 3]
+
+Have a great trading day.
+
+[Your name]
+CrossAsset | Macro Intelligence
+
+---
+All data as of ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}. For informational purposes only.`,
     };
 
     try {
@@ -863,17 +1109,17 @@ export default function MorningPage() {
           )}
 
           {brief ? (
-            <div className="bg-[#fbfaf7] border border-[#ebebeb] rounded-lg p-5">
-              <div className="flex items-center justify-between mb-3">
+            <div className="bg-[#fbfaf7] border border-[#ebebeb] rounded-lg p-6">
+              <div className="flex items-center justify-between mb-4">
                 <p className="text-[9.5px] font-bold uppercase tracking-widest text-[#bbb]">
                   {briefType === "exec" ? "Executive Summary" : briefType === "full" ? "Morning Brief" : "Trader Email Draft"}
                 </p>
                 <button onClick={() => { navigator.clipboard.writeText(brief); }}
-                  className="text-[10px] text-[#999] hover:text-[#0c1b38] transition-colors">
+                  className="text-[10.5px] font-semibold text-[#999] hover:text-[#0c1b38] border border-[#e8e8e8] hover:border-[#0c1b38] px-2.5 py-1 rounded-md transition-colors">
                   Copy
                 </button>
               </div>
-              <pre className="text-[12.5px] text-[#1a1a1a] leading-[1.8] whitespace-pre-wrap font-sans">{brief}</pre>
+              <BriefBody text={brief} />
             </div>
           ) : !generating && (
             <p className="text-[11px] text-[#ccc]">

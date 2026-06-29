@@ -36,29 +36,36 @@ const ALL_SYMBOLS = [
 type QuoteResult = {
   symbol: string; name: string; price: number; change: number;
   changePct: number; prev: number; high52w: number; low52w: number;
+  marketTime?: number; marketState?: string;
 };
 
-// Fetches one symbol via v8/chart meta — no auth needed on query2
+// Fetches one symbol via v8/chart meta — no crumb auth needed on query2
 async function fetchOne(sym: string): Promise<QuoteResult | null> {
   try {
+    // includePrePost=true so we get current pre/post-market price, not just last close
     const r = await fetch(
-      `${YF2}/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=2d&includePrePost=false`,
+      `${YF2}/v8/finance/chart/${encodeURIComponent(sym)}?interval=1d&range=5d&includePrePost=true`,
       { headers: YF_HDRS, cache: "no-store" }
     );
     if (!r.ok) return null;
     const d = await r.json();
     const meta = d?.chart?.result?.[0]?.meta;
     if (!meta || !meta.regularMarketPrice) return null;
-    const price  = meta.regularMarketPrice ?? 0;
-    const prev   = meta.chartPreviousClose ?? meta.previousClose ?? price;
-    const change = price - prev;
+
+    const price = meta.regularMarketPrice ?? 0;
+    // chartPreviousClose is the actual prior-session close — most accurate for daily change
+    const prev  = meta.chartPreviousClose ?? meta.previousClose ?? price;
+    const change    = price - prev;
     const changePct = prev > 0 ? (change / prev) * 100 : 0;
+
     return {
       symbol: sym,
-      name: meta.longName ?? meta.shortName ?? sym,
+      name:   meta.longName ?? meta.shortName ?? sym,
       price, prev, change, changePct,
-      high52w: meta.fiftyTwoWeekHigh ?? 0,
-      low52w:  meta.fiftyTwoWeekLow  ?? 0,
+      high52w:    meta.fiftyTwoWeekHigh  ?? 0,
+      low52w:     meta.fiftyTwoWeekLow   ?? 0,
+      marketTime: meta.regularMarketTime ?? undefined,
+      marketState: meta.marketState      ?? undefined,
     };
   } catch { return null; }
 }
