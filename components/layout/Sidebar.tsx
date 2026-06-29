@@ -13,6 +13,8 @@ const NAV = [
   { label: "Watchlist",        href: "/watchlist" },
   { label: "Calendar",         href: "/calendar" },
   { label: "Backtesting",      href: "/backtesting" },
+  { label: "Archive",          href: "/archive" },
+  { label: "Settings",         href: "/settings" },
 ];
 
 export default function Sidebar() {
