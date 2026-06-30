@@ -406,28 +406,66 @@ function FinancialStatements({ facts, history }: { facts: Record<string, number>
   );
 }
 
-// ── Section text renderer ─────────────────────────────────────────────────────
+// ── Section text renderer with search + number highlights ────────────────────
 
-function SectionText({ text }: { text: string }) {
+const NUM_RE = /(\$[\d,]+(?:\.\d+)?(?:\s*(?:billion|million|trillion|thousand|B|M|T|K))?|\d+(?:\.\d+)?%|\bfiscal\s+20\d\d\b|\bFY\s*20\d\d\b)/gi;
+
+function highlightText(text: string, query: string): React.ReactNode[] {
+  const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const patterns: { re: RegExp; cls: string }[] = [
+    ...(query.trim().length > 1 ? [{ re: new RegExp(`(${escape(query.trim())})`, 'gi'), cls: 'bg-yellow-200 text-yellow-900 rounded px-0.5' }] : []),
+    { re: NUM_RE, cls: 'text-[#0c1b38] font-semibold' },
+  ];
+
+  const parts: { str: string; cls?: string }[] = [{ str: text }];
+  for (const { re, cls } of patterns) {
+    const next: { str: string; cls?: string }[] = [];
+    for (const p of parts) {
+      if (p.cls) { next.push(p); continue; }
+      const segs = p.str.split(re);
+      segs.forEach((seg, i) => {
+        if (i % 2 === 1) next.push({ str: seg, cls });
+        else if (seg) next.push({ str: seg });
+      });
+    }
+    parts.splice(0, parts.length, ...next);
+  }
+  return parts.map((p, i) =>
+    p.cls ? <mark key={i} className={p.cls} style={{ background: p.cls.includes('yellow') ? undefined : 'none' }}>{p.str}</mark> : p.str
+  );
+}
+
+function SectionBody({ text, query, expanded }: { text: string; query: string; expanded: boolean }) {
   const cleaned = text
     .replace(/^(ITEM\s+\d+[A-Z]?\s*[\.\-—]+\s*[^\n]*\n)/im, "")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
 
-  const paragraphs = cleaned.split(/\n\n+/);
+  const paragraphs = cleaned.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
+  const lq = query.trim().toLowerCase();
+  const visible = !lq
+    ? (expanded ? paragraphs : paragraphs.slice(0, 25))
+    : paragraphs.filter(p => p.toLowerCase().includes(lq));
+
+  if (!visible.length) return (
+    <p className="text-[12px] text-[#bbb] py-6 text-center italic">No paragraphs match "{query}"</p>
+  );
+
   return (
     <div className="space-y-3">
-      {paragraphs.slice(0, 40).map((para, i) => {
-        const t = para.trim();
-        if (!t) return null;
-        const isHeader = t.length < 120 && /^[A-Z\s\d\-—:]+$/.test(t) && !t.endsWith(".");
+      {lq && <p className="text-[10px] text-[#999] mb-2">{visible.length} matching paragraph{visible.length !== 1 ? "s" : ""}</p>}
+      {visible.map((para, i) => {
+        const isHeader = para.length < 120 && /^[A-Z\s\d\-—:\.]+$/.test(para) && !para.endsWith(",");
         if (isHeader) return (
-          <p key={i} className="text-[10.5px] font-bold tracking-[0.12em] uppercase text-[#0c1b38] mt-4 first:mt-0">{t}</p>
+          <p key={i} className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#0c1b38] mt-5 first:mt-0 pb-1 border-b border-[#eef0f5]">{para}</p>
         );
         return (
-          <p key={i} className="text-[12.5px] text-[#333] leading-[1.75]">{t}</p>
+          <p key={i} className="text-[12.5px] text-[#2c2c2c] leading-[1.8]">{highlightText(para, query)}</p>
         );
       })}
+      {!lq && !expanded && paragraphs.length > 25 && (
+        <p className="text-[10.5px] text-[#bbb] italic pt-2">{paragraphs.length - 25} more paragraphs hidden — click "Show full" to expand</p>
+      )}
     </div>
   );
 }
@@ -435,66 +473,100 @@ function SectionText({ text }: { text: string }) {
 // ── Section viewer ────────────────────────────────────────────────────────────
 
 const SECTION_TABS = [
-  { key: "business", label: "Business Overview" },
-  { key: "risks",    label: "Risk Factors" },
-  { key: "mda",      label: "MD&A Annual" },
-  { key: "mda_q",    label: "MD&A Quarterly" },
+  { key: "business", label: "Business Overview",  src: "annual"    },
+  { key: "risks",    label: "Risk Factors",        src: "annual"    },
+  { key: "mda",      label: "MD&A Annual",         src: "annual"    },
+  { key: "mda_q",    label: "MD&A Quarterly",      src: "quarterly" },
 ];
 
 function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quarterly: FilingData | null }) {
-  const [active, setActive] = useState("business");
+  const [active, setActive]   = useState("business");
   const [expanded, setExpanded] = useState(false);
+  const [query, setQuery]     = useState("");
+  const [copied, setCopied]   = useState(false);
 
   const section = active === "mda_q"
     ? quarterly?.sections.find(s => s.item === "mda")
     : annual?.sections.find(s => s.item === active);
 
+  function copyText() {
+    if (!section) return;
+    navigator.clipboard.writeText(section.text).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    });
+  }
+
+  const wordCount = section ? section.text.split(/\s+/).filter(Boolean).length : 0;
+
   return (
     <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      {/* Tab bar */}
       <div className="flex border-b border-[#ebebeb] bg-[#fafafa] overflow-x-auto">
         {SECTION_TABS.map(({ key, label }) => {
           const hasSec = key === "mda_q"
             ? quarterly?.sections.some(s => s.item === "mda")
             : annual?.sections.some(s => s.item === key);
           return (
-            <button key={key} onClick={() => { setActive(key); setExpanded(false); }}
+            <button key={key}
+              onClick={() => { setActive(key); setExpanded(false); setQuery(""); }}
               disabled={!hasSec}
               className={`px-4 py-3 text-[11.5px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
                 active === key
-                  ? "border-[#0c1b38] text-[#0c1b38]"
+                  ? "border-[#0c1b38] text-[#0c1b38] bg-white"
                   : hasSec
                     ? "border-transparent text-[#888] hover:text-[#444]"
                     : "border-transparent text-[#ccc] cursor-not-allowed"
               }`}>
               {label}
+              {!hasSec && <span className="ml-1 text-[9px]">—</span>}
             </button>
           );
         })}
       </div>
-      <div className="p-5">
-        {section ? (
-          <>
-            <div className="flex items-center justify-between mb-4">
-              <div>
-                <p className="text-[12px] font-semibold text-[#0a0a0a]">{section.title}</p>
-                <p className="text-[10px] text-[#bbb] mt-0.5">{section.char_count.toLocaleString()} characters</p>
-              </div>
-              <button onClick={() => setExpanded(e => !e)}
-                className="flex items-center gap-1 text-[10.5px] text-[#0c1b38] font-semibold hover:underline shrink-0">
-                {expanded ? <><ChevronUp size={12}/> Collapse</> : <><ChevronDown size={12}/> Show full</>}
-              </button>
+
+      {section ? (
+        <>
+          {/* Section meta + controls */}
+          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#f0f0f0] bg-[#fdfcfc] flex-wrap">
+            <div className="flex-1 min-w-0">
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] truncate">{section.title}</p>
+              <p className="text-[9.5px] text-[#bbb] mt-0.5">{wordCount.toLocaleString()} words · {section.char_count.toLocaleString()} chars</p>
             </div>
-            <div className={`relative overflow-hidden transition-all ${expanded ? "" : "max-h-80"}`}>
-              <SectionText text={section.text} />
-              {!expanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-              )}
+            {/* Search box */}
+            <div className="relative">
+              <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#ccc]" />
+              <input
+                value={query}
+                onChange={e => setQuery(e.target.value)}
+                placeholder="Search in section…"
+                className="pl-7 pr-3 py-1.5 text-[11px] border border-[#e0e0e0] rounded w-44 focus:outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 placeholder:text-[#ddd]"
+              />
             </div>
-          </>
-        ) : (
-          <p className="text-[12px] text-[#bbb] py-8 text-center">Section not available in this filing extract.</p>
-        )}
-      </div>
+            <button onClick={copyText}
+              className="text-[10px] font-semibold px-2.5 py-1.5 border border-[#e8e8e8] rounded text-[#666] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors shrink-0">
+              {copied ? "✓ Copied" : "Copy"}
+            </button>
+            <button onClick={() => setExpanded(e => !e)}
+              className="flex items-center gap-1 text-[10px] text-[#0c1b38] font-semibold hover:underline shrink-0">
+              {expanded ? <><ChevronUp size={11}/> Collapse</> : <><ChevronDown size={11}/> Expand</>}
+            </button>
+          </div>
+
+          {/* Section body */}
+          <div className={`px-5 py-4 relative ${!expanded && !query ? "max-h-96 overflow-hidden" : ""}`}>
+            <SectionBody text={section.text} query={query} expanded={expanded} />
+            {!expanded && !query && (
+              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+            )}
+          </div>
+        </>
+      ) : (
+        <div className="px-5 py-10 text-center">
+          <p className="text-[12px] text-[#bbb]">Section not extracted from this filing.</p>
+          <p className="text-[10.5px] text-[#d0d0d0] mt-1">edgartools may not have parsed this item from the filing document.</p>
+        </div>
+      )}
     </div>
   );
 }
