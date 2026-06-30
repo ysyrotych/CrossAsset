@@ -1149,6 +1149,8 @@ async function downloadExcel(
     ...Object.keys(history.operating_income ?? {}),
     ...Object.keys(history.cost_of_revenue ?? {}),
     ...Object.keys(history.gross_profit ?? {}),
+    ...Object.keys(history.operating_cf ?? {}),
+    ...Object.keys(history.free_cash_flow ?? {}),
   ])).sort().slice(-5);
 
   const yoy = (curr?: number, prev?: number): number | string => {
@@ -1176,7 +1178,7 @@ async function downloadExcel(
   isRows.push(["  YoY Revenue Growth", ...fy.map((yr, i) => {
     if (i === 0) return "";
     return yoy(getRevHist(yr), getRevHist(fy[i-1]));
-  }), "", "", "(%))"]);
+  }), "", "", "(%)"]);
 
   isRows.push([""]);
 
@@ -1208,15 +1210,26 @@ async function downloadExcel(
     const oi = history.operating_income?.[yr]; const rev = getRevHist(yr);
     return (oi != null && rev && rev > 0) ? toPct(oi / rev * 100) : "";
   }), toPct(quarterly.operating_margin_pct), toPct(facts.operating_margin_pct), "(margin, %)"]);
-  isRows.push(["EBITDA", ...fy.map(() => ""), "", toPct(facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue * 100 : undefined), ""]);
+  isRows.push(["EBITDA", ...fy.map(yr => toM(history.ebitda?.[yr])),
+    "", toPct(facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue * 100 : undefined), ""]);
+  isRows.push(["  EBITDA Margin %", ...fy.map(yr => {
+    const eb = history.ebitda?.[yr]; const rev = getRevHist(yr);
+    return (eb != null && rev && rev > 0) ? toPct(eb / rev * 100) : "";
+  }), "", toPct(facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue * 100 : undefined), "(margin, %)"]);
 
   isRows.push([""]);
 
   // Below the line
-  isRows.push(["Interest Expense", ...fy.map(() => ""), "", "", ""]);
-  isRows.push(["Pre-tax Income", ...fy.map(() => ""), toM(quarterly.pretax_income), "", ""]);
-  isRows.push(["Income Tax", ...fy.map(() => ""), toM(quarterly.income_tax), "", ""]);
-  isRows.push(["Effective Tax Rate %", ...fy.map(() => ""), toPct(quarterly.effective_tax_rate), toPct(facts.effective_tax_rate), "(tax rate)"]);
+  isRows.push(["Interest Expense", ...fy.map(yr => toM(history.interest_expense?.[yr])),
+    "", facts.interest_expense ? toPct(facts.interest_expense / (facts.revenue || 1) * 100) : "", ""]);
+  isRows.push(["Pre-tax Income", ...fy.map(yr => toM(history.pretax_income?.[yr])),
+    toM(quarterly.pretax_income), "", ""]);
+  isRows.push(["Income Tax", ...fy.map(yr => toM(history.income_tax?.[yr])),
+    toM(quarterly.income_tax), "", ""]);
+  isRows.push(["Effective Tax Rate %", ...fy.map(yr => {
+    const tx = history.income_tax?.[yr]; const pt = history.pretax_income?.[yr];
+    return (tx != null && pt && pt !== 0) ? toPct(tx / pt * 100) : "";
+  }), toPct(quarterly.effective_tax_rate), toPct(facts.effective_tax_rate), "(tax rate)"]);
   isRows.push(["Net Income", ...fy.map(yr => toM(history.net_income?.[yr])),
     toM(quarterly.net_income),
     toPct(facts.net_margin_pct), ""]);
@@ -1232,10 +1245,14 @@ async function downloadExcel(
   isRows.push([""]);
 
   // Per share
-  isRows.push(["EPS — Basic", ...fy.map(() => ""), quarterly.eps_basic ? toPct(quarterly.eps_basic) : "", facts.eps_basic ? toPct(facts.eps_basic) : "", "($)"]);
-  isRows.push(["EPS — Diluted", ...fy.map(() => ""), quarterly.eps_diluted ? toPct(quarterly.eps_diluted) : "", facts.eps_diluted ? toPct(facts.eps_diluted) : "", "($)"]);
-  isRows.push(["Diluted Shares (wtd avg)", ...fy.map(() => ""), toM(quarterly.shares_diluted_wtd), toM(facts.shares_diluted_wtd), "($M)"]);
-  isRows.push(["SBC Expense", ...fy.map(() => ""), toM(quarterly.sbc_expense), toM(facts.sbc_expense), ""]);
+  isRows.push(["EPS — Basic", ...fy.map(yr => history.eps_basic?.[yr] ? toPct(history.eps_basic[yr]) : ""),
+    quarterly.eps_basic ? toPct(quarterly.eps_basic) : "", facts.eps_basic ? toPct(facts.eps_basic) : "", "($)"]);
+  isRows.push(["EPS — Diluted", ...fy.map(yr => history.eps_diluted?.[yr] ? toPct(history.eps_diluted[yr]) : ""),
+    quarterly.eps_diluted ? toPct(quarterly.eps_diluted) : "", facts.eps_diluted ? toPct(facts.eps_diluted) : "", "($)"]);
+  isRows.push(["Diluted Shares (wtd avg)", ...fy.map(yr => toM(history.shares_diluted_wtd?.[yr])),
+    toM(quarterly.shares_diluted_wtd), toM(facts.shares_diluted_wtd), "($M)"]);
+  isRows.push(["SBC Expense", ...fy.map(yr => toM(history.sbc_expense?.[yr])),
+    toM(quarterly.sbc_expense), toM(facts.sbc_expense), ""]);
 
   const isSheet = XLSX.utils.aoa_to_sheet(isRows);
   isSheet["!cols"] = [{ wch: 32 }, ...fy.map(() => ({ wch: 14 })), { wch: 16 }, { wch: 13 }, { wch: 16 }];
@@ -1247,6 +1264,8 @@ async function downloadExcel(
     ...Object.keys(history.cash ?? {}),
     ...Object.keys(history.equity ?? {}),
     ...Object.keys(history.current_assets ?? {}),
+    ...Object.keys(history.total_liabilities ?? {}),
+    ...Object.keys(history.long_term_debt ?? {}),
   ])).sort().slice(-5);
 
   const bsRows: (string | number | "")[][] = [];
@@ -1255,25 +1274,33 @@ async function downloadExcel(
   bsRows.push([""]);
   bsRows.push(["ASSETS"]);
   bsRows.push(["Cash & Equivalents", ...bsYears.map(yr => toM(history.cash?.[yr])), toM(facts.cash)]);
-  bsRows.push(["Accounts Receivable", ...bsYears.map(() => ""), toM(facts.accounts_receivable)]);
-  bsRows.push(["Inventory", ...bsYears.map(() => ""), toM(facts.inventory)]);
+  bsRows.push(["Accounts Receivable", ...bsYears.map(yr => toM(history.accounts_receivable?.[yr])), toM(facts.accounts_receivable)]);
+  bsRows.push(["Inventory", ...bsYears.map(yr => toM(history.inventory?.[yr])), toM(facts.inventory)]);
   bsRows.push(["Current Assets", ...bsYears.map(yr => toM(history.current_assets?.[yr])), toM(facts.current_assets)]);
-  bsRows.push(["PP&E (net)", ...bsYears.map(() => ""), toM(facts.ppe_net)]);
-  bsRows.push(["Goodwill", ...bsYears.map(() => ""), toM(facts.goodwill)]);
+  bsRows.push(["PP&E (net)", ...bsYears.map(yr => toM(history.ppe_net?.[yr])), toM(facts.ppe_net)]);
+  bsRows.push(["Goodwill", ...bsYears.map(yr => toM(history.goodwill?.[yr])), toM(facts.goodwill)]);
   bsRows.push(["Total Assets", ...bsYears.map(yr => toM(history.total_assets?.[yr])), toM(facts.total_assets)]);
   bsRows.push([""]);
   bsRows.push(["LIABILITIES"]);
-  bsRows.push(["Current Liabilities", ...bsYears.map(() => ""), toM(facts.current_liabilities)]);
+  bsRows.push(["Accounts Payable", ...bsYears.map(yr => toM(history.accounts_payable?.[yr])), toM(facts.accounts_payable)]);
+  bsRows.push(["Current Liabilities", ...bsYears.map(yr => toM(history.current_liabilities?.[yr])), toM(facts.current_liabilities)]);
   bsRows.push(["Long-term Debt", ...bsYears.map(yr => toM(history.long_term_debt?.[yr])), toM(facts.long_term_debt)]);
   bsRows.push(["Total Liabilities", ...bsYears.map(yr => toM(history.total_liabilities?.[yr])), toM(facts.total_liabilities)]);
   bsRows.push([""]);
   bsRows.push(["EQUITY"]);
+  bsRows.push(["Retained Earnings", ...bsYears.map(yr => toM(history.retained_earnings?.[yr])), toM(facts.retained_earnings)]);
   bsRows.push(["Stockholders Equity", ...bsYears.map(yr => toM(history.equity?.[yr])), toM(facts.equity)]);
   bsRows.push([""]);
   bsRows.push(["DERIVED"]);
   const nd = facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : undefined;
-  bsRows.push(["Net Debt (LTD − Cash)", ...bsYears.map(() => ""), toM(nd)]);
-  bsRows.push(["Current Ratio", ...bsYears.map(() => ""),
+  bsRows.push(["Net Debt (LTD − Cash)", ...bsYears.map(yr => {
+    const ltd = history.long_term_debt?.[yr]; const c = history.cash?.[yr];
+    return (ltd != null && c != null) ? toM(ltd - c) : "";
+  }), toM(nd)]);
+  bsRows.push(["Current Ratio", ...bsYears.map(yr => {
+    const ca = history.current_assets?.[yr]; const cl = history.current_liabilities?.[yr];
+    return (ca != null && cl && cl !== 0) ? parseFloat((ca / cl).toFixed(2)) : "";
+  }),
     facts.current_assets && facts.current_liabilities ? parseFloat((facts.current_assets / facts.current_liabilities).toFixed(2)) : ""]);
 
   const bsSheet = XLSX.utils.aoa_to_sheet(bsRows);
@@ -1285,18 +1312,33 @@ async function downloadExcel(
   cfRows.push([`${companyName} (${ticker}) — CASH FLOW STATEMENT`]);
   cfRows.push(["$ in Millions", ...fy.map(y => `FY${y.slice(0,4)}`), `MRQ ${quarterlyPeriod.slice(0,7)}`]);
   cfRows.push([""]);
+  cfRows.push(["OPERATING ACTIVITIES"]);
+  cfRows.push(["Net Income", ...fy.map(yr => toM(history.net_income?.[yr])), toM(quarterly.net_income)]);
+  cfRows.push(["Depreciation & Amortization", ...fy.map(yr => toM(history.da_expense?.[yr])), ""]);
+  cfRows.push(["Stock-based Compensation", ...fy.map(yr => toM(history.sbc_expense?.[yr])), ""]);
   cfRows.push(["Operating Cash Flow", ...fy.map(yr => toM(history.operating_cf?.[yr])), toM(quarterly.operating_cf)]);
-  cfRows.push(["  YoY Growth", ...fy.map((yr, i) => i === 0 ? "" : yoy(history.operating_cf?.[yr], history.operating_cf?.[fy[i-1]])), ""]);
-  cfRows.push(["Capital Expenditures", ...fy.map(() => ""), toM(quarterly.capex)]);
-  cfRows.push(["Free Cash Flow (OCF − CapEx)", ...fy.map(() => ""), toM(quarterly.free_cash_flow)]);
+  cfRows.push(["  YoY OCF Growth", ...fy.map((yr, i) => i === 0 ? "" : yoy(history.operating_cf?.[yr], history.operating_cf?.[fy[i-1]])), ""]);
   cfRows.push([""]);
-  cfRows.push(["ANNUAL FREE CASH FLOW (FY)"]);
-  cfRows.push(["Free Cash Flow", ...fy.map(() => ""), toM(facts.free_cash_flow)]);
-  cfRows.push(["  FCF Margin %", ...fy.map(() => ""),
-    facts.free_cash_flow && facts.revenue ? toPct(facts.free_cash_flow / facts.revenue * 100) : ""]);
-  cfRows.push(["  FCF / Net Income", ...fy.map(() => ""),
-    facts.free_cash_flow && facts.net_income ? toPct(facts.free_cash_flow / facts.net_income * 100) : ""]);
-  cfRows.push(["SBC (non-cash add-back)", ...fy.map(() => ""), toM(facts.sbc_expense)]);
+  cfRows.push(["INVESTING ACTIVITIES"]);
+  cfRows.push(["Capital Expenditures", ...fy.map(yr => toM(history.capex?.[yr])), toM(quarterly.capex)]);
+  cfRows.push(["Investing Cash Flow", ...fy.map(yr => toM(history.investing_cf?.[yr])), ""]);
+  cfRows.push([""]);
+  cfRows.push(["FINANCING ACTIVITIES"]);
+  cfRows.push(["Share Repurchases", ...fy.map(yr => toM(history.buybacks?.[yr])), ""]);
+  cfRows.push(["Dividends Paid", ...fy.map(yr => toM(history.dividends_paid?.[yr])), ""]);
+  cfRows.push(["Financing Cash Flow", ...fy.map(yr => toM(history.financing_cf?.[yr])), ""]);
+  cfRows.push([""]);
+  cfRows.push(["FREE CASH FLOW"]);
+  cfRows.push(["Free Cash Flow", ...fy.map(yr => toM(history.free_cash_flow?.[yr])), toM(quarterly.free_cash_flow)]);
+  cfRows.push(["  YoY FCF Growth", ...fy.map((yr, i) => i === 0 ? "" : yoy(history.free_cash_flow?.[yr], history.free_cash_flow?.[fy[i-1]])), ""]);
+  cfRows.push(["  FCF Margin %", ...fy.map(yr => {
+    const fcf = history.free_cash_flow?.[yr]; const rev = getRevHist(yr);
+    return (fcf != null && rev && rev > 0) ? toPct(fcf / rev * 100) : "";
+  }), facts.free_cash_flow && facts.revenue ? toPct(facts.free_cash_flow / facts.revenue * 100) : ""]);
+  cfRows.push(["  FCF / Net Income %", ...fy.map(yr => {
+    const fcf = history.free_cash_flow?.[yr]; const ni = history.net_income?.[yr];
+    return (fcf != null && ni && ni > 0) ? toPct(fcf / ni * 100) : "";
+  }), facts.free_cash_flow && facts.net_income ? toPct(facts.free_cash_flow / facts.net_income * 100) : ""]);
 
   const cfSheet = XLSX.utils.aoa_to_sheet(cfRows);
   cfSheet["!cols"] = [{ wch: 34 }, ...fy.map(() => ({ wch: 14 })), { wch: 16 }];

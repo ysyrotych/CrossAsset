@@ -31,6 +31,16 @@ try:
 except ImportError:
     EDGAR_AVAILABLE = False
 
+# ── yfinance imports ──────────────────────────────────────────────────────────
+
+try:
+    import yfinance as yf
+    import numpy as _np
+    YF_AVAILABLE = True
+except ImportError:
+    YF_AVAILABLE = False
+    print("yfinance not installed — add yfinance>=0.2.40 to requirements.txt")
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def strip_html(text: str) -> str:
@@ -550,6 +560,280 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         print(f"XBRL SEC API error for CIK {cik}: {e}")
         return {"facts": {}, "history": {}, "quarterly_facts": {}, "quarterly_period": ""}
 
+# ── yfinance financial statements ────────────────────────────────────────────
+
+def _yf_safe(v) -> Optional[float]:
+    """Convert a yfinance cell value to float, returning None for NaN/None."""
+    if v is None:
+        return None
+    try:
+        if hasattr(v, 'item'):
+            v = v.item()
+        if isinstance(v, float) and _np.isnan(v):
+            return None
+        return float(v)
+    except Exception:
+        return None
+
+def get_yfinance_financials(ticker: str) -> dict:
+    """Fetch standardized financial statements from Yahoo Finance via yfinance."""
+    if not YF_AVAILABLE:
+        return {}
+    try:
+        t = yf.Ticker(ticker)
+
+        def df_to_obj(df):
+            if df is None or df.empty:
+                return {"columns": [], "data": {}}
+            cols = [str(c)[:10] for c in df.columns]
+            data = {}
+            for idx in df.index:
+                key = str(idx)
+                vals = [_yf_safe(df.loc[idx, col]) for col in df.columns]
+                data[key] = vals
+            return {"columns": cols, "data": data}
+
+        annual_income   = df_to_obj(t.income_stmt)
+        annual_balance  = df_to_obj(t.balance_sheet)
+        annual_cashflow = df_to_obj(t.cash_flow)
+        q_income   = df_to_obj(t.quarterly_income_stmt)
+        q_balance  = df_to_obj(t.quarterly_balance_sheet)
+        q_cashflow = df_to_obj(t.quarterly_cash_flow)
+
+        try:
+            raw = t.info or {}
+        except Exception:
+            raw = {}
+
+        info = {k: raw.get(k) for k in [
+            "marketCap", "trailingPE", "forwardPE", "currentPrice",
+            "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "dividendYield",
+            "beta", "sharesOutstanding", "floatShares", "bookValue",
+            "enterpriseValue", "enterpriseToRevenue", "enterpriseToEbitda",
+            "priceToBook",
+        ]}
+
+        print(f"yfinance: {len(annual_income.get('columns', []))} annual + {len(q_income.get('columns', []))} quarterly periods for {ticker}")
+        return {
+            "income": annual_income,
+            "balance_sheet": annual_balance,
+            "cash_flow": annual_cashflow,
+            "quarterly_income": q_income,
+            "quarterly_balance": q_balance,
+            "quarterly_cashflow": q_cashflow,
+            "info": info,
+        }
+    except Exception as e:
+        print(f"yfinance error for {ticker}: {e}")
+        return {}
+
+def _yf_get(yf_stmt: dict, *keys: str, col_idx: int = 0) -> Optional[float]:
+    """Get a value from a yfinance statement dict, trying keys in order."""
+    for key in keys:
+        vals = yf_stmt.get("data", {}).get(key)
+        if vals and col_idx < len(vals) and vals[col_idx] is not None:
+            return vals[col_idx]
+    return None
+
+def _yf_series(yf_stmt: dict, *keys: str) -> dict:
+    """Build {date: value} series from yfinance statement, newest-first cols → sorted asc result."""
+    cols = yf_stmt.get("columns", [])
+    if not cols:
+        return {}
+    for key in keys:
+        vals = yf_stmt.get("data", {}).get(key)
+        if vals:
+            result = {cols[i]: v for i, v in enumerate(vals) if v is not None and i < len(cols)}
+            if result:
+                return result
+    return {}
+
+def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
+    """Override xbrl_facts with yfinance most-recent-annual data (more reliable, standardized)."""
+    if not yf_data:
+        return facts
+
+    inc = yf_data.get("income", {})
+    bal = yf_data.get("balance_sheet", {})
+    cf  = yf_data.get("cash_flow", {})
+
+    def g(*args, col_idx=0): return _yf_get(inc, *args, col_idx=col_idx)
+    def gb(*args, col_idx=0): return _yf_get(bal, *args, col_idx=col_idx)
+    def gc(*args, col_idx=0): return _yf_get(cf,  *args, col_idx=col_idx)
+
+    # Income statement
+    rev = g("Total Revenue")
+    if rev: facts["revenue"] = rev
+    cogs = g("Cost Of Revenue", "Reconciled Cost Of Revenue")
+    if cogs: facts["cost_of_revenue"] = cogs
+    gp = g("Gross Profit")
+    if gp: facts["gross_profit"] = gp
+    rd = g("Research And Development")
+    if rd: facts["rd_expense"] = rd
+    sga = g("Selling General Administrative")
+    if sga: facts["sga_expense"] = sga
+    oi = g("Operating Income", "EBIT")
+    if oi: facts["operating_income"] = oi
+    ebitda = g("EBITDA", "Normalized EBITDA")
+    if ebitda: facts["ebitda"] = ebitda
+    ni = g("Net Income")
+    if ni: facts["net_income"] = ni
+    eps_d = g("Diluted EPS")
+    if eps_d: facts["eps_diluted"] = eps_d
+    eps_b = g("Basic EPS")
+    if eps_b: facts["eps_basic"] = eps_b
+    sh_d = g("Diluted Average Shares")
+    if sh_d: facts["shares_diluted_wtd"] = sh_d
+    sh_b = g("Basic Average Shares")
+    if sh_b: facts["shares_basic_wtd"] = sh_b
+    int_exp = g("Interest Expense", "Interest Expense Non Operating")
+    if int_exp: facts["interest_expense"] = abs(int_exp)
+    pretax = g("Pretax Income")
+    if pretax: facts["pretax_income"] = pretax
+    tax = g("Tax Provision")
+    if tax: facts["income_tax"] = tax
+
+    # Balance sheet
+    cash_val = gb("Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments")
+    if cash_val: facts["cash"] = cash_val
+    sti = gb("Available For Sale Securities", "Investements And Advances")
+    if sti: facts["short_term_investments"] = sti
+    ar = gb("Accounts Receivable")
+    if ar: facts["accounts_receivable"] = ar
+    inv = gb("Inventory")
+    if inv: facts["inventory"] = inv
+    curr_a = gb("Current Assets")
+    if curr_a: facts["current_assets"] = curr_a
+    ppe = gb("Net PPE")
+    if ppe: facts["ppe_net"] = ppe
+    goodwill = gb("Goodwill")
+    if goodwill: facts["goodwill"] = goodwill
+    intang = gb("Other Intangible Assets", "Intangible Assets")
+    if intang: facts["intangibles"] = intang
+    total_a = gb("Total Assets")
+    if total_a: facts["total_assets"] = total_a
+    ap = gb("Accounts Payable")
+    if ap: facts["accounts_payable"] = ap
+    curr_l = gb("Current Liabilities")
+    if curr_l: facts["current_liabilities"] = curr_l
+    ltd = gb("Long Term Debt")
+    if ltd: facts["long_term_debt"] = ltd
+    total_l = gb("Total Liabilities Net Minority Interest")
+    if total_l: facts["total_liabilities"] = total_l
+    re_ = gb("Retained Earnings")
+    if re_: facts["retained_earnings"] = re_
+    eq = gb("Stockholders Equity", "Common Stock Equity")
+    if eq: facts["equity"] = eq
+
+    # Cash flow
+    ocf = gc("Operating Cash Flow")
+    if ocf: facts["operating_cf"] = ocf
+    capex = gc("Capital Expenditure")
+    if capex: facts["capex"] = capex
+    fcf = gc("Free Cash Flow")
+    if fcf: facts["free_cash_flow"] = fcf
+    da = gc("Depreciation Amortization Depletion", "Reconciled Depreciation")
+    if da: facts["da_expense"] = da
+    sbc = gc("Stock Based Compensation")
+    if sbc: facts["sbc_expense"] = sbc
+    buybacks = gc("Common Stock Repurchased", "Repurchase Of Capital Stock")
+    if buybacks: facts["buybacks"] = abs(buybacks)
+    divs = gc("Cash Dividends Paid", "Common Stock Dividend Paid")
+    if divs: facts["dividends_paid"] = divs
+    fin_cf = gc("Financing Cash Flow")
+    if fin_cf: facts["financing_cf"] = fin_cf
+    inv_cf = gc("Investing Cash Flow")
+    if inv_cf: facts["investing_cf"] = inv_cf
+
+    # Recalculate derived ratios with updated data
+    rev2  = facts.get("revenue")
+    gp2   = facts.get("gross_profit")
+    oi2   = facts.get("operating_income")
+    ni2   = facts.get("net_income")
+    ocf2  = facts.get("operating_cf")
+    cap2  = facts.get("capex")
+    da2   = facts.get("da_expense")
+    pretax2 = facts.get("pretax_income")
+    tax2  = facts.get("income_tax")
+
+    if rev2 and gp2:  facts["gross_margin_pct"]     = round(gp2 / rev2 * 100, 1)
+    if rev2 and oi2:  facts["operating_margin_pct"] = round(oi2 / rev2 * 100, 1)
+    if rev2 and ni2:  facts["net_margin_pct"]        = round(ni2 / rev2 * 100, 1)
+    if ocf2 and cap2: facts["free_cash_flow"] = ocf2 - abs(cap2)
+    if oi2 and da2:   facts["ebitda"] = facts.get("ebitda") or (oi2 + da2)
+    if pretax2 and tax2 and pretax2 != 0:
+        facts["effective_tax_rate"] = round(tax2 / pretax2 * 100, 1)
+
+    return facts
+
+def build_history_from_yf(yf_data: dict) -> dict:
+    """Build comprehensive history dict from yfinance annual statements."""
+    if not yf_data:
+        return {}
+
+    inc = yf_data.get("income", {})
+    bal = yf_data.get("balance_sheet", {})
+    cf  = yf_data.get("cash_flow", {})
+
+    history: dict = {}
+
+    def add(key, stmt, *yf_keys):
+        series = _yf_series(stmt, *yf_keys)
+        if series:
+            history[key] = series
+
+    # Income statement
+    add("revenue",          inc, "Total Revenue")
+    add("gross_profit",     inc, "Gross Profit")
+    add("net_income",       inc, "Net Income")
+    add("operating_income", inc, "Operating Income", "EBIT")
+    add("cost_of_revenue",  inc, "Cost Of Revenue", "Reconciled Cost Of Revenue")
+    add("rd_expense",       inc, "Research And Development")
+    add("sga_expense",      inc, "Selling General Administrative")
+    add("ebitda",           inc, "EBITDA", "Normalized EBITDA")
+    add("interest_expense", inc, "Interest Expense", "Interest Expense Non Operating")
+    add("pretax_income",    inc, "Pretax Income")
+    add("income_tax",       inc, "Tax Provision")
+    add("eps_diluted",      inc, "Diluted EPS")
+    add("eps_basic",        inc, "Basic EPS")
+    add("shares_diluted_wtd", inc, "Diluted Average Shares")
+
+    # Cash flow
+    add("operating_cf",   cf, "Operating Cash Flow")
+    add("capex",          cf, "Capital Expenditure")
+    add("free_cash_flow", cf, "Free Cash Flow")
+    add("sbc_expense",    cf, "Stock Based Compensation")
+    add("da_expense",     cf, "Depreciation Amortization Depletion", "Reconciled Depreciation")
+    add("buybacks",       cf, "Common Stock Repurchased", "Repurchase Of Capital Stock")
+    add("dividends_paid", cf, "Cash Dividends Paid", "Common Stock Dividend Paid")
+    add("investing_cf",   cf, "Investing Cash Flow")
+    add("financing_cf",   cf, "Financing Cash Flow")
+
+    # Balance sheet (multi-year)
+    add("total_assets",       bal, "Total Assets")
+    add("cash",               bal, "Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments")
+    add("equity",             bal, "Stockholders Equity", "Common Stock Equity")
+    add("total_liabilities",  bal, "Total Liabilities Net Minority Interest")
+    add("long_term_debt",     bal, "Long Term Debt")
+    add("current_assets",     bal, "Current Assets")
+    add("current_liabilities",bal, "Current Liabilities")
+    add("accounts_receivable",bal, "Accounts Receivable")
+    add("accounts_payable",   bal, "Accounts Payable")
+    add("inventory",          bal, "Inventory")
+    add("ppe_net",            bal, "Net PPE")
+    add("goodwill",           bal, "Goodwill")
+    add("retained_earnings",  bal, "Retained Earnings")
+
+    # Make interest_expense absolute values (yfinance may return negative)
+    if "interest_expense" in history:
+        history["interest_expense"] = {k: abs(v) for k, v in history["interest_expense"].items()}
+
+    # Make buybacks absolute values
+    if "buybacks" in history:
+        history["buybacks"] = {k: abs(v) for k, v in history["buybacks"].items()}
+
+    return history
+
 # ── Response models ───────────────────────────────────────────────────────────
 
 class CompanyInfo(BaseModel):
@@ -611,20 +895,70 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         sic_description=str(getattr(company, 'sic_description', '') or ''),
     )
 
-    annual_task   = asyncio.to_thread(_get_filing, company, "10-K", want)
+    annual_task    = asyncio.to_thread(_get_filing, company, "10-K", want)
     quarterly_task = asyncio.to_thread(_get_filing, company, "10-Q", want)
-    xbrl_task     = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
+    xbrl_task      = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
+    yf_task        = asyncio.to_thread(get_yfinance_financials, ticker)
 
-    annual, quarterly, xbrl_result = await asyncio.gather(annual_task, quarterly_task, xbrl_task)
+    annual, quarterly, xbrl_result, yf_data = await asyncio.gather(
+        annual_task, quarterly_task, xbrl_task, yf_task
+    )
+
+    # Start with XBRL facts then override with yfinance (more complete, standardized)
+    merged_facts   = merge_yf_into_facts(dict(xbrl_result.get("facts", {})), yf_data)
+    merged_history = build_history_from_yf(yf_data) or xbrl_result.get("history", {})
+
+    # Quarterly XBRL is harder to get from yfinance; keep SEC XBRL for quarterly
+    qxbrl = dict(xbrl_result.get("quarterly_facts", {}))
+    # Supplement quarterly with yfinance most-recent-quarter if XBRL is sparse
+    if yf_data.get("quarterly_income"):
+        q_inc = yf_data["quarterly_income"]
+        q_bal = yf_data.get("quarterly_balance", {})
+        q_cf  = yf_data.get("quarterly_cashflow", {})
+        def qg(*args): return _yf_get(q_inc, *args, col_idx=0)
+        def qgb(*args): return _yf_get(q_bal, *args, col_idx=0)
+        def qgc(*args): return _yf_get(q_cf,  *args, col_idx=0)
+        if qg("Total Revenue") and (not qxbrl.get("revenue") or abs(qg("Total Revenue") - qxbrl.get("revenue", 0)) < 1e10):
+            if qg("Total Revenue"): qxbrl["revenue"] = qg("Total Revenue")
+            if qg("Gross Profit"): qxbrl["gross_profit"] = qg("Gross Profit")
+            if qg("Cost Of Revenue", "Reconciled Cost Of Revenue"): qxbrl["cost_of_revenue"] = qg("Cost Of Revenue", "Reconciled Cost Of Revenue")
+            if qg("Research And Development"): qxbrl["rd_expense"] = qg("Research And Development")
+            if qg("Selling General Administrative"): qxbrl["sga_expense"] = qg("Selling General Administrative")
+            if qg("Operating Income", "EBIT"): qxbrl["operating_income"] = qg("Operating Income", "EBIT")
+            if qg("Net Income"): qxbrl["net_income"] = qg("Net Income")
+            if qg("Diluted EPS"): qxbrl["eps_diluted"] = qg("Diluted EPS")
+            if qgc("Operating Cash Flow"): qxbrl["operating_cf"] = qgc("Operating Cash Flow")
+            if qgc("Capital Expenditure"): qxbrl["capex"] = qgc("Capital Expenditure")
+            if qgc("Free Cash Flow"): qxbrl["free_cash_flow"] = qgc("Free Cash Flow")
+            if qgb("Cash And Cash Equivalents"): qxbrl["cash"] = qgb("Cash And Cash Equivalents")
+            if qgb("Total Assets"): qxbrl["total_assets"] = qgb("Total Assets")
+            if qgb("Stockholders Equity", "Common Stock Equity"): qxbrl["equity"] = qgb("Stockholders Equity", "Common Stock Equity")
+            if qgb("Current Liabilities"): qxbrl["current_liabilities"] = qgb("Current Liabilities")
+            # Recalculate margins
+            qrev = qxbrl.get("revenue"); qgp = qxbrl.get("gross_profit"); qoi = qxbrl.get("operating_income"); qni = qxbrl.get("net_income")
+            if qrev and qgp: qxbrl["gross_margin_pct"] = round(qgp / qrev * 100, 1)
+            if qrev and qoi: qxbrl["operating_margin_pct"] = round(qoi / qrev * 100, 1)
+            if qrev and qni: qxbrl["net_margin_pct"] = round(qni / qrev * 100, 1)
+            qocf = qxbrl.get("operating_cf"); qcap = qxbrl.get("capex")
+            if qocf and qcap: qxbrl["free_cash_flow"] = qocf - abs(qcap)
+
+        # Most recent quarterly period from yfinance
+        q_cols = q_inc.get("columns", [])
+        if q_cols:
+            yf_q_period = q_cols[0]  # most recent first
+        else:
+            yf_q_period = xbrl_result.get("quarterly_period", "")
+    else:
+        yf_q_period = xbrl_result.get("quarterly_period", "")
 
     return AnalysisPayload(
         company=info,
         annual=annual,
         quarterly=quarterly,
-        xbrl_facts=xbrl_result.get("facts", {}),
-        history=xbrl_result.get("history", {}),
-        quarterly_xbrl=xbrl_result.get("quarterly_facts", {}),
-        quarterly_period=xbrl_result.get("quarterly_period", ""),
+        xbrl_facts=merged_facts,
+        history=merged_history,
+        quarterly_xbrl=qxbrl,
+        quarterly_period=yf_q_period or xbrl_result.get("quarterly_period", ""),
         prior_quarter_xbrl=xbrl_result.get("prior_quarter_facts", {}),
         prior_quarter_period=xbrl_result.get("prior_quarter_period", ""),
     )
