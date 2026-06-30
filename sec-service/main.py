@@ -1377,9 +1377,31 @@ def debug():
     return {
         "fmp_key_set": bool(FMP_API_KEY),
         "fmp_key_length": len(FMP_API_KEY),
+        "fmp_key_prefix": FMP_API_KEY[:4] if FMP_API_KEY else "",
         "edgar_available": EDGAR_AVAILABLE,
         "yf_available": YF_AVAILABLE,
     }
+
+@app.get("/test-fmp")
+def test_fmp():
+    """Test FMP connectivity — makes a live call to income-statement/AAPL and reports result."""
+    if not FMP_API_KEY:
+        return {"error": "FMP_API_KEY not set"}
+    try:
+        url = f"{FMP_BASE}/income-statement/AAPL?limit=1&apikey={FMP_API_KEY}"
+        r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
+        body = r.text[:500]
+        data = r.json() if r.status_code == 200 else None
+        return {
+            "http_status": r.status_code,
+            "response_type": type(data).__name__ if data else None,
+            "records_returned": len(data) if isinstance(data, list) else None,
+            "first_date": data[0].get("date") if isinstance(data, list) and data else None,
+            "first_revenue": data[0].get("revenue") if isinstance(data, list) and data else None,
+            "error_body": body if r.status_code != 200 else None,
+        }
+    except Exception as e:
+        return {"error": str(e)}
 
 @app.get("/company/{ticker}", response_model=AnalysisPayload)
 async def get_company_analysis(ticker: str, sections: str = "business,risks,cybersecurity,properties,legal,mda,quantitative,controls,accountant_fees,q_quantitative,q_controls,q_legal"):
