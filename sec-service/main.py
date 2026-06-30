@@ -159,17 +159,13 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
                get_latest_flow("RevenueFromContractWithCustomerIncludingAssessedTax"))
         if rev is not None: r["revenue"] = rev
 
+        cogs = (get_latest_flow("CostOfRevenue") or
+                get_latest_flow("CostOfGoodsAndServicesSold") or
+                get_latest_flow("CostOfGoodsSold"))
+        if cogs is not None: r["cost_of_revenue"] = cogs
+
         gp = get_latest_flow("GrossProfit")
         if gp is not None: r["gross_profit"] = gp
-
-        oi = get_latest_flow("OperatingIncomeLoss")
-        if oi is not None: r["operating_income"] = oi
-
-        ni = get_latest_flow("NetIncomeLoss") or get_latest_flow("NetIncomeLossAvailableToCommonStockholdersDiluted")
-        if ni is not None: r["net_income"] = ni
-
-        eps = get_latest_flow("EarningsPerShareDiluted")
-        if eps is not None: r["eps_diluted"] = eps
 
         rd = get_latest_flow("ResearchAndDevelopmentExpense")
         if rd is not None: r["rd_expense"] = rd
@@ -177,21 +173,85 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         sga = get_latest_flow("SellingGeneralAndAdministrativeExpense")
         if sga is not None: r["sga_expense"] = sga
 
+        opex_total = get_latest_flow("OperatingExpenses")
+        if opex_total is not None: r["operating_expenses"] = opex_total
+
+        oi = get_latest_flow("OperatingIncomeLoss")
+        if oi is not None: r["operating_income"] = oi
+
+        int_exp = (get_latest_flow("InterestAndDebtExpense") or
+                   get_latest_flow("InterestExpense") or
+                   get_latest_flow("InterestExpenseDebt"))
+        if int_exp is not None: r["interest_expense"] = int_exp
+
+        pretax = get_latest_flow("IncomeLossFromContinuingOperationsBeforeIncomeTaxesExtraordinaryItemsNoncontrollingInterest")
+        if pretax is not None: r["pretax_income"] = pretax
+
+        tax = get_latest_flow("IncomeTaxExpenseBenefit")
+        if tax is not None: r["income_tax"] = tax
+
+        ni = get_latest_flow("NetIncomeLoss") or get_latest_flow("NetIncomeLossAvailableToCommonStockholdersDiluted")
+        if ni is not None: r["net_income"] = ni
+
+        eps_b = get_latest_flow("EarningsPerShareBasic")
+        if eps_b is not None: r["eps_basic"] = eps_b
+
+        eps = get_latest_flow("EarningsPerShareDiluted")
+        if eps is not None: r["eps_diluted"] = eps
+
+        sh_dil = get_latest_flow("WeightedAverageNumberOfDilutedSharesOutstanding")
+        if sh_dil is not None: r["shares_diluted_wtd"] = sh_dil
+
+        sh_basic = get_latest_flow("WeightedAverageNumberOfSharesOutstandingBasic")
+        if sh_basic is not None: r["shares_basic_wtd"] = sh_basic
+
         # ── Balance Sheet (point-in-time) ─────────────────────────────────────
+        cash = get_latest_bs("CashAndCashEquivalentsAtCarryingValue") or get_latest_bs("CashCashEquivalentsAndShortTermInvestments")
+        if cash is not None: r["cash"] = cash
+
+        sti = (get_latest_bs("ShortTermInvestments") or
+               get_latest_bs("AvailableForSaleSecuritiesDebtSecuritiesCurrent") or
+               get_latest_bs("MarketableSecuritiesCurrent"))
+        if sti is not None: r["short_term_investments"] = sti
+
+        ar = get_latest_bs("AccountsReceivableNetCurrent")
+        if ar is not None: r["accounts_receivable"] = ar
+
+        inv = get_latest_bs("InventoryNet")
+        if inv is not None: r["inventory"] = inv
+
+        curr_assets = get_latest_bs("AssetsCurrent")
+        if curr_assets is not None: r["current_assets"] = curr_assets
+
+        ppe = get_latest_bs("PropertyPlantAndEquipmentNet")
+        if ppe is not None: r["ppe_net"] = ppe
+
+        goodwill = get_latest_bs("Goodwill")
+        if goodwill is not None: r["goodwill"] = goodwill
+
+        intangibles = get_latest_bs("IntangibleAssetsNetExcludingGoodwill")
+        if intangibles is not None: r["intangibles"] = intangibles
+
         assets = get_latest_bs("Assets")
         if assets is not None: r["total_assets"] = assets
+
+        ap = get_latest_bs("AccountsPayableCurrent")
+        if ap is not None: r["accounts_payable"] = ap
+
+        curr_liab = get_latest_bs("LiabilitiesCurrent")
+        if curr_liab is not None: r["current_liabilities"] = curr_liab
+
+        ltd = get_latest_bs("LongTermDebt") or get_latest_bs("LongTermDebtNoncurrent")
+        if ltd is not None: r["long_term_debt"] = ltd
 
         liab = get_latest_bs("Liabilities")
         if liab is not None: r["total_liabilities"] = liab
 
+        re_accum = get_latest_bs("RetainedEarningsAccumulatedDeficit")
+        if re_accum is not None: r["retained_earnings"] = re_accum
+
         eq = get_latest_bs("StockholdersEquity") or get_latest_bs("StockholdersEquityAttributableToParent")
         if eq is not None: r["equity"] = eq
-
-        cash = get_latest_bs("CashAndCashEquivalentsAtCarryingValue") or get_latest_bs("CashCashEquivalentsAndShortTermInvestments")
-        if cash is not None: r["cash"] = cash
-
-        ltd = get_latest_bs("LongTermDebt") or get_latest_bs("LongTermDebtNoncurrent")
-        if ltd is not None: r["long_term_debt"] = ltd
 
         shares = get_latest_bs("CommonStockSharesOutstanding")
         if shares is not None: r["shares_outstanding"] = shares
@@ -200,15 +260,43 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         ocf = get_latest_flow("NetCashProvidedByUsedInOperatingActivities")
         if ocf is not None: r["operating_cf"] = ocf
 
+        da = (get_latest_flow("DepreciationDepletionAndAmortization") or
+              get_latest_flow("DepreciationAndAmortization") or
+              get_latest_flow("Depreciation"))
+        if da is not None: r["da_expense"] = da
+
+        sbc = (get_latest_flow("AllocatedShareBasedCompensationExpense") or
+               get_latest_flow("ShareBasedCompensation") or
+               get_latest_flow("ShareBasedCompensationExpense"))
+        if sbc is not None: r["sbc_expense"] = sbc
+
         capex = get_latest_flow("PaymentsToAcquirePropertyPlantAndEquipment")
         if capex is not None: r["capex"] = capex
 
+        acq = get_latest_flow("PaymentsToAcquireBusinessesNetOfCashAcquired")
+        if acq is not None: r["acquisitions"] = acq
+
+        inv_cf = get_latest_flow("NetCashProvidedByUsedInInvestingActivities")
+        if inv_cf is not None: r["investing_cf"] = inv_cf
+
+        buybacks = get_latest_flow("PaymentsForRepurchaseOfCommonStock")
+        if buybacks is not None: r["buybacks"] = buybacks
+
+        divs = (get_latest_flow("PaymentsOfDividends") or
+                get_latest_flow("PaymentsOfDividendsCommonStock"))
+        if divs is not None: r["dividends_paid"] = divs
+
+        fin_cf = get_latest_flow("NetCashProvidedByUsedInFinancingActivities")
+        if fin_cf is not None: r["financing_cf"] = fin_cf
+
         # ── Derived ratios ────────────────────────────────────────────────────
-        if rev and gp:  r["gross_margin_pct"]     = round((gp  / rev) * 100, 1)
-        if rev and oi:  r["operating_margin_pct"] = round((oi  / rev) * 100, 1)
-        if rev and ni:  r["net_margin_pct"]        = round((ni  / rev) * 100, 1)
+        if rev and gp:   r["gross_margin_pct"]     = round((gp  / rev) * 100, 1)
+        if rev and oi:   r["operating_margin_pct"] = round((oi  / rev) * 100, 1)
+        if rev and ni:   r["net_margin_pct"]        = round((ni  / rev) * 100, 1)
         if ocf is not None and capex is not None:
             r["free_cash_flow"] = ocf - abs(capex)
+        if oi is not None and da is not None:
+            r["ebitda"] = oi + da
 
         print(f"XBRL SEC API: extracted {len(r)} facts for CIK {cik}")
 
@@ -337,31 +425,32 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
             doc_attrs = [a for a in dir(doc) if not a.startswith('_')]
             print(f"[{form_type}] doc attrs: {doc_attrs}")
 
-        # Multiple fallback attribute names per section
+        # Multiple fallback attribute names + item keys per section
         SECTION_MAP = {
             "business": ("Item 1 — Business", [
                 "business", "item1", "item_1", "item1_business",
-            ]),
+            ], ["1", "1."]),
             "risks": ("Item 1A — Risk Factors", [
                 "risk_factors", "risks", "item1a", "item_1a", "risk_factors_text",
-            ]),
+            ], ["1A", "1a", "1a."]),
             "mda": ("Item 7 — MD&A", [
                 "mda", "management_discussion_and_analysis", "item7", "item_7",
                 "md_and_a", "management_s_discussion_and_analysis",
                 "managements_discussion_and_analysis",
-            ]),
+            ], ["7", "7."]),
             "quantitative": ("Item 7A — Market Risk", [
                 "quantitative_disclosures", "item7a", "item_7a",
                 "quantitative_and_qualitative_disclosures_about_market_risk",
-            ]),
+            ], ["7A", "7a"]),
         }
 
-        for key, (title, attr_names) in SECTION_MAP.items():
+        for key, (title, attr_names, item_keys) in SECTION_MAP.items():
             if key not in want:
                 continue
             if doc is None:
                 continue
             raw = None
+            # 1) Try named attributes
             for attr in attr_names:
                 try:
                     val = getattr(doc, attr, None)
@@ -371,8 +460,37 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                         break
                 except Exception:
                     continue
+            # 2) Try __getitem__ with item number keys
             if raw is None:
-                print(f"[{form_type}] section '{key}' not found — tried: {attr_names}")
+                for ik in item_keys:
+                    try:
+                        val = doc[ik]
+                        if val is not None:
+                            raw = val
+                            print(f"[{form_type}] section '{key}' found via doc['{ik}']")
+                            break
+                    except (KeyError, TypeError, IndexError):
+                        continue
+            # 3) Dynamic discovery: scan all attrs for one whose name contains the key and has long text
+            if raw is None:
+                for attr in dir(doc):
+                    if attr.startswith('_'):
+                        continue
+                    if key.replace("_", "") not in attr.replace("_", "").lower():
+                        continue
+                    try:
+                        val = getattr(doc, attr, None)
+                        if val is None:
+                            continue
+                        text_probe = str(val)
+                        if len(text_probe) > 200:
+                            raw = val
+                            print(f"[{form_type}] section '{key}' found via dynamic scan: '{attr}'")
+                            break
+                    except Exception:
+                        continue
+            if raw is None:
+                print(f"[{form_type}] section '{key}' not found — tried attrs, item keys, and dynamic scan")
                 continue
             try:
                 # edgartools Item objects may expose a .text property with clean content

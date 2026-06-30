@@ -149,38 +149,18 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
 
 // ── Financial Statements ─────────────────────────────────────────────────────
 
-type FinRow = { key: string; label: string; prefix?: string; suffix?: string; dynamic?: boolean; bold?: boolean };
-
-const INCOME_ROWS: FinRow[] = [
-  { key: "revenue",           label: "Revenue",             prefix: "$", bold: true },
-  { key: "gross_profit",      label: "Gross Profit",        prefix: "$" },
-  { key: "rd_expense",        label: "R&D Expense",         prefix: "$" },
-  { key: "sga_expense",       label: "SG&A Expense",        prefix: "$" },
-  { key: "operating_income",  label: "Operating Income",    prefix: "$", dynamic: true },
-  { key: "net_income",        label: "Net Income",          prefix: "$", dynamic: true, bold: true },
-  { key: "eps_diluted",       label: "EPS (Diluted)",       prefix: "$", dynamic: true },
-];
-
-const BALANCE_ROWS: FinRow[] = [
-  { key: "total_assets",      label: "Total Assets",        prefix: "$", bold: true },
-  { key: "cash",              label: "Cash & Equivalents",  prefix: "$" },
-  { key: "total_liabilities", label: "Total Liabilities",   prefix: "$" },
-  { key: "long_term_debt",    label: "Long-Term Debt",      prefix: "$" },
-  { key: "equity",            label: "Shareholders Equity", prefix: "$", dynamic: true, bold: true },
-  { key: "shares_outstanding",label: "Shares Outstanding",  prefix: "" },
-];
-
-const CASHFLOW_ROWS: FinRow[] = [
-  { key: "operating_cf",      label: "Operating CF",         prefix: "$", dynamic: true, bold: true },
-  { key: "capex",             label: "Capital Expenditures", prefix: "$" },
-  { key: "free_cash_flow",    label: "Free Cash Flow",       prefix: "$", dynamic: true, bold: true },
-];
-
-const MARGIN_ROWS: FinRow[] = [
-  { key: "gross_margin_pct",     label: "Gross Margin",     suffix: "%" },
-  { key: "operating_margin_pct", label: "Operating Margin", suffix: "%", dynamic: true },
-  { key: "net_margin_pct",       label: "Net Margin",       suffix: "%", dynamic: true },
-];
+type FinRow = {
+  key?: string;          // undefined = divider/header row
+  label: string;
+  indent?: boolean;
+  bold?: boolean;
+  prefix?: string;
+  suffix?: string;
+  dynamic?: boolean;
+  divider?: boolean;     // section separator line
+  header?: boolean;      // section header (no value)
+  derived?: string;      // "pct_of_rev:revenue_key" for % of revenue
+};
 
 function getPriorYearVal(history: Record<string, Record<string, number>>, key: string): number | null {
   const series = history[key];
@@ -195,77 +175,103 @@ function YoYBadge({ current, prior }: { current: number; prior: number | null })
   const pct = ((current - prior) / Math.abs(prior)) * 100;
   const pos = pct >= 0;
   return (
-    <span className="ml-1.5 text-[9.5px] font-semibold tabular-nums" style={{ color: pos ? "#0d6b45" : "#b42318" }}>
+    <span className="ml-1 text-[9px] font-bold tabular-nums" style={{ color: pos ? "#0d6b45" : "#b42318" }}>
       {pos ? "▲" : "▼"}{Math.abs(pct).toFixed(1)}%
     </span>
   );
 }
 
-function FinTable({ title, rows, facts, history = {} }: { title: string; rows: FinRow[]; facts: Record<string, number>; history?: Record<string, Record<string, number>> }) {
-  const available = rows.filter(r => facts[r.key] != null);
-  if (!available.length) return null;
+function FinStmtTable({
+  rows,
+  facts,
+  history = {},
+  showPctRev = false,
+}: {
+  rows: FinRow[];
+  facts: Record<string, number>;
+  history?: Record<string, Record<string, number>>;
+  showPctRev?: boolean;
+}) {
+  const rev = facts["revenue"];
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
-      <div className="px-4 py-2.5 bg-[#0c1b38]">
-        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">{title}</p>
-      </div>
-      <table className="w-full">
-        <tbody>
-          {available.map(({ key, label, prefix = "", suffix = "", dynamic, bold }, i) => {
-            const val = facts[key];
-            const prior = getPriorYearVal(history, key);
-            const color = dynamic ? (val >= 0 ? "#0d6b45" : "#b42318") : "#0a0a0a";
-            return (
-              <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
-                <td className={`px-4 py-2.5 text-[11.5px] text-[#555] ${bold ? "font-semibold text-[#222]" : ""}`}>{label}</td>
-                <td className={`px-4 py-2.5 text-[12.5px] tabular-nums text-right ${bold ? "font-bold" : "font-medium"}`} style={{ color }}>
-                  {fmtNum(val, prefix, suffix)}
-                  <YoYBadge current={val} prior={prior} />
+    <table className="w-full">
+      <colgroup>
+        <col className="w-[55%]" />
+        {showPctRev && <col className="w-[12%]" />}
+        <col />
+      </colgroup>
+      <tbody>
+        {rows.map((row, i) => {
+          if (row.divider) return (
+            <tr key={i}><td colSpan={showPctRev ? 3 : 2} className="px-0 py-0"><div className="border-t border-[#d8dde8] mx-4 my-0.5" /></td></tr>
+          );
+          if (row.header) return (
+            <tr key={i} className="bg-[#f5f6f8]">
+              <td colSpan={showPctRev ? 3 : 2} className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-[#0c1b38]">{row.label}</td>
+            </tr>
+          );
+          if (!row.key) return null;
+          const val = facts[row.key];
+          if (val == null) return null;
+          const prior = getPriorYearVal(history, row.key);
+          const prefix = row.prefix ?? "$";
+          const suffix = row.suffix ?? "";
+          const color = row.dynamic ? (val >= 0 ? "#0d6b45" : "#b42318") : "#111";
+          const pctRev = showPctRev && rev && rev !== 0 ? (val / rev * 100) : null;
+          const isEven = i % 2 === 0;
+          return (
+            <tr key={row.key} className={`border-b border-[#f0f0f0] last:border-0 ${isEven ? "bg-white" : "bg-[#fafafa]"}`}>
+              <td className={`px-4 ${row.indent ? "pl-7" : ""} py-2 text-[11.5px] text-[#444] ${row.bold ? "font-semibold text-[#0a0a0a]" : ""}`}>
+                {row.label}
+              </td>
+              {showPctRev && (
+                <td className="px-2 py-2 text-[10.5px] text-right tabular-nums text-[#bbb]">
+                  {pctRev != null ? `${pctRev.toFixed(1)}%` : ""}
                 </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+              )}
+              <td className={`px-4 py-2 text-right tabular-nums text-[12px] ${row.bold ? "font-bold" : "font-medium"}`} style={{ color }}>
+                {fmtNum(val, prefix, suffix)}
+                <YoYBadge current={val} prior={prior} />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }
 
 function MarginBadges({ facts, history }: { facts: Record<string, number>; history: Record<string, Record<string, number>> }) {
-  const available = MARGIN_ROWS.filter(r => facts[r.key] != null);
+  type MR = { key: string; label: string; numKey: string; denKey: string };
+  const MARGINS: MR[] = [
+    { key: "gross_margin_pct",     label: "Gross Margin",     numKey: "gross_profit",     denKey: "revenue" },
+    { key: "operating_margin_pct", label: "Operating Margin", numKey: "operating_income", denKey: "revenue" },
+    { key: "net_margin_pct",       label: "Net Margin",       numKey: "net_income",       denKey: "revenue" },
+  ];
+  const available = MARGINS.filter(m => facts[m.key] != null);
   if (!available.length) return null;
 
-  // Compute prior-year margins from history when available
-  function priorMargin(pct_key: string, num_key: string, den_key: string): number | null {
-    const numSeries = history[num_key];
-    const denSeries = history[den_key];
-    if (!numSeries || !denSeries) return null;
-    const years = Object.keys(numSeries).sort().filter(y => denSeries[y] != null);
-    if (years.length < 2) return null;
-    const py = years[years.length - 2];
-    const n = numSeries[py], d = denSeries[py];
-    if (!d) return null;
-    return (n / d) * 100;
+  function priorMargin(numKey: string, denKey: string): number | null {
+    const ns = history[numKey], ds = history[denKey];
+    if (!ns || !ds) return null;
+    const yrs = Object.keys(ns).sort().filter(y => ds[y] != null);
+    if (yrs.length < 2) return null;
+    const py = yrs[yrs.length - 2];
+    return ds[py] ? (ns[py] / ds[py]) * 100 : null;
   }
 
-  const priors: Record<string, number | null> = {
-    gross_margin_pct:     priorMargin("gross_margin_pct", "gross_profit", "revenue"),
-    operating_margin_pct: priorMargin("operating_margin_pct", "operating_income", "revenue"),
-    net_margin_pct:       priorMargin("net_margin_pct", "net_income", "revenue"),
-  };
-
   return (
-    <div className="flex gap-3 flex-wrap mb-4">
-      {available.map(({ key, label }) => {
+    <div className="grid grid-cols-3 gap-3 mb-5">
+      {available.map(({ key, label, numKey, denKey }) => {
         const val = facts[key];
-        const prior = priors[key];
+        const prior = priorMargin(numKey, denKey);
         const delta = prior != null ? val - prior : null;
         return (
-          <div key={key} className="flex-1 min-w-[120px] border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
+          <div key={key} className="border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
             <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
-            <p className="text-[22px] font-bold tabular-nums" style={{ color: pctColor(val) }}>{fmtNum(val, "", "%")}</p>
+            <p className="text-[24px] font-bold tabular-nums leading-none" style={{ color: pctColor(val) }}>{fmtNum(val, "", "%")}</p>
             {delta != null && (
-              <p className="text-[9.5px] font-semibold mt-0.5 tabular-nums" style={{ color: delta >= 0 ? "#0d6b45" : "#b42318" }}>
+              <p className="text-[9.5px] font-semibold mt-1 tabular-nums" style={{ color: delta >= 0 ? "#0d6b45" : "#b42318" }}>
                 {delta >= 0 ? "▲" : "▼"}{Math.abs(delta).toFixed(1)} pp YoY
               </p>
             )}
@@ -276,19 +282,123 @@ function MarginBadges({ facts, history }: { facts: Record<string, number>; histo
   );
 }
 
+// ── Statement definitions ─────────────────────────────────────────────────────
+
+const INCOME_STMT: FinRow[] = [
+  { header: true,  label: "Revenue" },
+  { key: "revenue",           label: "Total Revenue",           bold: true, prefix: "$" },
+  { key: "cost_of_revenue",   label: "Cost of Revenue",         indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "gross_profit",      label: "Gross Profit",            bold: true, prefix: "$", dynamic: true },
+  { header: true, label: "Operating Expenses" },
+  { key: "rd_expense",        label: "Research & Development",  indent: true, prefix: "$" },
+  { key: "sga_expense",       label: "SG&A",                    indent: true, prefix: "$" },
+  { key: "operating_expenses",label: "Total Operating Expenses",indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "operating_income",  label: "Operating Income (EBIT)", bold: true, prefix: "$", dynamic: true },
+  { key: "ebitda",            label: "EBITDA",                  indent: true, prefix: "$", dynamic: true },
+  { header: true, label: "Below the Line" },
+  { key: "interest_expense",  label: "Interest Expense",        indent: true, prefix: "$" },
+  { key: "pretax_income",     label: "Pre-tax Income",          indent: true, prefix: "$", dynamic: true },
+  { key: "income_tax",        label: "Income Tax",              indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "net_income",        label: "Net Income",              bold: true, prefix: "$", dynamic: true },
+  { header: true, label: "Per Share" },
+  { key: "eps_basic",         label: "EPS — Basic",             indent: true, prefix: "$" },
+  { key: "eps_diluted",       label: "EPS — Diluted",           indent: true, prefix: "$", bold: true },
+  { key: "shares_basic_wtd",  label: "Shares Basic (wtd avg)",  indent: true, prefix: "" },
+  { key: "shares_diluted_wtd",label: "Shares Diluted (wtd avg)",indent: true, prefix: "" },
+];
+
+const BALANCE_STMT: FinRow[] = [
+  { header: true, label: "Current Assets" },
+  { key: "cash",                label: "Cash & Equivalents",       indent: true, prefix: "$" },
+  { key: "short_term_investments",label:"Short-term Investments",  indent: true, prefix: "$" },
+  { key: "accounts_receivable", label: "Accounts Receivable",      indent: true, prefix: "$" },
+  { key: "inventory",           label: "Inventories",              indent: true, prefix: "$" },
+  { key: "current_assets",      label: "Total Current Assets",     bold: true, prefix: "$" },
+  { header: true, label: "Non-Current Assets" },
+  { key: "ppe_net",             label: "PP&E (Net)",               indent: true, prefix: "$" },
+  { key: "goodwill",            label: "Goodwill",                 indent: true, prefix: "$" },
+  { key: "intangibles",         label: "Intangible Assets",        indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "total_assets",        label: "Total Assets",             bold: true, prefix: "$" },
+  { header: true, label: "Current Liabilities" },
+  { key: "accounts_payable",    label: "Accounts Payable",         indent: true, prefix: "$" },
+  { key: "current_liabilities", label: "Total Current Liabilities",bold: true, prefix: "$" },
+  { header: true, label: "Non-Current Liabilities" },
+  { key: "long_term_debt",      label: "Long-Term Debt",           indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "total_liabilities",   label: "Total Liabilities",        bold: true, prefix: "$" },
+  { header: true, label: "Shareholders' Equity" },
+  { key: "retained_earnings",   label: "Retained Earnings",        indent: true, prefix: "$", dynamic: true },
+  { key: "equity",              label: "Total Equity",             bold: true, prefix: "$", dynamic: true },
+  { key: "shares_outstanding",  label: "Shares Outstanding",       indent: true, prefix: "" },
+];
+
+const CASHFLOW_STMT: FinRow[] = [
+  { header: true, label: "Operating Activities" },
+  { key: "net_income",          label: "Net Income",               indent: true, prefix: "$", dynamic: true },
+  { key: "da_expense",          label: "Depreciation & Amortization",indent: true, prefix: "$" },
+  { key: "sbc_expense",         label: "Stock-based Compensation", indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "operating_cf",        label: "Operating Cash Flow",      bold: true, prefix: "$", dynamic: true },
+  { header: true, label: "Investing Activities" },
+  { key: "capex",               label: "Capital Expenditures",     indent: true, prefix: "$" },
+  { key: "acquisitions",        label: "Acquisitions",             indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "investing_cf",        label: "Investing Cash Flow",      bold: true, prefix: "$", dynamic: true },
+  { header: true, label: "Financing Activities" },
+  { key: "buybacks",            label: "Share Repurchases",        indent: true, prefix: "$" },
+  { key: "dividends_paid",      label: "Dividends Paid",           indent: true, prefix: "$" },
+  { divider: true, label: "" },
+  { key: "financing_cf",        label: "Financing Cash Flow",      bold: true, prefix: "$", dynamic: true },
+  { divider: true, label: "" },
+  { key: "free_cash_flow",      label: "Free Cash Flow",           bold: true, prefix: "$", dynamic: true },
+];
+
 function FinancialStatements({ facts, history }: { facts: Record<string, number>; history: Record<string, Record<string, number>> }) {
+  const [tab, setTab] = useState<"income" | "balance" | "cashflow">("income");
+
   if (!Object.keys(facts).length) return (
     <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
       <p className="text-[11.5px] text-[#999]">XBRL financial data unavailable — SEC filing may not include structured data or extraction failed.</p>
     </div>
   );
+
+  const TABS = [
+    { id: "income"   as const, label: "Income Statement" },
+    { id: "balance"  as const, label: "Balance Sheet" },
+    { id: "cashflow" as const, label: "Cash Flow" },
+  ];
+
   return (
-    <div className="space-y-4">
+    <div className="space-y-5">
       <MarginBadges facts={facts} history={history} />
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <FinTable title="Income Statement (Annual)" rows={INCOME_ROWS} facts={facts} history={history} />
-        <FinTable title="Balance Sheet"             rows={BALANCE_ROWS} facts={facts} />
-        <FinTable title="Cash Flow Statement"       rows={CASHFLOW_ROWS} facts={facts} history={history} />
+      <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+        {/* Tab bar */}
+        <div className="flex border-b border-[#ebebeb] bg-[#fafafa]">
+          {TABS.map(({ id, label }) => (
+            <button key={id} onClick={() => setTab(id)}
+              className={`px-5 py-3 text-[11.5px] font-semibold border-b-2 transition-colors ${
+                tab === id
+                  ? "border-[#0c1b38] text-[#0c1b38] bg-white"
+                  : "border-transparent text-[#888] hover:text-[#444]"
+              }`}>
+              {label}
+            </button>
+          ))}
+          <div className="flex-1" />
+          {tab === "income" && (
+            <span className="self-center pr-4 text-[9.5px] text-[#bbb] uppercase tracking-wider">% of Rev shown</span>
+          )}
+        </div>
+        {/* Statement body */}
+        <div className="overflow-x-auto">
+          {tab === "income"   && <FinStmtTable rows={INCOME_STMT}   facts={facts} history={history} showPctRev />}
+          {tab === "balance"  && <FinStmtTable rows={BALANCE_STMT}  facts={facts} />}
+          {tab === "cashflow" && <FinStmtTable rows={CASHFLOW_STMT} facts={facts} history={history} />}
+        </div>
       </div>
     </div>
   );
