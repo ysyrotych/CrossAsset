@@ -39,7 +39,325 @@ try:
     YF_AVAILABLE = True
 except ImportError:
     YF_AVAILABLE = False
-    print("yfinance not installed — add yfinance>=0.2.40 to requirements.txt")
+
+# ── FMP (Financial Modeling Prep) ─────────────────────────────────────────────
+
+import os as _os
+FMP_API_KEY = _os.environ.get("FMP_API_KEY", "").strip()
+FMP_BASE    = "https://financialmodelingprep.com/api/v3"
+
+def get_fmp_financials(ticker: str) -> dict:
+    """
+    Fetch full financial statements from Financial Modeling Prep.
+    Returns {} if FMP_API_KEY not set or request fails.
+    Field names follow FMP's camelCase convention — mapped below.
+    """
+    if not FMP_API_KEY:
+        return {}
+    try:
+        def fetch(path: str) -> list:
+            url = f"{FMP_BASE}/{path}?limit=6&apikey={FMP_API_KEY}"
+            r = httpx.get(url, timeout=20, headers={"User-Agent": "CrossAsset/1.0"})
+            if r.status_code != 200:
+                print(f"FMP {path}: HTTP {r.status_code}")
+                return []
+            data = r.json()
+            return data if isinstance(data, list) else []
+
+        inc_a  = fetch(f"income-statement/{ticker}")
+        bal_a  = fetch(f"balance-sheet-statement/{ticker}")
+        cf_a   = fetch(f"cash-flow-statement/{ticker}")
+        inc_q  = fetch(f"income-statement/{ticker}?period=quarter")
+        bal_q  = fetch(f"balance-sheet-statement/{ticker}?period=quarter")
+        cf_q   = fetch(f"cash-flow-statement/{ticker}?period=quarter")
+
+        if not inc_a:
+            print(f"FMP: no income statement for {ticker}")
+            return {}
+
+        print(f"FMP: {len(inc_a)} annual + {len(inc_q)} quarterly periods for {ticker}")
+        return {
+            "income_annual":   inc_a,
+            "balance_annual":  bal_a,
+            "cashflow_annual": cf_a,
+            "income_quarterly":   inc_q,
+            "balance_quarterly":  bal_q,
+            "cashflow_quarterly": cf_q,
+        }
+    except Exception as e:
+        print(f"FMP error for {ticker}: {e}")
+        return {}
+
+def _fmp_val(period: dict, *keys: str) -> Optional[float]:
+    for k in keys:
+        v = period.get(k)
+        if v is not None and v != 0:
+            return float(v)
+    return None
+
+def _fmp_series(periods: list, field: str, abs_val: bool = False) -> dict:
+    """Build {date: value} dict from a list of FMP period objects, sorted ascending."""
+    result: dict = {}
+    for p in periods:
+        dt = p.get("date", "")[:10]
+        if not dt:
+            continue
+        v = p.get(field)
+        if v is None:
+            continue
+        try:
+            fv = float(v)
+            result[dt] = abs(fv) if abs_val else fv
+        except (ValueError, TypeError):
+            continue
+    return result  # already sorted asc by FMP (newest first), we reverse below
+
+def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
+    """
+    Returns: (facts, history, qfacts, prior_q_facts, q_period, info, prior_q_period)
+    """
+    inc_a  = fmp.get("income_annual",   [])
+    bal_a  = fmp.get("balance_annual",  [])
+    cf_a   = fmp.get("cashflow_annual", [])
+    inc_q  = fmp.get("income_quarterly",   [])
+    bal_q  = fmp.get("balance_quarterly",  [])
+    cf_q   = fmp.get("cashflow_quarterly", [])
+
+    # Most recent annual period (index 0 = most recent in FMP)
+    ia = inc_a[0] if inc_a else {}
+    ba = bal_a[0] if bal_a else {}
+    ca = cf_a[0]  if cf_a  else {}
+
+    # ── Most-recent-annual facts ──────────────────────────────────────────────
+    facts: dict = {}
+
+    rev = _fmp_val(ia, "revenue")
+    if rev: facts["revenue"] = rev
+    cogs = _fmp_val(ia, "costOfRevenue")
+    if cogs: facts["cost_of_revenue"] = cogs
+    gp = _fmp_val(ia, "grossProfit")
+    if gp: facts["gross_profit"] = gp
+    rd = _fmp_val(ia, "researchAndDevelopmentExpenses")
+    if rd: facts["rd_expense"] = rd
+    sga = _fmp_val(ia, "sellingGeneralAndAdministrativeExpenses")
+    if sga: facts["sga_expense"] = sga
+    oi = _fmp_val(ia, "operatingIncome")
+    if oi: facts["operating_income"] = oi
+    ebitda = _fmp_val(ia, "ebitda")
+    if ebitda: facts["ebitda"] = ebitda
+    da = _fmp_val(ia, "depreciationAndAmortization")
+    if da: facts["da_expense"] = da
+    int_exp = _fmp_val(ia, "interestExpense")
+    if int_exp: facts["interest_expense"] = abs(int_exp)
+    pretax = _fmp_val(ia, "incomeBeforeTax")
+    if pretax: facts["pretax_income"] = pretax
+    tax = _fmp_val(ia, "incomeTaxExpense")
+    if tax: facts["income_tax"] = abs(tax)
+    ni = _fmp_val(ia, "netIncome")
+    if ni: facts["net_income"] = ni
+    eps_d = _fmp_val(ia, "epsDiluted")
+    if eps_d: facts["eps_diluted"] = eps_d
+    eps_b = _fmp_val(ia, "eps")
+    if eps_b: facts["eps_basic"] = eps_b
+    sh_d = _fmp_val(ia, "weightedAverageShsOutDil")
+    if sh_d: facts["shares_diluted_wtd"] = sh_d
+    sh_b = _fmp_val(ia, "weightedAverageShsOut")
+    if sh_b: facts["shares_basic_wtd"] = sh_b
+
+    # Balance sheet
+    cash = _fmp_val(ba, "cashAndCashEquivalents")
+    if cash: facts["cash"] = cash
+    sti = _fmp_val(ba, "shortTermInvestments")
+    if sti: facts["short_term_investments"] = sti
+    ar = _fmp_val(ba, "netReceivables")
+    if ar: facts["accounts_receivable"] = ar
+    inv = _fmp_val(ba, "inventory")
+    if inv and inv != 0: facts["inventory"] = inv
+    curr_a = _fmp_val(ba, "totalCurrentAssets")
+    if curr_a: facts["current_assets"] = curr_a
+    ppe = _fmp_val(ba, "propertyPlantEquipmentNet")
+    if ppe: facts["ppe_net"] = ppe
+    goodwill = _fmp_val(ba, "goodwill")
+    if goodwill: facts["goodwill"] = goodwill
+    intang = _fmp_val(ba, "intangibleAssets")
+    if intang: facts["intangibles"] = intang
+    total_a = _fmp_val(ba, "totalAssets")
+    if total_a: facts["total_assets"] = total_a
+    ap = _fmp_val(ba, "accountPayables")
+    if ap: facts["accounts_payable"] = ap
+    curr_l = _fmp_val(ba, "totalCurrentLiabilities")
+    if curr_l: facts["current_liabilities"] = curr_l
+    ltd = _fmp_val(ba, "longTermDebt")
+    if ltd: facts["long_term_debt"] = ltd
+    total_l = _fmp_val(ba, "totalLiabilities")
+    if total_l: facts["total_liabilities"] = total_l
+    re_ = _fmp_val(ba, "retainedEarnings")
+    if re_: facts["retained_earnings"] = re_
+    eq = _fmp_val(ba, "totalStockholdersEquity")
+    if eq: facts["equity"] = eq
+
+    # Cash flow
+    ocf = _fmp_val(ca, "operatingCashFlow")
+    if ocf: facts["operating_cf"] = ocf
+    capex = _fmp_val(ca, "capitalExpenditure")
+    if capex: facts["capex"] = capex  # FMP already negative
+    fcf = _fmp_val(ca, "freeCashFlow")
+    if fcf: facts["free_cash_flow"] = fcf
+    sbc = _fmp_val(ca, "stockBasedCompensation")
+    if sbc: facts["sbc_expense"] = sbc
+    buybacks = _fmp_val(ca, "commonStockRepurchased")
+    if buybacks: facts["buybacks"] = abs(buybacks)
+    divs = _fmp_val(ca, "dividendsPaid")
+    if divs: facts["dividends_paid"] = divs
+    inv_cf = _fmp_val(ca, "investingCashFlow")
+    if inv_cf: facts["investing_cf"] = inv_cf
+    fin_cf = _fmp_val(ca, "financingCashFlow")
+    if fin_cf: facts["financing_cf"] = fin_cf
+
+    # Derived margins
+    rev2 = facts.get("revenue"); gp2 = facts.get("gross_profit")
+    oi2  = facts.get("operating_income"); ni2 = facts.get("net_income")
+    ocf2 = facts.get("operating_cf"); cap2 = facts.get("capex")
+    tax2 = facts.get("income_tax"); pretax2 = facts.get("pretax_income")
+    if rev2 and gp2:  facts["gross_margin_pct"]     = round(gp2 / rev2 * 100, 1)
+    if rev2 and oi2:  facts["operating_margin_pct"] = round(oi2 / rev2 * 100, 1)
+    if rev2 and ni2:  facts["net_margin_pct"]        = round(ni2 / rev2 * 100, 1)
+    if ocf2 and cap2: facts["free_cash_flow"] = facts.get("free_cash_flow") or (ocf2 + cap2)
+    if oi2 and da:    facts["ebitda"] = facts.get("ebitda") or (oi2 + da)
+    if pretax2 and tax2 and pretax2 != 0:
+        facts["effective_tax_rate"] = round(abs(tax2) / abs(pretax2) * 100, 1)
+
+    # ── Multi-year history ────────────────────────────────────────────────────
+    history: dict = {}
+
+    def hs(field, periods, abs_val=False):
+        s = _fmp_series(periods, field, abs_val)
+        if s:
+            history[field] = dict(sorted(s.items()))  # sort ascending by date
+
+    # Income history
+    hs("revenue",          inc_a, False)
+    hs("cost_of_revenue",  inc_a, False)
+    hs("gross_profit",     inc_a, False)
+    hs("rd_expense",       [dict(**p, rd_expense=p.get("researchAndDevelopmentExpenses")) for p in inc_a], False)
+    # Use raw field names directly for income
+    for p in inc_a:
+        p.setdefault("rd_expense", p.get("researchAndDevelopmentExpenses"))
+        p.setdefault("sga_expense", p.get("sellingGeneralAndAdministrativeExpenses"))
+        p.setdefault("operating_income", p.get("operatingIncome"))
+        p.setdefault("ebitda", p.get("ebitda"))
+        p.setdefault("da_expense", p.get("depreciationAndAmortization"))
+        p.setdefault("interest_expense", abs(p.get("interestExpense") or 0) or None)
+        p.setdefault("pretax_income", p.get("incomeBeforeTax"))
+        p.setdefault("income_tax", abs(p.get("incomeTaxExpense") or 0) or None)
+        p.setdefault("net_income", p.get("netIncome"))
+        p.setdefault("eps_diluted", p.get("epsDiluted"))
+        p.setdefault("eps_basic", p.get("eps"))
+        p.setdefault("shares_diluted_wtd", p.get("weightedAverageShsOutDil"))
+        p.setdefault("shares_basic_wtd", p.get("weightedAverageShsOut"))
+
+    for key in ["revenue","cost_of_revenue","gross_profit","rd_expense","sga_expense",
+                "operating_income","ebitda","da_expense","interest_expense","pretax_income",
+                "income_tax","net_income","eps_diluted","eps_basic","shares_diluted_wtd","shares_basic_wtd"]:
+        hs(key, inc_a, key in ("interest_expense", "income_tax"))
+
+    # Cash flow history
+    for p in cf_a:
+        p.setdefault("operating_cf",   p.get("operatingCashFlow"))
+        p.setdefault("capex",          p.get("capitalExpenditure"))
+        p.setdefault("free_cash_flow", p.get("freeCashFlow"))
+        p.setdefault("sbc_expense",    p.get("stockBasedCompensation"))
+        p.setdefault("da_expense",     p.get("depreciationAndAmortization"))
+        p.setdefault("buybacks",       p.get("commonStockRepurchased"))
+        p.setdefault("dividends_paid", p.get("dividendsPaid"))
+        p.setdefault("investing_cf",   p.get("investingCashFlow"))
+        p.setdefault("financing_cf",   p.get("financingCashFlow"))
+
+    for key in ["operating_cf","capex","free_cash_flow","sbc_expense","da_expense",
+                "buybacks","investing_cf","financing_cf"]:
+        hs(key, cf_a, key in ("buybacks",))
+
+    # Balance sheet history (newest 5)
+    for p in bal_a:
+        p.setdefault("total_assets",        p.get("totalAssets"))
+        p.setdefault("cash",                p.get("cashAndCashEquivalents"))
+        p.setdefault("equity",              p.get("totalStockholdersEquity"))
+        p.setdefault("total_liabilities",   p.get("totalLiabilities"))
+        p.setdefault("long_term_debt",      p.get("longTermDebt"))
+        p.setdefault("current_assets",      p.get("totalCurrentAssets"))
+        p.setdefault("current_liabilities", p.get("totalCurrentLiabilities"))
+        p.setdefault("accounts_receivable", p.get("netReceivables"))
+        p.setdefault("accounts_payable",    p.get("accountPayables"))
+        p.setdefault("inventory",           p.get("inventory"))
+        p.setdefault("ppe_net",             p.get("propertyPlantEquipmentNet"))
+        p.setdefault("goodwill",            p.get("goodwill"))
+        p.setdefault("retained_earnings",   p.get("retainedEarnings"))
+
+    for key in ["total_assets","cash","equity","total_liabilities","long_term_debt",
+                "current_assets","current_liabilities","accounts_receivable","accounts_payable",
+                "inventory","ppe_net","goodwill","retained_earnings"]:
+        hs(key, bal_a)
+
+    # ── Most recent quarter ───────────────────────────────────────────────────
+    qfacts: dict = {}
+    if inc_q:
+        iq = inc_q[0]; bq = bal_q[0] if bal_q else {}; cq = cf_q[0] if cf_q else {}
+        q_period = iq.get("date", "")[:10]
+        for field, src, src_key in [
+            ("revenue",          iq, "revenue"),
+            ("cost_of_revenue",  iq, "costOfRevenue"),
+            ("gross_profit",     iq, "grossProfit"),
+            ("rd_expense",       iq, "researchAndDevelopmentExpenses"),
+            ("sga_expense",      iq, "sellingGeneralAndAdministrativeExpenses"),
+            ("operating_income", iq, "operatingIncome"),
+            ("net_income",       iq, "netIncome"),
+            ("eps_diluted",      iq, "epsDiluted"),
+            ("operating_cf",     cq, "operatingCashFlow"),
+            ("capex",            cq, "capitalExpenditure"),
+            ("free_cash_flow",   cq, "freeCashFlow"),
+            ("cash",             bq, "cashAndCashEquivalents"),
+            ("total_assets",     bq, "totalAssets"),
+            ("equity",           bq, "totalStockholdersEquity"),
+            ("current_liabilities", bq, "totalCurrentLiabilities"),
+        ]:
+            v = src.get(src_key)
+            if v is not None:
+                qfacts[field] = float(v)
+        q_rev = qfacts.get("revenue"); q_gp = qfacts.get("gross_profit")
+        q_oi  = qfacts.get("operating_income"); q_ni = qfacts.get("net_income")
+        q_ocf = qfacts.get("operating_cf"); q_cap = qfacts.get("capex")
+        if q_rev and q_gp:  qfacts["gross_margin_pct"]     = round(q_gp / q_rev * 100, 1)
+        if q_rev and q_oi:  qfacts["operating_margin_pct"] = round(q_oi / q_rev * 100, 1)
+        if q_rev and q_ni:  qfacts["net_margin_pct"]        = round(q_ni / q_rev * 100, 1)
+        if q_ocf and q_cap: qfacts["free_cash_flow"] = qfacts.get("free_cash_flow") or (q_ocf + q_cap)
+    else:
+        q_period = ""
+
+    # Prior quarter
+    pqfacts: dict = {}
+    prior_q_period = ""
+    if len(inc_q) >= 2:
+        iq2 = inc_q[1]; cq2 = cf_q[1] if len(cf_q) >= 2 else {}
+        prior_q_period = iq2.get("date", "")[:10]
+        for field, src, src_key in [
+            ("revenue",          iq2, "revenue"),
+            ("gross_profit",     iq2, "grossProfit"),
+            ("operating_income", iq2, "operatingIncome"),
+            ("net_income",       iq2, "netIncome"),
+            ("eps_diluted",      iq2, "epsDiluted"),
+            ("operating_cf",     cq2, "operatingCashFlow"),
+            ("free_cash_flow",   cq2, "freeCashFlow"),
+        ]:
+            v = src.get(src_key)
+            if v is not None:
+                pqfacts[field] = float(v)
+        pq_rev = pqfacts.get("revenue"); pq_gp = pqfacts.get("gross_profit")
+        pq_oi  = pqfacts.get("operating_income"); pq_ni = pqfacts.get("net_income")
+        if pq_rev and pq_gp:  pqfacts["gross_margin_pct"]     = round(pq_gp / pq_rev * 100, 1)
+        if pq_rev and pq_oi:  pqfacts["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
+        if pq_rev and pq_ni:  pqfacts["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
+
+    return facts, history, qfacts, pqfacts, q_period, {}, prior_q_period
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -898,58 +1216,25 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
     annual_task    = asyncio.to_thread(_get_filing, company, "10-K", want)
     quarterly_task = asyncio.to_thread(_get_filing, company, "10-Q", want)
     xbrl_task      = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
+    fmp_task       = asyncio.to_thread(get_fmp_financials, ticker)
     yf_task        = asyncio.to_thread(get_yfinance_financials, ticker)
 
-    annual, quarterly, xbrl_result, yf_data = await asyncio.gather(
-        annual_task, quarterly_task, xbrl_task, yf_task
+    annual, quarterly, xbrl_result, fmp_data, yf_data = await asyncio.gather(
+        annual_task, quarterly_task, xbrl_task, fmp_task, yf_task
     )
 
-    # Start with XBRL facts then override with yfinance (more complete, standardized)
-    merged_facts   = merge_yf_into_facts(dict(xbrl_result.get("facts", {})), yf_data)
-    merged_history = build_history_from_yf(yf_data) or xbrl_result.get("history", {})
-
-    # Quarterly XBRL is harder to get from yfinance; keep SEC XBRL for quarterly
-    qxbrl = dict(xbrl_result.get("quarterly_facts", {}))
-    # Supplement quarterly with yfinance most-recent-quarter if XBRL is sparse
-    if yf_data.get("quarterly_income"):
-        q_inc = yf_data["quarterly_income"]
-        q_bal = yf_data.get("quarterly_balance", {})
-        q_cf  = yf_data.get("quarterly_cashflow", {})
-        def qg(*args): return _yf_get(q_inc, *args, col_idx=0)
-        def qgb(*args): return _yf_get(q_bal, *args, col_idx=0)
-        def qgc(*args): return _yf_get(q_cf,  *args, col_idx=0)
-        if qg("Total Revenue") and (not qxbrl.get("revenue") or abs(qg("Total Revenue") - qxbrl.get("revenue", 0)) < 1e10):
-            if qg("Total Revenue"): qxbrl["revenue"] = qg("Total Revenue")
-            if qg("Gross Profit"): qxbrl["gross_profit"] = qg("Gross Profit")
-            if qg("Cost Of Revenue", "Reconciled Cost Of Revenue"): qxbrl["cost_of_revenue"] = qg("Cost Of Revenue", "Reconciled Cost Of Revenue")
-            if qg("Research And Development"): qxbrl["rd_expense"] = qg("Research And Development")
-            if qg("Selling General Administrative"): qxbrl["sga_expense"] = qg("Selling General Administrative")
-            if qg("Operating Income", "EBIT"): qxbrl["operating_income"] = qg("Operating Income", "EBIT")
-            if qg("Net Income"): qxbrl["net_income"] = qg("Net Income")
-            if qg("Diluted EPS"): qxbrl["eps_diluted"] = qg("Diluted EPS")
-            if qgc("Operating Cash Flow"): qxbrl["operating_cf"] = qgc("Operating Cash Flow")
-            if qgc("Capital Expenditure"): qxbrl["capex"] = qgc("Capital Expenditure")
-            if qgc("Free Cash Flow"): qxbrl["free_cash_flow"] = qgc("Free Cash Flow")
-            if qgb("Cash And Cash Equivalents"): qxbrl["cash"] = qgb("Cash And Cash Equivalents")
-            if qgb("Total Assets"): qxbrl["total_assets"] = qgb("Total Assets")
-            if qgb("Stockholders Equity", "Common Stock Equity"): qxbrl["equity"] = qgb("Stockholders Equity", "Common Stock Equity")
-            if qgb("Current Liabilities"): qxbrl["current_liabilities"] = qgb("Current Liabilities")
-            # Recalculate margins
-            qrev = qxbrl.get("revenue"); qgp = qxbrl.get("gross_profit"); qoi = qxbrl.get("operating_income"); qni = qxbrl.get("net_income")
-            if qrev and qgp: qxbrl["gross_margin_pct"] = round(qgp / qrev * 100, 1)
-            if qrev and qoi: qxbrl["operating_margin_pct"] = round(qoi / qrev * 100, 1)
-            if qrev and qni: qxbrl["net_margin_pct"] = round(qni / qrev * 100, 1)
-            qocf = qxbrl.get("operating_cf"); qcap = qxbrl.get("capex")
-            if qocf and qcap: qxbrl["free_cash_flow"] = qocf - abs(qcap)
-
-        # Most recent quarterly period from yfinance
-        q_cols = q_inc.get("columns", [])
-        if q_cols:
-            yf_q_period = q_cols[0]  # most recent first
-        else:
-            yf_q_period = xbrl_result.get("quarterly_period", "")
+    # ── Financial data priority: FMP > yfinance > XBRL ───────────────────────
+    if fmp_data:
+        print(f"Using FMP as primary financial data source for {ticker}")
+        merged_facts, merged_history, qxbrl, pqxbrl, q_period, _, prior_q_period = build_from_fmp(fmp_data)
     else:
-        yf_q_period = xbrl_result.get("quarterly_period", "")
+        print(f"FMP not available — falling back to yfinance+XBRL for {ticker}")
+        merged_facts   = merge_yf_into_facts(dict(xbrl_result.get("facts", {})), yf_data)
+        merged_history = build_history_from_yf(yf_data) or xbrl_result.get("history", {})
+        qxbrl          = dict(xbrl_result.get("quarterly_facts", {}))
+        pqxbrl         = dict(xbrl_result.get("prior_quarter_facts", {}))
+        q_period       = xbrl_result.get("quarterly_period", "")
+        prior_q_period = xbrl_result.get("prior_quarter_period", "")
 
     return AnalysisPayload(
         company=info,
@@ -958,9 +1243,9 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         xbrl_facts=merged_facts,
         history=merged_history,
         quarterly_xbrl=qxbrl,
-        quarterly_period=yf_q_period or xbrl_result.get("quarterly_period", ""),
-        prior_quarter_xbrl=xbrl_result.get("prior_quarter_facts", {}),
-        prior_quarter_period=xbrl_result.get("prior_quarter_period", ""),
+        quarterly_period=q_period,
+        prior_quarter_xbrl=pqxbrl,
+        prior_quarter_period=prior_q_period,
     )
 
 def _get_company(ticker: str):
