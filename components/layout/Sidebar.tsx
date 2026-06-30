@@ -12,6 +12,7 @@ const NAV = [
   { label: "Reaction Tracker", href: "/reaction-tracker" },
   { label: "Watchlist",        href: "/watchlist" },
   { label: "Calendar",         href: "/calendar" },
+  { label: "10K / 10Q",        href: "/10k" },
   { label: "Backtesting",      href: "/backtesting" },
   { label: "Archive",          href: "/archive" },
   { label: "Settings",         href: "/settings" },
