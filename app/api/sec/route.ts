@@ -14,10 +14,17 @@ export type AnalysisPayload = { company: CompanyInfo; annual: FilingData | null;
 // Fetch raw filing data from the Python sidecar
 async function fetchFromSidecar(ticker: string): Promise<AnalysisPayload> {
   const url = `${SEC_SERVICE}/company/${encodeURIComponent(ticker)}?sections=mda,risks,business`;
-  const r   = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(60_000) });
+  console.log("[sec] fetching:", url);
+  let r: Response;
+  try {
+    r = await fetch(url, { cache: "no-store", signal: AbortSignal.timeout(60_000) });
+  } catch (e) {
+    const cause = e instanceof Error ? `${e.message} | cause: ${JSON.stringify((e as NodeJS.ErrnoException).cause)}` : String(e);
+    throw new Error(`Network error reaching ${url} — ${cause}`);
+  }
   if (!r.ok) {
     const msg = await r.text().catch(() => `HTTP ${r.status}`);
-    throw new Error(`SEC service error: ${msg}`);
+    throw new Error(`SEC service HTTP ${r.status}: ${msg}`);
   }
   return r.json() as Promise<AnalysisPayload>;
 }
