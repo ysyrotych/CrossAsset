@@ -1,7 +1,11 @@
 "use client";
-import { useState } from "react";
+import { useState, useRef } from "react";
+import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
-import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send } from "lucide-react";
+import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown } from "lucide-react";
+
+const PDFDownloadLink = dynamic(() => import("@react-pdf/renderer").then(m => m.PDFDownloadLink), { ssr: false });
+const PrimerDocumentLazy = dynamic(() => import("@/components/PrimerPDF").then(m => m.PrimerDocument), { ssr: false });
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1443,6 +1447,11 @@ export default function TenKPage() {
   const [chatMsgs, setChatMsgs]       = useState<ChatMsg[]>([]);
   const [chatInput, setChatInput]     = useState("");
   const [chatRunning, setChatRunning] = useState(false);
+  const [primerText, setPrimerText]   = useState("");
+  const [primerRunning, setPrimerRunning] = useState(false);
+  const [primerDone, setPrimerDone]   = useState(false);
+  const [showPrimer, setShowPrimer]   = useState(false);
+  const primerRef = useRef<HTMLDivElement>(null);
 
   async function fetchFiling(sym?: string) {
     const t = (sym ?? ticker).toUpperCase().trim();
@@ -1453,6 +1462,9 @@ export default function TenKPage() {
     setData(null);
     setAiText("");
     setChatMsgs([]);
+    setPrimerText("");
+    setPrimerDone(false);
+    setShowPrimer(false);
     try {
       const r = await fetch(`/api/sec?ticker=${encodeURIComponent(t)}`);
       const j = await r.json();
@@ -1494,6 +1506,59 @@ export default function TenKPage() {
       setAiText(`Error: ${e instanceof Error ? e.message : "Unknown error"}`);
     } finally {
       setAiRunning(false);
+    }
+  }
+
+  async function generatePrimer() {
+    if (!data || primerRunning) return;
+    setPrimerRunning(true);
+    setPrimerText("");
+    setPrimerDone(false);
+    setShowPrimer(true);
+    const allSections = [
+      ...(data.annual?.sections ?? []),
+      ...(data.quarterly?.sections ?? []),
+    ];
+    try {
+      const r = await fetch("/api/generate-primer", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: data.company.ticker,
+          companyName: data.company.name,
+          industry: data.company.sic_description ?? "",
+          facts: data.xbrl_facts,
+          history: data.history ?? {},
+          quarterlyFacts: data.quarterly_xbrl ?? {},
+          quarterlyPeriod: data.quarterly_period ?? "",
+          sections: allSections,
+        }),
+      });
+      if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const raw = line.startsWith("data: ") ? line.slice(6).trim() : null;
+          if (!raw || raw === "[DONE]") continue;
+          try {
+            const j = JSON.parse(raw);
+            if (j.text) setPrimerText(p => p + j.text);
+            if (j.error) setPrimerText(p => p + `\n\nError: ${j.error}`);
+          } catch { /* skip */ }
+        }
+      }
+      setPrimerDone(true);
+    } catch (e) {
+      setPrimerText(`Error: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setPrimerRunning(false);
     }
   }
 
@@ -1729,6 +1794,101 @@ export default function TenKPage() {
               </button>
             </div>
             <SectionViewer annual={data.annual} quarterly={data.quarterly} ticker={data.company.ticker} />
+          </div>
+
+          {/* ── Company Primer Generator ──────────────────────────────────── */}
+          <div className="border border-[#d0d7e8] rounded-lg overflow-hidden">
+            <div className="px-5 py-4 bg-gradient-to-r from-[#0c1b38] to-[#152a55] flex items-center justify-between gap-4">
+              <div>
+                <div className="flex items-center gap-2 mb-1">
+                  <FileDown size={13} className="text-white/60" />
+                  <p className="text-[12px] font-bold text-white tracking-wide">Company Primer</p>
+                </div>
+                <p className="text-[10.5px] text-white/40">
+                  Institutional-grade equity research primer — business overview, industry analysis, financial deep-dive, bull/bear thesis. Download as PDF.
+                </p>
+              </div>
+              <div className="flex items-center gap-2 shrink-0">
+                {primerDone && (
+                  <button onClick={() => setShowPrimer(v => !v)}
+                    className="px-3 py-1.5 border border-white/20 text-white/70 text-[10.5px] font-semibold rounded hover:bg-white/10 transition-colors">
+                    {showPrimer ? "Hide Preview" : "Show Preview"}
+                  </button>
+                )}
+                <button onClick={generatePrimer} disabled={primerRunning}
+                  className="flex items-center gap-2 px-4 py-2 bg-white text-[#0c1b38] text-[11.5px] font-bold rounded-md hover:bg-white/90 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                  {primerRunning
+                    ? <><span className="w-3 h-3 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin" /> Writing Primer…</>
+                    : <><FileDown size={13} /> {primerDone ? "Regenerate" : "Generate Primer"}</>}
+                </button>
+              </div>
+            </div>
+
+            {/* Generation progress */}
+            {primerRunning && (
+              <div className="px-5 py-3 border-b border-[#ebebeb] bg-[#fafafa]">
+                <div className="flex items-center gap-2 mb-2">
+                  <span className="w-2 h-2 rounded-full bg-[#0c1b38] animate-pulse" />
+                  <span className="text-[10.5px] font-semibold text-[#0c1b38]">
+                    {primerText.length < 200 ? "Starting analysis…"
+                      : primerText.includes("## BUSINESS OVERVIEW") ? "Writing business overview…"
+                      : primerText.includes("## INDUSTRY ANALYSIS") ? "Analyzing industry dynamics…"
+                      : primerText.includes("## FINANCIAL ANALYSIS") ? "Building financial analysis…"
+                      : primerText.includes("## KEY RISKS") ? "Identifying key risks…"
+                      : primerText.includes("## INVESTMENT THESIS") ? "Forming investment thesis…"
+                      : "Writing executive summary…"}
+                  </span>
+                  <span className="text-[10px] text-[#bbb] ml-auto">{primerText.split(/\s+/).filter(Boolean).length} words</span>
+                </div>
+                <div className="h-1.5 bg-[#ebebeb] rounded-full overflow-hidden">
+                  <div className="h-full bg-[#0c1b38] rounded-full transition-all duration-500"
+                    style={{ width: `${Math.min(100, (primerText.length / 8000) * 100)}%` }} />
+                </div>
+              </div>
+            )}
+
+            {/* Primer preview */}
+            {showPrimer && primerText && (
+              <div ref={primerRef} className="p-6 border-b border-[#ebebeb]">
+                {/* Download PDF button */}
+                {primerDone && (
+                  <div className="flex items-center justify-between mb-5">
+                    <p className="text-[10px] font-bold uppercase tracking-widest text-[#0c1b38]">
+                      {data.company.name} — Equity Research Primer
+                    </p>
+                    <div className="flex items-center gap-2">
+                      <button onClick={() => navigator.clipboard.writeText(primerText)}
+                        className="text-[10.5px] text-[#999] hover:text-[#0c1b38] font-medium border border-[#e8e8e8] px-2.5 py-1 rounded transition-colors">
+                        Copy Markdown
+                      </button>
+                      {typeof window !== "undefined" && (
+                        <PDFDownloadLink
+                          document={
+                            <PrimerDocumentLazy
+                              ticker={data.company.ticker}
+                              companyName={data.company.name}
+                              industry={data.company.sic_description ?? ""}
+                              content={primerText}
+                              generatedDate={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                              history={data.history ?? {}}
+                              facts={data.xbrl_facts}
+                            />
+                          }
+                          fileName={`${data.company.ticker}_Primer_${new Date().toISOString().slice(0,10)}.pdf`}
+                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0c1b38] text-white text-[10.5px] font-bold rounded hover:bg-[#1a3361] transition-colors">
+                          {({ loading: pdfLoading }) =>
+                            pdfLoading
+                              ? "Generating PDF…"
+                              : <><FileDown size={11} /> Download PDF</>}
+                        </PDFDownloadLink>
+                      )}
+                    </div>
+                  </div>
+                )}
+                {/* Rendered primer content */}
+                <BriefBody text={primerText} />
+              </div>
+            )}
           </div>
 
           {/* Optional AI Note */}
