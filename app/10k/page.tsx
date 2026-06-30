@@ -650,6 +650,13 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
 
   if (!ratios.length) return null;
 
+  // DuPont decomposition: ROE = Net Margin × Asset Turnover × Equity Multiplier
+  const netMarginPct = f.net_margin_pct;
+  const assetTO      = assetTurnover;
+  const equityMult   = f.total_assets != null && f.equity != null && f.equity !== 0
+    ? f.total_assets / f.equity : null;
+  const showDuPont   = netMarginPct != null && assetTO != null && equityMult != null;
+
   return (
     <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
@@ -658,6 +665,23 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
       <div className="p-4 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
         {ratios.map(r => <RatioCard key={r.label} {...r} />)}
       </div>
+      {showDuPont && (
+        <div className="border-t border-[#ebebeb] px-4 py-3 bg-[#fafafa]">
+          <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#999] mb-2">DuPont ROE Decomposition</p>
+          <div className="flex items-center gap-1.5 flex-wrap">
+            <span className="text-[11px] font-bold text-[#0c1b38]">{roe?.toFixed(1)}% ROE</span>
+            <span className="text-[10px] text-[#bbb]">=</span>
+            <span className="text-[11px] font-semibold text-[#444]">{netMarginPct!.toFixed(1)}% Net Margin</span>
+            <span className="text-[10px] text-[#bbb]">×</span>
+            <span className="text-[11px] font-semibold text-[#444]">{assetTO!.toFixed(2)}× Asset Turnover</span>
+            <span className="text-[10px] text-[#bbb]">×</span>
+            <span className="text-[11px] font-semibold text-[#444]">{equityMult!.toFixed(2)}× Equity Multiplier</span>
+            <span className="text-[9px] text-[#bbb] ml-1">
+              {equityMult! > 3 ? "— leverage-driven" : netMarginPct! > 20 ? "— margin-driven" : assetTO! > 1.5 ? "— efficiency-driven" : ""}
+            </span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -763,6 +787,17 @@ function QualityScorecard({
     const goodwillPct = f.goodwill / f.total_assets * 100;
     if (goodwillPct > 40) signals.push({ label: "Goodwill Risk", detail: `Goodwill = ${goodwillPct.toFixed(0)}% of total assets — M&A heavy, impairment risk`, type: "red" });
     else if (goodwillPct > 20) signals.push({ label: "Goodwill", detail: `Goodwill = ${goodwillPct.toFixed(0)}% of assets — moderate M&A exposure`, type: "yellow" });
+  }
+
+  // Accruals ratio (earnings quality): (NI - OCF) / Total Assets
+  // Positive = income > cash (potential concern); negative = cash > income (strong quality)
+  if (f.net_income != null && f.operating_cf != null && f.total_assets != null && f.total_assets > 0) {
+    const accruals = f.net_income - f.operating_cf;
+    const accrualsRatio = (accruals / f.total_assets) * 100;
+    if (accrualsRatio < -5) signals.push({ label: "Earnings Quality", detail: `Accruals ratio ${accrualsRatio.toFixed(1)}% — cash earnings significantly exceed reported income`, type: "green" });
+    else if (accrualsRatio <= 5) signals.push({ label: "Earnings Quality", detail: `Accruals ratio ${accrualsRatio.toFixed(1)}% — income and cash flow aligned`, type: "green" });
+    else if (accrualsRatio <= 15) signals.push({ label: "Earnings Quality", detail: `Accruals ratio +${accrualsRatio.toFixed(1)}% — income ahead of cash; monitor closely`, type: "yellow" });
+    else signals.push({ label: "Earnings Quality", detail: `Accruals ratio +${accrualsRatio.toFixed(1)}% — significant accruals gap, earnings quality concern`, type: "red" });
   }
 
   if (!signals.length) return null;

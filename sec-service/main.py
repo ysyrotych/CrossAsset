@@ -270,7 +270,9 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
                get_latest_flow("ShareBasedCompensationExpense"))
         if sbc is not None: r["sbc_expense"] = sbc
 
-        capex = get_latest_flow("PaymentsToAcquirePropertyPlantAndEquipment")
+        capex = (get_latest_flow("PaymentsToAcquirePropertyPlantAndEquipment") or
+                 get_latest_flow("PaymentsForCapitalImprovements") or
+                 get_latest_flow("PaymentsToAcquireProductiveAssets"))
         if capex is not None: r["capex"] = capex
 
         acq = get_latest_flow("PaymentsToAcquireBusinessesNetOfCashAcquired")
@@ -300,6 +302,23 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
 
         print(f"XBRL SEC API: extracted {len(r)} facts for CIK {cik}")
 
+        # ── Helpers: BS history (point-in-time, dedupe by end date) ─────────
+        def get_history_bs(concept: str, years: int = 2) -> dict:
+            entries = get_entries(concept)
+            if not entries:
+                return {}
+            annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
+            if not annual:
+                return {}
+            by_end: dict = {}
+            for e in annual:
+                end = e.get("end", "")
+                val = safe_float(e["val"])
+                if val is not None and (end not in by_end or abs(val) > abs(by_end[end])):
+                    by_end[end] = val
+            sorted_ends = sorted(by_end.keys(), reverse=True)[:years]
+            return {k: by_end[k] for k in sorted(sorted_ends)}
+
         # ── 5-year history ────────────────────────────────────────────────────
         history: dict = {}
         rev_hist = (get_history_flow("Revenues") or
@@ -319,6 +338,27 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
 
         ocf_hist = get_history_flow("NetCashProvidedByUsedInOperatingActivities")
         if ocf_hist: history["operating_cf"] = ocf_hist
+
+        # Balance sheet: 2-year history for YoY comparisons on BS tab
+        assets_h = get_history_bs("Assets")
+        if assets_h: history["total_assets"] = assets_h
+
+        cash_h = (get_history_bs("CashAndCashEquivalentsAtCarryingValue") or
+                  get_history_bs("CashCashEquivalentsAndShortTermInvestments"))
+        if cash_h: history["cash"] = cash_h
+
+        eq_h = (get_history_bs("StockholdersEquity") or
+                get_history_bs("StockholdersEquityAttributableToParent"))
+        if eq_h: history["equity"] = eq_h
+
+        liab_h = get_history_bs("Liabilities")
+        if liab_h: history["total_liabilities"] = liab_h
+
+        ltd_h = (get_history_bs("LongTermDebt") or get_history_bs("LongTermDebtNoncurrent"))
+        if ltd_h: history["long_term_debt"] = ltd_h
+
+        curr_a_h = get_history_bs("AssetsCurrent")
+        if curr_a_h: history["current_assets"] = curr_a_h
 
         # ── Most recent single quarter (10-Q, ~80–100 days) ─────────────────
         def get_latest_q_flow(concept: str) -> Optional[float]:
