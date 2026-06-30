@@ -9,7 +9,7 @@ const SEC_SERVICE = (process.env.SEC_SERVICE_URL ?? "http://localhost:8000").tri
 export type FilingSection = { item: string; title: string; text: string; char_count: number };
 export type FilingData    = { form_type: string; accession: string; filed_date: string; period_of_report: string; sections: FilingSection[]; raw_financials: Record<string, number> };
 export type CompanyInfo   = { ticker: string; name: string; cik: string; sic: string; sic_description: string };
-export type AnalysisPayload = { company: CompanyInfo; annual: FilingData | null; quarterly: FilingData | null; xbrl_facts: Record<string, number>; history: Record<string, Record<string, number>>; quarterly_xbrl: Record<string, number>; quarterly_period: string };
+export type AnalysisPayload = { company: CompanyInfo; annual: FilingData | null; quarterly: FilingData | null; xbrl_facts: Record<string, number>; history: Record<string, Record<string, number>>; quarterly_xbrl: Record<string, number>; quarterly_period: string; prior_quarter_xbrl: Record<string, number>; prior_quarter_period: string };
 
 // Fetch raw filing data from the Python sidecar
 async function fetchFromSidecar(ticker: string): Promise<AnalysisPayload> {

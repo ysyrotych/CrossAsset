@@ -485,8 +485,46 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         if q_ocf is not None and q_capex is not None:
             qr["free_cash_flow"] = q_ocf - abs(q_capex)
 
-        # Period label for most recent quarter
+        # Prior quarter flow (QoQ comparison) — second-most-recent 10-Q single period
+        def get_prior_q_flow(concept: str) -> Optional[float]:
+            entries = get_entries(concept)
+            if not entries:
+                return None
+            q = [e for e in entries
+                 if e.get("form") == "10-Q" and e.get("val") is not None
+                 and 75 <= _duration_days(e) <= 105]
+            if len(q) < 2:
+                return None
+            q.sort(key=lambda e: e.get("end", ""), reverse=True)
+            return safe_float(q[1]["val"])
+
+        pqr: dict = {}
+        pq_rev = (get_prior_q_flow("Revenues") or
+                  get_prior_q_flow("RevenueFromContractWithCustomerExcludingAssessedTax"))
+        if pq_rev is not None: pqr["revenue"] = pq_rev
+
+        pq_gp = get_prior_q_flow("GrossProfit")
+        if pq_gp is not None: pqr["gross_profit"] = pq_gp
+
+        pq_oi = get_prior_q_flow("OperatingIncomeLoss")
+        if pq_oi is not None: pqr["operating_income"] = pq_oi
+
+        pq_ni = get_prior_q_flow("NetIncomeLoss")
+        if pq_ni is not None: pqr["net_income"] = pq_ni
+
+        pq_ocf = get_prior_q_flow("NetCashProvidedByUsedInOperatingActivities")
+        if pq_ocf is not None: pqr["operating_cf"] = pq_ocf
+
+        pq_eps = get_prior_q_flow("EarningsPerShareDiluted")
+        if pq_eps is not None: pqr["eps_diluted"] = pq_eps
+
+        if pq_rev and pq_gp:  pqr["gross_margin_pct"]     = round(pq_gp / pq_rev * 100, 1)
+        if pq_rev and pq_oi:  pqr["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
+        if pq_rev and pq_ni:  pqr["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
+
+        # Period labels
         q_period = ""
+        prior_q_period = ""
         rev_entries_all = get_entries("Revenues") or get_entries("RevenueFromContractWithCustomerExcludingAssessedTax")
         if rev_entries_all:
             qpe = [e for e in rev_entries_all
@@ -495,9 +533,18 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
             if qpe:
                 qpe.sort(key=lambda e: e.get("end", ""), reverse=True)
                 q_period = qpe[0].get("end", "")
+                if len(qpe) >= 2:
+                    prior_q_period = qpe[1].get("end", "")
 
         print(f"XBRL SEC API: {len(r)} annual + {len(qr)} quarterly facts for CIK {cik}")
-        return {"facts": r, "history": history, "quarterly_facts": qr, "quarterly_period": q_period}
+        return {
+            "facts": r,
+            "history": history,
+            "quarterly_facts": qr,
+            "quarterly_period": q_period,
+            "prior_quarter_facts": pqr,
+            "prior_quarter_period": prior_q_period,
+        }
 
     except Exception as e:
         print(f"XBRL SEC API error for CIK {cik}: {e}")
@@ -534,6 +581,8 @@ class AnalysisPayload(BaseModel):
     history: dict = {}
     quarterly_xbrl: dict = {}
     quarterly_period: str = ""
+    prior_quarter_xbrl: dict = {}
+    prior_quarter_period: str = ""
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -576,6 +625,8 @@ async def get_company_analysis(ticker: str, sections: str = "mda,risks,business"
         history=xbrl_result.get("history", {}),
         quarterly_xbrl=xbrl_result.get("quarterly_facts", {}),
         quarterly_period=xbrl_result.get("quarterly_period", ""),
+        prior_quarter_xbrl=xbrl_result.get("prior_quarter_facts", {}),
+        prior_quarter_period=xbrl_result.get("prior_quarter_period", ""),
     )
 
 def _get_company(ticker: str):

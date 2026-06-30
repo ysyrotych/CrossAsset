@@ -16,6 +16,8 @@ type Payload       = {
   history: Record<string, Record<string, number>>;
   quarterly_xbrl: Record<string, number>;
   quarterly_period: string;
+  prior_quarter_xbrl: Record<string, number>;
+  prior_quarter_period: string;
 };
 
 // ── Quick-picks ───────────────────────────────────────────────────────────────
@@ -882,32 +884,38 @@ function QualityScorecard({
 
 // ── Quarterly vs Annual Snapshot ──────────────────────────────────────────────
 
-function QuarterlySnapshot({ annual, quarterly, period }: {
+function QuarterlySnapshot({ annual, quarterly, period, priorQuarter, priorPeriod }: {
   annual: Record<string, number>;
   quarterly: Record<string, number>;
   period: string;
+  priorQuarter: Record<string, number>;
+  priorPeriod: string;
 }) {
   if (!Object.keys(quarterly).length) return null;
 
   const ROWS: { key: string; label: string; prefix?: string; suffix?: string }[] = [
-    { key: "revenue",           label: "Revenue",          prefix: "$" },
-    { key: "gross_margin_pct",  label: "Gross Margin",     suffix: "%" },
-    { key: "operating_income",  label: "Operating Income", prefix: "$" },
-    { key: "operating_margin_pct", label: "Op. Margin",   suffix: "%" },
-    { key: "net_income",        label: "Net Income",       prefix: "$" },
-    { key: "net_margin_pct",    label: "Net Margin",       suffix: "%" },
-    { key: "operating_cf",      label: "Operating CF",     prefix: "$" },
-    { key: "free_cash_flow",    label: "Free Cash Flow",   prefix: "$" },
-    { key: "eps_diluted",       label: "EPS (Diluted)",    prefix: "$" },
+    { key: "revenue",              label: "Revenue",          prefix: "$" },
+    { key: "gross_margin_pct",     label: "Gross Margin",     suffix: "%" },
+    { key: "operating_income",     label: "Operating Income", prefix: "$" },
+    { key: "operating_margin_pct", label: "Op. Margin",       suffix: "%" },
+    { key: "net_income",           label: "Net Income",       prefix: "$" },
+    { key: "net_margin_pct",       label: "Net Margin",       suffix: "%" },
+    { key: "operating_cf",         label: "Operating CF",     prefix: "$" },
+    { key: "free_cash_flow",       label: "Free Cash Flow",   prefix: "$" },
+    { key: "eps_diluted",          label: "EPS (Diluted)",    prefix: "$" },
   ].filter(r => quarterly[r.key] != null);
 
   if (!ROWS.length) return null;
 
-  const annualizedQuarterly = (key: string, val: number) => {
+  const hasQoQ = Object.keys(priorQuarter).length > 0;
+
+  const annualizedQ = (key: string, val: number) => {
     if (["revenue","gross_profit","operating_income","net_income","operating_cf","free_cash_flow","rd_expense","sga_expense"].includes(key))
       return val * 4;
     return null;
   };
+
+  const shortDate = (d: string) => d ? d.slice(0, 7) : "Prev Q";
 
   return (
     <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
@@ -915,14 +923,16 @@ function QuarterlySnapshot({ annual, quarterly, period }: {
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">
           Most Recent Quarter vs Annual — {period || "Latest Quarter"}
         </p>
-        <p className="text-[9px] text-white/40 uppercase tracking-wider">Single quarter | (×4 implied annual)</p>
+        <p className="text-[9px] text-white/40 uppercase tracking-wider">Single quarter | ×4 implied annual</p>
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px]">
+        <table className="w-full min-w-[600px]">
           <thead>
             <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
               <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-40">Metric</th>
-              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Quarter</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{shortDate(period)} MRQ</th>
+              {hasQoQ && <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{shortDate(priorPeriod)}</th>}
+              {hasQoQ && <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">QoQ</th>}
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Implied Ann.</th>
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Annual (10-K)</th>
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">vs Annual</th>
@@ -930,30 +940,42 @@ function QuarterlySnapshot({ annual, quarterly, period }: {
           </thead>
           <tbody>
             {ROWS.map(({ key, label, prefix = "", suffix = "" }, i) => {
-              const qVal = quarterly[key];
-              const aVal = annual[key];
-              const implied = annualizedQuarterly(key, qVal);
-              const pct = aVal != null && aVal !== 0 && implied != null
+              const qVal  = quarterly[key];
+              const pqVal = priorQuarter[key] ?? null;
+              const aVal  = annual[key];
+              const implied = annualizedQ(key, qVal);
+              const vsAnnual = aVal != null && aVal !== 0 && implied != null
                 ? ((implied - aVal) / Math.abs(aVal)) * 100 : null;
-              const isEven = i % 2 === 0;
+              const qoq = pqVal != null && pqVal !== 0
+                ? ((qVal - pqVal) / Math.abs(pqVal)) * 100 : null;
+              const isEven  = i % 2 === 0;
               const isMargin = suffix === "%";
+
+              const pctSpan = (val: number | null) => val == null
+                ? <span className="text-[#ddd]">—</span>
+                : <span style={{ color: val >= 0 ? "#0d6b45" : "#b42318" }} className="font-semibold">{val >= 0 ? "▲" : "▼"}{Math.abs(val).toFixed(1)}%</span>;
+
               return (
                 <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${isEven ? "bg-white" : "bg-[#fafafa]"}`}>
                   <td className="px-4 py-2 text-[11.5px] font-semibold text-[#333]">{label}</td>
-                  <td className="px-3 py-2 text-right text-[12px] font-medium tabular-nums text-[#0a0a0a]">
+                  <td className="px-3 py-2 text-right text-[12px] font-bold tabular-nums text-[#0a0a0a]">
                     {fmtNum(qVal, prefix, suffix)}
                   </td>
+                  {hasQoQ && (
+                    <td className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#888]">
+                      {pqVal != null ? fmtNum(pqVal, prefix, suffix) : "—"}
+                    </td>
+                  )}
+                  {hasQoQ && (
+                    <td className="px-3 py-2 text-right text-[11px] tabular-nums">{pctSpan(qoq)}</td>
+                  )}
                   <td className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#888]">
                     {!isMargin && implied != null ? fmtNum(implied, prefix) : "—"}
                   </td>
                   <td className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#555]">
                     {aVal != null ? fmtNum(aVal, prefix, suffix) : "—"}
                   </td>
-                  <td className="px-3 py-2 text-right text-[11px] font-semibold tabular-nums">
-                    {pct != null
-                      ? <span style={{ color: pct >= 0 ? "#0d6b45" : "#b42318" }}>{pct >= 0 ? "▲" : "▼"}{Math.abs(pct).toFixed(1)}%</span>
-                      : <span className="text-[#ddd]">—</span>}
-                  </td>
+                  <td className="px-3 py-2 text-right text-[11px] tabular-nums">{pctSpan(vsAnnual)}</td>
                 </tr>
               );
             })}
@@ -1207,6 +1229,8 @@ export default function TenKPage() {
                 annual={data.xbrl_facts}
                 quarterly={data.quarterly_xbrl}
                 period={data.quarterly_period}
+                priorQuarter={data.prior_quarter_xbrl ?? {}}
+                priorPeriod={data.prior_quarter_period ?? ""}
               />
             </div>
           )}
