@@ -13,7 +13,7 @@ export type AnalysisPayload = { company: CompanyInfo; annual: FilingData | null;
 
 // Fetch raw filing data from the Python sidecar
 async function fetchFromSidecar(ticker: string): Promise<AnalysisPayload> {
-  const url = `${SEC_SERVICE}/company/${encodeURIComponent(ticker)}?sections=mda,risks,business`;
+  const url = `${SEC_SERVICE}/company/${encodeURIComponent(ticker)}?sections=business,risks,cybersecurity,properties,legal,mda,quantitative,controls,accountant_fees,q_quantitative,q_controls,q_legal`;
   console.log("[sec] SEC_SERVICE_URL env:", process.env.SEC_SERVICE_URL);
   console.log("[sec] fetching:", url);
   let r: Response;

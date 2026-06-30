@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp } from "lucide-react";
+import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -452,7 +452,7 @@ function highlightText(text: string, query: string): React.ReactNode[] {
   );
 }
 
-function SectionBody({ text, query, expanded }: { text: string; query: string; expanded: boolean }) {
+function SectionBody({ text, query }: { text: string; query: string }) {
   const cleaned = text
     .replace(/^(ITEM\s+\d+[A-Z]?\s*[\.\-—]+\s*[^\n]*\n)/im, "")
     .replace(/\n{3,}/g, "\n\n")
@@ -460,9 +460,9 @@ function SectionBody({ text, query, expanded }: { text: string; query: string; e
 
   const paragraphs = cleaned.split(/\n\n+/).map(p => p.trim()).filter(Boolean);
   const lq = query.trim().toLowerCase();
-  const visible = !lq
-    ? (expanded ? paragraphs : paragraphs.slice(0, 25))
-    : paragraphs.filter(p => p.toLowerCase().includes(lq));
+  const visible = lq
+    ? paragraphs.filter(p => p.toLowerCase().includes(lq))
+    : paragraphs;
 
   if (!visible.length) return (
     <p className="text-[12px] text-[#bbb] py-6 text-center italic">No paragraphs match "{query}"</p>
@@ -480,31 +480,52 @@ function SectionBody({ text, query, expanded }: { text: string; query: string; e
           <p key={i} className="text-[12.5px] text-[#2c2c2c] leading-[1.8]">{highlightText(para, query)}</p>
         );
       })}
-      {!lq && !expanded && paragraphs.length > 25 && (
-        <p className="text-[10.5px] text-[#bbb] italic pt-2">{paragraphs.length - 25} more paragraphs hidden — click "Show full" to expand</p>
-      )}
     </div>
   );
 }
 
 // ── Section viewer ────────────────────────────────────────────────────────────
 
-const SECTION_TABS = [
-  { key: "business", label: "Business Overview",  src: "annual"    },
-  { key: "risks",    label: "Risk Factors",        src: "annual"    },
-  { key: "mda",      label: "MD&A Annual",         src: "annual"    },
-  { key: "mda_q",    label: "MD&A Quarterly",      src: "quarterly" },
+type SectionTab = { key: string; label: string; src: "annual" | "quarterly"; item: string };
+
+const SECTION_TABS: SectionTab[] = [
+  // 10-K sections
+  { key: "business",        label: "Business",        src: "annual",    item: "business" },
+  { key: "risks",           label: "Risk Factors",    src: "annual",    item: "risks" },
+  { key: "cybersecurity",   label: "Cybersecurity",   src: "annual",    item: "cybersecurity" },
+  { key: "properties",      label: "Properties",      src: "annual",    item: "properties" },
+  { key: "legal",           label: "Legal",           src: "annual",    item: "legal" },
+  { key: "mda",             label: "MD&A Annual",     src: "annual",    item: "mda" },
+  { key: "quantitative",    label: "Market Risk",     src: "annual",    item: "quantitative" },
+  { key: "controls",        label: "Controls 9A",     src: "annual",    item: "controls" },
+  { key: "accountant_fees", label: "Acct Fees",       src: "annual",    item: "accountant_fees" },
+  // 10-Q sections
+  { key: "mda_q",           label: "MD&A (Q)",        src: "quarterly", item: "mda" },
+  { key: "q_quantitative",  label: "Market Risk (Q)", src: "quarterly", item: "q_quantitative" },
+  { key: "q_controls",      label: "Controls (Q)",    src: "quarterly", item: "q_controls" },
+  { key: "q_legal",         label: "Legal (Q)",       src: "quarterly", item: "q_legal" },
 ];
 
-function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quarterly: FilingData | null }) {
-  const [active, setActive]   = useState("business");
-  const [expanded, setExpanded] = useState(false);
-  const [query, setQuery]     = useState("");
-  const [copied, setCopied]   = useState(false);
+function SectionViewer({ annual, quarterly, ticker }: {
+  annual: FilingData | null;
+  quarterly: FilingData | null;
+  ticker: string;
+}) {
+  const [active, setActive] = useState("business");
+  const [query, setQuery]   = useState("");
+  const [copied, setCopied] = useState(false);
+  const [summaries, setSummaries] = useState<Record<string, string>>({});
+  const [summarizing, setSummarizing] = useState<string | null>(null);
+  const [showSummary, setShowSummary] = useState<Record<string, boolean>>({});
 
-  const section = active === "mda_q"
-    ? quarterly?.sections.find(s => s.item === "mda")
-    : annual?.sections.find(s => s.item === active);
+  const tab = SECTION_TABS.find(t => t.key === active) ?? SECTION_TABS[0];
+  const filing = tab.src === "annual" ? annual : quarterly;
+  const section = filing?.sections.find(s => s.item === tab.item);
+
+  const hasSec = (t: SectionTab) => {
+    const f = t.src === "annual" ? annual : quarterly;
+    return f?.sections.some(s => s.item === t.item) ?? false;
+  };
 
   function copyText() {
     if (!section) return;
@@ -514,29 +535,75 @@ function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quart
     });
   }
 
+  async function summarize() {
+    if (!section || summarizing) return;
+    const key = active;
+    if (summaries[key]) {
+      setShowSummary(s => ({ ...s, [key]: !s[key] }));
+      return;
+    }
+    setSummarizing(key);
+    setShowSummary(s => ({ ...s, [key]: true }));
+    let text = "";
+    try {
+      const r = await fetch("/api/summarize-section", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title: section.title, text: section.text, ticker }),
+      });
+      if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        for (const line of dec.decode(value, { stream: true }).split("\n")) {
+          const raw = line.startsWith("data: ") ? line.slice(6).trim() : null;
+          if (!raw || raw === "[DONE]") continue;
+          try {
+            const j = JSON.parse(raw);
+            if (j.text) { text += j.text; setSummaries(s => ({ ...s, [key]: text })); }
+          } catch { /* skip */ }
+        }
+      }
+    } catch (e) {
+      setSummaries(s => ({ ...s, [key]: `Error: ${e instanceof Error ? e.message : "Unknown"}` }));
+    } finally {
+      setSummarizing(null);
+    }
+  }
+
   const wordCount = section ? section.text.split(/\s+/).filter(Boolean).length : 0;
+  const thisSummary = summaries[active];
+  const summaryVisible = showSummary[active] !== false && !!thisSummary;
 
   return (
     <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      {/* Header */}
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
+        <BookOpen size={12} className="text-white/40" />
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Filing Sections</p>
+        <span className="ml-auto text-[9px] text-white/30">Full text — all 10-K & 10-Q items</span>
+      </div>
+
       {/* Tab bar */}
       <div className="flex border-b border-[#ebebeb] bg-[#fafafa] overflow-x-auto">
-        {SECTION_TABS.map(({ key, label }) => {
-          const hasSec = key === "mda_q"
-            ? quarterly?.sections.some(s => s.item === "mda")
-            : annual?.sections.some(s => s.item === key);
+        {SECTION_TABS.map(t => {
+          const has = hasSec(t);
           return (
-            <button key={key}
-              onClick={() => { setActive(key); setExpanded(false); setQuery(""); }}
-              disabled={!hasSec}
-              className={`px-4 py-3 text-[11.5px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
-                active === key
+            <button key={t.key}
+              onClick={() => { setActive(t.key); setQuery(""); }}
+              disabled={!has}
+              className={`px-3.5 py-2.5 text-[11px] font-semibold border-b-2 transition-colors whitespace-nowrap ${
+                active === t.key
                   ? "border-[#0c1b38] text-[#0c1b38] bg-white"
-                  : hasSec
+                  : has
                     ? "border-transparent text-[#888] hover:text-[#444]"
                     : "border-transparent text-[#ccc] cursor-not-allowed"
               }`}>
-              {label}
-              {!hasSec && <span className="ml-1 text-[9px]">—</span>}
+              {t.label}
+              {!has && <span className="ml-1 text-[9px] opacity-50">—</span>}
+              {summaries[t.key] && <span className="ml-1 text-[8px] text-[#0d6b45] font-bold">✓</span>}
             </button>
           );
         })}
@@ -544,44 +611,62 @@ function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quart
 
       {section ? (
         <>
-          {/* Section meta + controls */}
-          <div className="flex items-center gap-3 px-5 py-3 border-b border-[#f0f0f0] bg-[#fdfcfc] flex-wrap">
+          {/* Controls */}
+          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#f0f0f0] bg-[#fdfcfc] flex-wrap">
             <div className="flex-1 min-w-0">
               <p className="text-[11.5px] font-semibold text-[#0a0a0a] truncate">{section.title}</p>
-              <p className="text-[9.5px] text-[#bbb] mt-0.5">{wordCount.toLocaleString()} words · {section.char_count.toLocaleString()} chars</p>
+              <p className="text-[9.5px] text-[#bbb] mt-0.5">{wordCount.toLocaleString()} words · {section.char_count.toLocaleString()} chars · full text</p>
             </div>
-            {/* Search box */}
             <div className="relative">
               <Search size={11} className="absolute left-2.5 top-1/2 -translate-y-1/2 text-[#ccc]" />
-              <input
-                value={query}
-                onChange={e => setQuery(e.target.value)}
+              <input value={query} onChange={e => setQuery(e.target.value)}
                 placeholder="Search in section…"
-                className="pl-7 pr-3 py-1.5 text-[11px] border border-[#e0e0e0] rounded w-44 focus:outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 placeholder:text-[#ddd]"
-              />
+                className="pl-7 pr-3 py-1.5 text-[11px] border border-[#e0e0e0] rounded w-40 focus:outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 placeholder:text-[#ddd]" />
             </div>
             <button onClick={copyText}
               className="text-[10px] font-semibold px-2.5 py-1.5 border border-[#e8e8e8] rounded text-[#666] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors shrink-0">
               {copied ? "✓ Copied" : "Copy"}
             </button>
-            <button onClick={() => setExpanded(e => !e)}
-              className="flex items-center gap-1 text-[10px] text-[#0c1b38] font-semibold hover:underline shrink-0">
-              {expanded ? <><ChevronUp size={11}/> Collapse</> : <><ChevronDown size={11}/> Expand</>}
+            <button onClick={summarize} disabled={!!summarizing}
+              className={`flex items-center gap-1.5 px-3 py-1.5 text-[10.5px] font-semibold rounded border transition-colors shrink-0 ${
+                thisSummary
+                  ? "border-[#0d6b45] text-[#0d6b45] bg-[#f0faf5] hover:bg-[#e0f5ea]"
+                  : "border-[#0c1b38] text-white bg-[#0c1b38] hover:bg-[#1a3361]"
+              } disabled:opacity-50 disabled:cursor-not-allowed`}>
+              {summarizing === active
+                ? <><span className="w-2.5 h-2.5 border border-current border-t-transparent rounded-full animate-spin" /> Summarizing…</>
+                : thisSummary
+                  ? <><BookOpen size={10}/> {showSummary[active] !== false ? "Hide" : "Show"} Summary</>
+                  : <><Sparkles size={10}/> Summarize</>}
             </button>
           </div>
 
-          {/* Section body */}
-          <div className={`px-5 py-4 relative ${!expanded && !query ? "max-h-96 overflow-hidden" : ""}`}>
-            <SectionBody text={section.text} query={query} expanded={expanded} />
-            {!expanded && !query && (
-              <div className="absolute bottom-0 left-0 right-0 h-20 bg-gradient-to-t from-white to-transparent pointer-events-none" />
-            )}
+          {/* AI Summary panel */}
+          {summaryVisible && thisSummary && (
+            <div className="border-b border-[#e8f5ee] bg-[#f8fdf9] px-5 py-4">
+              <div className="flex items-center gap-2 mb-3">
+                <div className="w-1.5 h-1.5 rounded-full bg-[#0d6b45]" />
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#0d6b45]">AI Section Summary — Claude Analysis</p>
+                {summarizing !== active && (
+                  <button onClick={() => { setSummaries(s => { const n = { ...s }; delete n[active]; return n; }); }}
+                    className="ml-auto text-[9px] text-[#bbb] hover:text-[#888] transition-colors">
+                    Regenerate
+                  </button>
+                )}
+              </div>
+              <BriefBody text={thisSummary} />
+            </div>
+          )}
+
+          {/* Full section body — no height cap, full text */}
+          <div className="px-5 py-4">
+            <SectionBody text={section.text} query={query} />
           </div>
         </>
       ) : (
         <div className="px-5 py-10 text-center">
-          <p className="text-[12px] text-[#bbb]">Section not extracted from this filing.</p>
-          <p className="text-[10.5px] text-[#d0d0d0] mt-1">edgartools may not have parsed this item from the filing document.</p>
+          <p className="text-[12px] text-[#bbb]">Section not available in this filing.</p>
+          <p className="text-[10.5px] text-[#d0d0d0] mt-1">edgartools could not extract this item. Try Business, Risk Factors, or MD&A.</p>
         </div>
       )}
     </div>
@@ -1016,6 +1101,204 @@ function BriefBody({ text }: { text: string }) {
   return <div className="space-y-[2px]">{nodes}</div>;
 }
 
+// ── Excel Export ─────────────────────────────────────────────────────────────
+
+async function downloadExcel(
+  ticker: string,
+  facts: Record<string, number>,
+  history: Record<string, Record<string, number>>,
+  quarterly: Record<string, number>,
+  quarterlyPeriod: string
+) {
+  const XLSX = (await import("xlsx")).default;
+  const wb = XLSX.utils.book_new();
+
+  const allYears = Array.from(new Set(Object.values(history).flatMap(d => Object.keys(d)))).sort();
+  const recent5 = allYears.slice(-5);
+
+  // Helper: get historical value
+  const hv = (key: string, yr: string): string | number => {
+    const v = history[key]?.[yr];
+    return v != null ? v : "";
+  };
+
+  // ── Income Statement ─────────────────────────────────────────────────────────
+  const IS_ROWS: [string, string, string][] = [
+    // [label, facts_key, history_key]
+    ["Revenue",                  "revenue",           "revenue"],
+    ["Cost of Revenue",          "cost_of_revenue",   "cost_of_revenue"],
+    ["Gross Profit",             "gross_profit",      "gross_profit"],
+    ["Gross Margin %",           "gross_margin_pct",  ""],
+    ["R&D Expense",              "rd_expense",        "rd_expense"],
+    ["SG&A Expense",             "sga_expense",       "sga_expense"],
+    ["Operating Income",         "operating_income",  "operating_income"],
+    ["Operating Margin %",       "operating_margin_pct", ""],
+    ["EBITDA",                   "ebitda",            ""],
+    ["EBITDA Margin %",          "ebitda_margin_pct", ""],
+    ["Interest Expense",         "interest_expense",  ""],
+    ["Pre-tax Income",           "pretax_income",     ""],
+    ["Income Tax",               "income_tax",        ""],
+    ["Effective Tax Rate %",     "effective_tax_rate",""],
+    ["Net Income",               "net_income",        "net_income"],
+    ["Net Margin %",             "net_margin_pct",    ""],
+    ["EPS Basic",                "eps_basic",         ""],
+    ["EPS Diluted",              "eps_diluted",       ""],
+    ["Shares Basic (wtd avg)",   "shares_basic_wtd",  ""],
+    ["Shares Diluted (wtd avg)", "shares_diluted_wtd",""],
+    ["SBC Expense",              "sbc_expense",       ""],
+  ];
+
+  const isHeader = ["Metric", ...recent5.map(y => y.slice(0, 4)), "MRQ", "Notes"];
+  const isData = IS_ROWS.map(([label, fKey, hKey]) => {
+    const row: (string | number)[] = [label];
+    for (const yr of recent5) {
+      row.push(hKey ? hv(hKey, yr) : "");
+    }
+    const v = facts[fKey];
+    row.push(v != null ? v : "");
+    row.push("");
+    return row;
+  });
+
+  const isSheet = XLSX.utils.aoa_to_sheet([isHeader, ...isData]);
+  isSheet["!cols"] = [{ wch: 28 }, ...recent5.map(() => ({ wch: 16 })), { wch: 16 }, { wch: 20 }];
+  XLSX.utils.book_append_sheet(wb, isSheet, "Income Statement");
+
+  // ── Balance Sheet ─────────────────────────────────────────────────────────────
+  const BS_ROWS: [string, string][] = [
+    ["Cash & Equivalents",     "cash"],
+    ["Accounts Receivable",    "accounts_receivable"],
+    ["Inventory",              "inventory"],
+    ["Current Assets",         "current_assets"],
+    ["PP&E (net)",             "ppe_net"],
+    ["Goodwill",               "goodwill"],
+    ["Total Assets",           "total_assets"],
+    ["Current Liabilities",    "current_liabilities"],
+    ["Long-term Debt",         "long_term_debt"],
+    ["Total Liabilities",      "total_liabilities"],
+    ["Stockholders Equity",    "equity"],
+    ["Net Debt (LTD - Cash)",  "net_debt_calc"],
+  ];
+
+  const bsHistYears = Array.from(new Set([
+    ...Object.keys(history.total_assets ?? {}),
+    ...Object.keys(history.cash ?? {}),
+    ...Object.keys(history.equity ?? {}),
+  ])).sort().slice(-5);
+
+  const bsHeader = ["Metric", ...bsHistYears.map(y => y.slice(0, 4)), "Current"];
+  const bsData = BS_ROWS.map(([label, key]) => {
+    const row: (string | number)[] = [label];
+    for (const yr of bsHistYears) {
+      row.push(hv(key, yr));
+    }
+    if (key === "net_debt_calc") {
+      const nd = facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : "";
+      row.push(nd);
+    } else {
+      const v = facts[key];
+      row.push(v != null ? v : "");
+    }
+    return row;
+  });
+
+  const bsSheet = XLSX.utils.aoa_to_sheet([bsHeader, ...bsData]);
+  bsSheet["!cols"] = [{ wch: 28 }, ...bsHistYears.map(() => ({ wch: 14 })), { wch: 14 }];
+  XLSX.utils.book_append_sheet(wb, bsSheet, "Balance Sheet");
+
+  // ── Cash Flow ─────────────────────────────────────────────────────────────────
+  const CF_ROWS: [string, string, string][] = [
+    ["Operating Cash Flow",  "operating_cf",   "operating_cf"],
+    ["Capital Expenditures", "capex",           ""],
+    ["Free Cash Flow",       "free_cash_flow",  ""],
+    ["SBC (non-cash)",       "sbc_expense",     ""],
+    ["FCF / Net Income %",   "fcf_conversion",  ""],
+    ["FCF Margin %",         "fcf_margin_pct",  ""],
+  ];
+
+  const cfHeader = ["Metric", ...recent5.map(y => y.slice(0, 4)), "MRQ"];
+  const cfData = CF_ROWS.map(([label, fKey, hKey]) => {
+    const row: (string | number)[] = [label];
+    for (const yr of recent5) {
+      row.push(hKey ? hv(hKey, yr) : "");
+    }
+    let v: number | string = "";
+    if (fKey === "fcf_conversion") {
+      v = facts.free_cash_flow != null && facts.net_income != null && facts.net_income > 0
+        ? parseFloat(((facts.free_cash_flow / facts.net_income) * 100).toFixed(1)) : "";
+    } else if (fKey === "fcf_margin_pct") {
+      v = facts.free_cash_flow != null && facts.revenue != null && facts.revenue > 0
+        ? parseFloat(((facts.free_cash_flow / facts.revenue) * 100).toFixed(1)) : "";
+    } else {
+      v = facts[fKey] != null ? facts[fKey] : "";
+    }
+    row.push(v);
+    return row;
+  });
+
+  const cfSheet = XLSX.utils.aoa_to_sheet([cfHeader, ...cfData]);
+  cfSheet["!cols"] = [{ wch: 28 }, ...recent5.map(() => ({ wch: 16 })), { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, cfSheet, "Cash Flow");
+
+  // ── Key Ratios ─────────────────────────────────────────────────────────────────
+  const ratioRows: [string, string | number][] = [
+    ["Return on Equity %", facts.net_income != null && facts.equity != null && facts.equity !== 0 ? parseFloat(((facts.net_income / facts.equity) * 100).toFixed(1)) : ""],
+    ["Return on Assets %", facts.net_income != null && facts.total_assets != null && facts.total_assets !== 0 ? parseFloat(((facts.net_income / facts.total_assets) * 100).toFixed(1)) : ""],
+    ["Gross Margin %",     facts.gross_margin_pct ?? ""],
+    ["Operating Margin %", facts.operating_margin_pct ?? ""],
+    ["EBITDA Margin %",    facts.ebitda != null && facts.revenue != null && facts.revenue !== 0 ? parseFloat(((facts.ebitda / facts.revenue) * 100).toFixed(1)) : ""],
+    ["Net Margin %",       facts.net_margin_pct ?? ""],
+    ["FCF Margin %",       facts.free_cash_flow != null && facts.revenue != null && facts.revenue !== 0 ? parseFloat(((facts.free_cash_flow / facts.revenue) * 100).toFixed(1)) : ""],
+    ["Current Ratio",      facts.current_assets != null && facts.current_liabilities != null && facts.current_liabilities !== 0 ? parseFloat((facts.current_assets / facts.current_liabilities).toFixed(2)) : ""],
+    ["Debt / Equity",      facts.total_liabilities != null && facts.equity != null && facts.equity !== 0 ? parseFloat((facts.total_liabilities / facts.equity).toFixed(2)) : ""],
+    ["Net Debt ($)",       facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : ""],
+    ["Interest Coverage",  facts.operating_income != null && facts.interest_expense != null && facts.interest_expense !== 0 ? parseFloat((facts.operating_income / facts.interest_expense).toFixed(1)) : ""],
+    ["Asset Turnover",     facts.revenue != null && facts.total_assets != null && facts.total_assets !== 0 ? parseFloat((facts.revenue / facts.total_assets).toFixed(2)) : ""],
+    ["EPS Diluted ($)",    facts.eps_diluted ?? ""],
+    ["Book Value / Share", facts.equity != null && facts.shares_outstanding != null && facts.shares_outstanding !== 0 ? parseFloat((facts.equity / facts.shares_outstanding).toFixed(2)) : ""],
+    ["FCF / Share",        facts.free_cash_flow != null && facts.shares_diluted_wtd != null && facts.shares_diluted_wtd !== 0 ? parseFloat((facts.free_cash_flow / facts.shares_diluted_wtd).toFixed(2)) : ""],
+  ];
+
+  const ratioSheet = XLSX.utils.aoa_to_sheet([
+    ["Metric", "Value"],
+    ...ratioRows,
+  ]);
+  ratioSheet["!cols"] = [{ wch: 30 }, { wch: 16 }];
+  XLSX.utils.book_append_sheet(wb, ratioSheet, "Key Ratios");
+
+  // ── Quarterly ─────────────────────────────────────────────────────────────────
+  if (Object.keys(quarterly).length > 0) {
+    const qRows: [string, string][] = [
+      ["Revenue",            "revenue"],
+      ["Gross Profit",       "gross_profit"],
+      ["Gross Margin %",     "gross_margin_pct"],
+      ["Operating Income",   "operating_income"],
+      ["Operating Margin %", "operating_margin_pct"],
+      ["Net Income",         "net_income"],
+      ["Net Margin %",       "net_margin_pct"],
+      ["Operating CF",       "operating_cf"],
+      ["Free Cash Flow",     "free_cash_flow"],
+      ["EPS Diluted",        "eps_diluted"],
+      ["Cash",               "cash"],
+      ["Total Assets",       "total_assets"],
+      ["Equity",             "equity"],
+    ];
+    const qSheet = XLSX.utils.aoa_to_sheet([
+      ["Metric", `MRQ (${quarterlyPeriod})`, "Implied Annual (×4)"],
+      ...qRows.map(([label, key]) => {
+        const v = quarterly[key];
+        const isMargin = key.endsWith("_pct") || key === "eps_diluted";
+        const implied = !isMargin && v != null ? v * 4 : "";
+        return [label, v != null ? v : "", implied];
+      }),
+    ]);
+    qSheet["!cols"] = [{ wch: 28 }, { wch: 20 }, { wch: 20 }];
+    XLSX.utils.book_append_sheet(wb, qSheet, "Most Recent Quarter");
+  }
+
+  XLSX.writeFile(wb, `${ticker}_Financial_Model_${new Date().toISOString().slice(0, 10)}.xlsx`);
+}
+
 // ── Page ──────────────────────────────────────────────────────────────────────
 
 export default function TenKPage() {
@@ -1242,8 +1525,21 @@ export default function TenKPage() {
 
           {/* Filing Sections */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Filing Sections</p>
-            <SectionViewer annual={data.annual} quarterly={data.quarterly} />
+            <div className="flex items-center justify-between mb-3">
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb]">Filing Sections</p>
+              <button
+                onClick={() => downloadExcel(
+                  data.company.ticker,
+                  data.xbrl_facts,
+                  data.history ?? {},
+                  data.quarterly_xbrl ?? {},
+                  data.quarterly_period ?? ""
+                )}
+                className="flex items-center gap-1.5 px-3 py-1.5 text-[10.5px] font-semibold border border-[#d0d7e8] rounded text-[#0c1b38] hover:bg-[#eef1f8] transition-colors">
+                <Download size={11} /> Export Excel
+              </button>
+            </div>
+            <SectionViewer annual={data.annual} quarterly={data.quarterly} ticker={data.company.ticker} />
           </div>
 
           {/* Optional AI Note */}

@@ -44,7 +44,7 @@ def strip_html(text: str) -> str:
     text = re.sub(r'[ \t]+', ' ', text)
     return text.strip()
 
-def truncate(text: str, max_chars: int = 8000) -> str:
+def truncate(text: str, max_chars: int = 60000) -> str:
     if not text:
         return ""
     text = strip_html(text)
@@ -591,7 +591,7 @@ def health():
     return {"status": "ok", "edgar_available": EDGAR_AVAILABLE}
 
 @app.get("/company/{ticker}", response_model=AnalysisPayload)
-async def get_company_analysis(ticker: str, sections: str = "mda,risks,business"):
+async def get_company_analysis(ticker: str, sections: str = "business,risks,cybersecurity,properties,legal,mda,quantitative,controls,accountant_fees,q_quantitative,q_controls,q_legal"):
     if not EDGAR_AVAILABLE:
         raise HTTPException(503, "edgartools not installed — run: pip install edgartools")
 
@@ -668,6 +668,16 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                     "managements_discussion_and_analysis",
                     "item7", "item_7",
                 ], ["2", "2.", "7", "7."]),
+                "q_quantitative": ("Item 3 — Market Risk (Q)", [
+                    "quantitative_disclosures", "item3", "item_3",
+                    "quantitative_and_qualitative_disclosures_about_market_risk",
+                ], ["3", "3."]),
+                "q_controls": ("Item 4 — Controls & Procedures (Q)", [
+                    "controls_and_procedures", "item4", "item_4", "controls",
+                ], ["4", "4."]),
+                "q_legal": ("Item 1 — Legal Proceedings (Q)", [
+                    "legal_proceedings", "legal", "item1", "item_1",
+                ], ["1", "1."]),
             }
         else:
             SECTION_MAP = {
@@ -677,6 +687,16 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                 "risks": ("Item 1A — Risk Factors", [
                     "risk_factors", "risks", "item1a", "item_1a", "risk_factors_text",
                 ], ["1A", "1a", "1a."]),
+                "cybersecurity": ("Item 1C — Cybersecurity", [
+                    "cybersecurity", "item1c", "item_1c", "item_1_c",
+                    "cybersecurity_risk_management", "cybersecurity_disclosure",
+                ], ["1C", "1c"]),
+                "properties": ("Item 2 — Properties", [
+                    "properties", "item2", "item_2",
+                ], ["2", "2."]),
+                "legal": ("Item 3 — Legal Proceedings", [
+                    "legal_proceedings", "legal", "item3", "item_3",
+                ], ["3", "3."]),
                 "mda": ("Item 7 — MD&A", [
                     "mda", "management_discussion_and_analysis", "item7", "item_7",
                     "md_and_a", "management_s_discussion_and_analysis",
@@ -686,6 +706,14 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                     "quantitative_disclosures", "item7a", "item_7a",
                     "quantitative_and_qualitative_disclosures_about_market_risk",
                 ], ["7A", "7a"]),
+                "controls": ("Item 9A — Controls & Procedures", [
+                    "controls_and_procedures", "item9a", "item_9a", "controls",
+                    "disclosure_controls", "internal_controls",
+                ], ["9A", "9a"]),
+                "accountant_fees": ("Item 14 — Accountant Fees", [
+                    "principal_accountant_fees", "accountant_fees", "item14", "item_14",
+                    "audit_fees", "accountant_fees_and_services",
+                ], ["14", "14."]),
             }
 
         for key, (title, attr_names, item_keys) in SECTION_MAP.items():
