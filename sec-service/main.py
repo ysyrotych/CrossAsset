@@ -329,6 +329,11 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
             r["free_cash_flow"] = ocf - abs(capex)
         if oi is not None and da is not None:
             r["ebitda"] = oi + da
+        # Effective tax rate
+        tax_val  = r.get("income_tax")
+        pre_val  = r.get("pretax_income")
+        if tax_val is not None and pre_val is not None and pre_val != 0:
+            r["effective_tax_rate"] = round((tax_val / pre_val) * 100, 1)
 
         print(f"XBRL SEC API: extracted {len(r)} facts for CIK {cik}")
 
@@ -368,6 +373,18 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
 
         ocf_hist = get_history_flow("NetCashProvidedByUsedInOperatingActivities")
         if ocf_hist: history["operating_cf"] = ocf_hist
+
+        # Additional income statement history for YoY badges on each row
+        cogs_hist = (get_history_flow("CostOfRevenue") or get_history_flow("CostOfGoodsAndServicesSold"))
+        if cogs_hist: history["cost_of_revenue"] = cogs_hist
+
+        rd_hist = get_history_flow("ResearchAndDevelopmentExpense")
+        if rd_hist: history["rd_expense"] = rd_hist
+
+        sga_hist = get_history_flow("SellingGeneralAndAdministrativeExpense")
+        if sga_hist: history["sga_expense"] = sga_hist
+
+        oi2_hist = get_history_flow("OperatingIncomeLoss")  # already done above, skip dup
 
         # Balance sheet: 2-year history for YoY comparisons on BS tab
         assets_h = get_history_bs("Assets")
