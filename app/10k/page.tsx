@@ -4,8 +4,10 @@ import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
 import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown } from "lucide-react";
 
-const PDFDownloadLink = dynamic(() => import("@react-pdf/renderer").then(m => m.PDFDownloadLink), { ssr: false });
-const PrimerDocumentLazy = dynamic(() => import("@/components/PrimerPDF").then(m => m.PrimerDocument), { ssr: false });
+const PrimerDownloadButton = dynamic(
+  () => import("@/components/PrimerDownloadButton").then(m => m.PrimerDownloadButton),
+  { ssr: false }
+);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1861,27 +1863,14 @@ export default function TenKPage() {
                         className="text-[10.5px] text-[#999] hover:text-[#0c1b38] font-medium border border-[#e8e8e8] px-2.5 py-1 rounded transition-colors">
                         Copy Markdown
                       </button>
-                      {typeof window !== "undefined" && (
-                        <PDFDownloadLink
-                          document={
-                            <PrimerDocumentLazy
-                              ticker={data.company.ticker}
-                              companyName={data.company.name}
-                              industry={data.company.sic_description ?? ""}
-                              content={primerText}
-                              generatedDate={new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" })}
-                              history={data.history ?? {}}
-                              facts={data.xbrl_facts}
-                            />
-                          }
-                          fileName={`${data.company.ticker}_Primer_${new Date().toISOString().slice(0,10)}.pdf`}
-                          className="flex items-center gap-1.5 px-3 py-1.5 bg-[#0c1b38] text-white text-[10.5px] font-bold rounded hover:bg-[#1a3361] transition-colors">
-                          {({ loading: pdfLoading }) =>
-                            pdfLoading
-                              ? "Generating PDF…"
-                              : <><FileDown size={11} /> Download PDF</>}
-                        </PDFDownloadLink>
-                      )}
+                      <PrimerDownloadButton
+                        ticker={data.company.ticker}
+                        companyName={data.company.name}
+                        industry={data.company.sic_description ?? ""}
+                        content={primerText}
+                        history={data.history ?? {}}
+                        facts={data.xbrl_facts}
+                      />
                     </div>
                   </div>
                 )}
