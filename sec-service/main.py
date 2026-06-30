@@ -320,11 +320,101 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         ocf_hist = get_history_flow("NetCashProvidedByUsedInOperatingActivities")
         if ocf_hist: history["operating_cf"] = ocf_hist
 
-        return {"facts": r, "history": history}
+        # ── Most recent single quarter (10-Q, ~80–100 days) ─────────────────
+        def get_latest_q_flow(concept: str) -> Optional[float]:
+            entries = get_entries(concept)
+            if not entries:
+                return None
+            q = [e for e in entries
+                 if e.get("form") == "10-Q" and e.get("val") is not None
+                 and 75 <= _duration_days(e) <= 105]
+            if not q:
+                q = [e for e in entries
+                     if e.get("form") == "10-Q" and e.get("val") is not None
+                     and _duration_days(e) < 200]
+            if not q:
+                return None
+            q.sort(key=lambda e: e.get("end", ""), reverse=True)
+            return safe_float(q[0]["val"])
+
+        def get_latest_q_bs(concept: str) -> Optional[float]:
+            entries = get_entries(concept)
+            if not entries:
+                return None
+            q = [e for e in entries if e.get("form") == "10-Q" and e.get("val") is not None]
+            if not q:
+                return None
+            q.sort(key=lambda e: e.get("end", ""), reverse=True)
+            return safe_float(q[0]["val"])
+
+        qr: dict = {}
+
+        q_rev = (get_latest_q_flow("Revenues") or
+                 get_latest_q_flow("RevenueFromContractWithCustomerExcludingAssessedTax") or
+                 get_latest_q_flow("SalesRevenueNet"))
+        if q_rev is not None: qr["revenue"] = q_rev
+
+        q_cogs = (get_latest_q_flow("CostOfRevenue") or
+                  get_latest_q_flow("CostOfGoodsAndServicesSold"))
+        if q_cogs is not None: qr["cost_of_revenue"] = q_cogs
+
+        q_gp = get_latest_q_flow("GrossProfit")
+        if q_gp is not None: qr["gross_profit"] = q_gp
+
+        q_rd = get_latest_q_flow("ResearchAndDevelopmentExpense")
+        if q_rd is not None: qr["rd_expense"] = q_rd
+
+        q_sga = get_latest_q_flow("SellingGeneralAndAdministrativeExpense")
+        if q_sga is not None: qr["sga_expense"] = q_sga
+
+        q_oi = get_latest_q_flow("OperatingIncomeLoss")
+        if q_oi is not None: qr["operating_income"] = q_oi
+
+        q_ni = get_latest_q_flow("NetIncomeLoss")
+        if q_ni is not None: qr["net_income"] = q_ni
+
+        q_eps = get_latest_q_flow("EarningsPerShareDiluted")
+        if q_eps is not None: qr["eps_diluted"] = q_eps
+
+        q_ocf = get_latest_q_flow("NetCashProvidedByUsedInOperatingActivities")
+        if q_ocf is not None: qr["operating_cf"] = q_ocf
+
+        q_capex = get_latest_q_flow("PaymentsToAcquirePropertyPlantAndEquipment")
+        if q_capex is not None: qr["capex"] = q_capex
+
+        q_cash = get_latest_q_bs("CashAndCashEquivalentsAtCarryingValue")
+        if q_cash is not None: qr["cash"] = q_cash
+
+        q_assets = get_latest_q_bs("Assets")
+        if q_assets is not None: qr["total_assets"] = q_assets
+
+        q_eq = get_latest_q_bs("StockholdersEquity") or get_latest_q_bs("StockholdersEquityAttributableToParent")
+        if q_eq is not None: qr["equity"] = q_eq
+
+        # Derived quarterly ratios
+        if q_rev and q_gp:  qr["gross_margin_pct"]     = round(q_gp / q_rev * 100, 1)
+        if q_rev and q_oi:  qr["operating_margin_pct"] = round(q_oi / q_rev * 100, 1)
+        if q_rev and q_ni:  qr["net_margin_pct"]        = round(q_ni / q_rev * 100, 1)
+        if q_ocf is not None and q_capex is not None:
+            qr["free_cash_flow"] = q_ocf - abs(q_capex)
+
+        # Period label for most recent quarter
+        q_period = ""
+        rev_entries_all = get_entries("Revenues") or get_entries("RevenueFromContractWithCustomerExcludingAssessedTax")
+        if rev_entries_all:
+            qpe = [e for e in rev_entries_all
+                   if e.get("form") == "10-Q" and e.get("val") is not None
+                   and 75 <= _duration_days(e) <= 105]
+            if qpe:
+                qpe.sort(key=lambda e: e.get("end", ""), reverse=True)
+                q_period = qpe[0].get("end", "")
+
+        print(f"XBRL SEC API: {len(r)} annual + {len(qr)} quarterly facts for CIK {cik}")
+        return {"facts": r, "history": history, "quarterly_facts": qr, "quarterly_period": q_period}
 
     except Exception as e:
         print(f"XBRL SEC API error for CIK {cik}: {e}")
-        return {"facts": {}, "history": {}}
+        return {"facts": {}, "history": {}, "quarterly_facts": {}, "quarterly_period": ""}
 
 # ── Response models ───────────────────────────────────────────────────────────
 
@@ -355,6 +445,8 @@ class AnalysisPayload(BaseModel):
     quarterly: Optional[FilingData] = None
     xbrl_facts: dict = {}
     history: dict = {}
+    quarterly_xbrl: dict = {}
+    quarterly_period: str = ""
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -395,6 +487,8 @@ async def get_company_analysis(ticker: str, sections: str = "mda,risks,business"
         quarterly=quarterly,
         xbrl_facts=xbrl_result.get("facts", {}),
         history=xbrl_result.get("history", {}),
+        quarterly_xbrl=xbrl_result.get("quarterly_facts", {}),
+        quarterly_period=xbrl_result.get("quarterly_period", ""),
     )
 
 def _get_company(ticker: str):
@@ -425,24 +519,36 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
             doc_attrs = [a for a in dir(doc) if not a.startswith('_')]
             print(f"[{form_type}] doc attrs: {doc_attrs}")
 
-        # Multiple fallback attribute names + item keys per section
-        SECTION_MAP = {
-            "business": ("Item 1 — Business", [
-                "business", "item1", "item_1", "item1_business",
-            ], ["1", "1."]),
-            "risks": ("Item 1A — Risk Factors", [
-                "risk_factors", "risks", "item1a", "item_1a", "risk_factors_text",
-            ], ["1A", "1a", "1a."]),
-            "mda": ("Item 7 — MD&A", [
-                "mda", "management_discussion_and_analysis", "item7", "item_7",
-                "md_and_a", "management_s_discussion_and_analysis",
-                "managements_discussion_and_analysis",
-            ], ["7", "7."]),
-            "quantitative": ("Item 7A — Market Risk", [
-                "quantitative_disclosures", "item7a", "item_7a",
-                "quantitative_and_qualitative_disclosures_about_market_risk",
-            ], ["7A", "7a"]),
-        }
+        # Section map varies by form type — 10-Q uses Item 2 for MD&A, not Item 7
+        if form_type == "10-Q":
+            SECTION_MAP = {
+                "mda": ("Item 2 — MD&A (Quarterly)", [
+                    "mda", "management_discussion_and_analysis",
+                    "item2", "item_2", "item2_management_discussion",
+                    "management_discussion", "md_and_a",
+                    "management_s_discussion_and_analysis",
+                    "managements_discussion_and_analysis",
+                    "item7", "item_7",
+                ], ["2", "2.", "7", "7."]),
+            }
+        else:
+            SECTION_MAP = {
+                "business": ("Item 1 — Business", [
+                    "business", "item1", "item_1", "item1_business",
+                ], ["1", "1."]),
+                "risks": ("Item 1A — Risk Factors", [
+                    "risk_factors", "risks", "item1a", "item_1a", "risk_factors_text",
+                ], ["1A", "1a", "1a."]),
+                "mda": ("Item 7 — MD&A", [
+                    "mda", "management_discussion_and_analysis", "item7", "item_7",
+                    "md_and_a", "management_s_discussion_and_analysis",
+                    "managements_discussion_and_analysis",
+                ], ["7", "7."]),
+                "quantitative": ("Item 7A — Market Risk", [
+                    "quantitative_disclosures", "item7a", "item_7a",
+                    "quantitative_and_qualitative_disclosures_about_market_risk",
+                ], ["7A", "7a"]),
+            }
 
         for key, (title, attr_names, item_keys) in SECTION_MAP.items():
             if key not in want:

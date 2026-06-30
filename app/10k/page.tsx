@@ -14,6 +14,8 @@ type Payload       = {
   quarterly: FilingData | null;
   xbrl_facts: Record<string, number>;
   history: Record<string, Record<string, number>>;
+  quarterly_xbrl: Record<string, number>;
+  quarterly_period: string;
 };
 
 // ── Quick-picks ───────────────────────────────────────────────────────────────
@@ -497,6 +499,167 @@ function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quart
   );
 }
 
+// ── Financial Ratios Panel ────────────────────────────────────────────────────
+
+type RatioItem = { label: string; value: string; sub?: string; color?: string };
+
+function RatioCard({ label, value, sub, color = "#0a0a0a" }: RatioItem) {
+  return (
+    <div className="border border-[#ebebeb] rounded-lg px-3 py-2.5 bg-white">
+      <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
+      <p className="text-[15px] font-bold tabular-nums leading-none" style={{ color }}>{value}</p>
+      {sub && <p className="text-[9.5px] text-[#999] mt-0.5">{sub}</p>}
+    </div>
+  );
+}
+
+function FinancialRatios({ facts }: { facts: Record<string, number> }) {
+  const f = facts;
+  const ratios: RatioItem[] = [];
+
+  // Returns
+  const roe = f.net_income != null && f.equity != null && f.equity !== 0
+    ? (f.net_income / f.equity * 100) : null;
+  const roa = f.net_income != null && f.total_assets != null && f.total_assets !== 0
+    ? (f.net_income / f.total_assets * 100) : null;
+  const assetTurnover = f.revenue != null && f.total_assets != null && f.total_assets !== 0
+    ? (f.revenue / f.total_assets) : null;
+
+  // Liquidity
+  const currentRatio = f.current_assets != null && f.current_liabilities != null && f.current_liabilities !== 0
+    ? (f.current_assets / f.current_liabilities) : null;
+  const netDebt = f.long_term_debt != null && f.cash != null
+    ? (f.long_term_debt - f.cash) : null;
+  const debtToEquity = f.total_liabilities != null && f.equity != null && f.equity !== 0
+    ? (f.total_liabilities / f.equity) : null;
+
+  // Coverage & FCF
+  const interestCoverage = f.operating_income != null && f.interest_expense != null && f.interest_expense !== 0
+    ? (f.operating_income / f.interest_expense) : null;
+  const fcfMargin = f.free_cash_flow != null && f.revenue != null && f.revenue !== 0
+    ? (f.free_cash_flow / f.revenue * 100) : null;
+  const ebitdaMargin = f.ebitda != null && f.revenue != null && f.revenue !== 0
+    ? (f.ebitda / f.revenue * 100) : null;
+
+  // Per share
+  const revPerShare = f.revenue != null && f.shares_diluted_wtd != null && f.shares_diluted_wtd !== 0
+    ? (f.revenue / f.shares_diluted_wtd) : null;
+  const bvPerShare = f.equity != null && f.shares_outstanding != null && f.shares_outstanding !== 0
+    ? (f.equity / f.shares_outstanding) : null;
+  const fcfPerShare = f.free_cash_flow != null && f.shares_diluted_wtd != null && f.shares_diluted_wtd !== 0
+    ? (f.free_cash_flow / f.shares_diluted_wtd) : null;
+
+  if (roe != null)            ratios.push({ label: "Return on Equity",    value: `${roe.toFixed(1)}%`,           color: pctColor(roe) });
+  if (roa != null)            ratios.push({ label: "Return on Assets",    value: `${roa.toFixed(1)}%`,           color: pctColor(roa) });
+  if (ebitdaMargin != null)   ratios.push({ label: "EBITDA Margin",       value: `${ebitdaMargin.toFixed(1)}%`,  color: pctColor(ebitdaMargin) });
+  if (fcfMargin != null)      ratios.push({ label: "FCF Margin",          value: `${fcfMargin.toFixed(1)}%`,     color: pctColor(fcfMargin) });
+  if (currentRatio != null)   ratios.push({ label: "Current Ratio",       value: `${currentRatio.toFixed(2)}x`,  color: currentRatio >= 1.5 ? "#0d6b45" : currentRatio >= 1 ? "#b58b00" : "#b42318" });
+  if (debtToEquity != null)   ratios.push({ label: "Debt / Equity",       value: `${debtToEquity.toFixed(2)}x`,  color: debtToEquity < 1 ? "#0d6b45" : debtToEquity < 2 ? "#b58b00" : "#b42318" });
+  if (netDebt != null)        ratios.push({ label: "Net Debt",            value: fmtNum(netDebt, "$"),            color: netDebt < 0 ? "#0d6b45" : "#b42318", sub: netDebt < 0 ? "net cash position" : undefined });
+  if (interestCoverage != null) ratios.push({ label: "Interest Coverage", value: `${interestCoverage.toFixed(1)}x`, color: interestCoverage > 5 ? "#0d6b45" : interestCoverage > 2 ? "#b58b00" : "#b42318" });
+  if (assetTurnover != null)  ratios.push({ label: "Asset Turnover",      value: `${assetTurnover.toFixed(2)}x` });
+  if (revPerShare != null)    ratios.push({ label: "Revenue / Share",     value: `$${revPerShare.toFixed(2)}` });
+  if (bvPerShare != null)     ratios.push({ label: "Book Value / Share",  value: `$${bvPerShare.toFixed(2)}` });
+  if (fcfPerShare != null)    ratios.push({ label: "FCF / Share",         value: `$${fcfPerShare.toFixed(2)}`,    color: pctColor(fcfPerShare) });
+
+  if (!ratios.length) return null;
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Financial Ratios & Quality Metrics</p>
+      </div>
+      <div className="p-4 grid grid-cols-3 gap-2 sm:grid-cols-4 lg:grid-cols-6">
+        {ratios.map(r => <RatioCard key={r.label} {...r} />)}
+      </div>
+    </div>
+  );
+}
+
+// ── Quarterly vs Annual Snapshot ──────────────────────────────────────────────
+
+function QuarterlySnapshot({ annual, quarterly, period }: {
+  annual: Record<string, number>;
+  quarterly: Record<string, number>;
+  period: string;
+}) {
+  if (!Object.keys(quarterly).length) return null;
+
+  const ROWS: { key: string; label: string; prefix?: string; suffix?: string }[] = [
+    { key: "revenue",           label: "Revenue",          prefix: "$" },
+    { key: "gross_margin_pct",  label: "Gross Margin",     suffix: "%" },
+    { key: "operating_income",  label: "Operating Income", prefix: "$" },
+    { key: "operating_margin_pct", label: "Op. Margin",   suffix: "%" },
+    { key: "net_income",        label: "Net Income",       prefix: "$" },
+    { key: "net_margin_pct",    label: "Net Margin",       suffix: "%" },
+    { key: "operating_cf",      label: "Operating CF",     prefix: "$" },
+    { key: "free_cash_flow",    label: "Free Cash Flow",   prefix: "$" },
+    { key: "eps_diluted",       label: "EPS (Diluted)",    prefix: "$" },
+  ].filter(r => quarterly[r.key] != null);
+
+  if (!ROWS.length) return null;
+
+  const annualizedQuarterly = (key: string, val: number) => {
+    if (["revenue","gross_profit","operating_income","net_income","operating_cf","free_cash_flow","rd_expense","sga_expense"].includes(key))
+      return val * 4;
+    return null;
+  };
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">
+          Most Recent Quarter vs Annual — {period || "Latest Quarter"}
+        </p>
+        <p className="text-[9px] text-white/40 uppercase tracking-wider">Single quarter | (×4 implied annual)</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+              <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-40">Metric</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Quarter</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Implied Ann.</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Annual (10-K)</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">vs Annual</th>
+            </tr>
+          </thead>
+          <tbody>
+            {ROWS.map(({ key, label, prefix = "", suffix = "" }, i) => {
+              const qVal = quarterly[key];
+              const aVal = annual[key];
+              const implied = annualizedQuarterly(key, qVal);
+              const pct = aVal != null && aVal !== 0 && implied != null
+                ? ((implied - aVal) / Math.abs(aVal)) * 100 : null;
+              const isEven = i % 2 === 0;
+              const isMargin = suffix === "%";
+              return (
+                <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${isEven ? "bg-white" : "bg-[#fafafa]"}`}>
+                  <td className="px-4 py-2 text-[11.5px] font-semibold text-[#333]">{label}</td>
+                  <td className="px-3 py-2 text-right text-[12px] font-medium tabular-nums text-[#0a0a0a]">
+                    {fmtNum(qVal, prefix, suffix)}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#888]">
+                    {!isMargin && implied != null ? fmtNum(implied, prefix) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#555]">
+                    {aVal != null ? fmtNum(aVal, prefix, suffix) : "—"}
+                  </td>
+                  <td className="px-3 py-2 text-right text-[11px] font-semibold tabular-nums">
+                    {pct != null
+                      ? <span style={{ color: pct >= 0 ? "#0d6b45" : "#b42318" }}>{pct >= 0 ? "▲" : "▼"}{Math.abs(pct).toFixed(1)}%</span>
+                      : <span className="text-[#ddd]">—</span>}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Markdown renderer for AI output ──────────────────────────────────────────
 
 function BriefBody({ text }: { text: string }) {
@@ -651,40 +814,89 @@ export default function TenKPage() {
       {data && !loading && (
         <div className="space-y-6">
 
-          {/* Company card */}
-          <div className="p-5 border border-[#d0d7e8] rounded-lg bg-[#fafcff] flex items-start justify-between gap-6 flex-wrap">
-            <div>
-              <div className="flex items-center gap-3 mb-1.5">
-                <span className="text-[30px] font-bold text-[#0c1b38] leading-none">{data.company.ticker}</span>
-                <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38]">SEC EDGAR</span>
+          {/* Company header — Bloomberg-style terminal card */}
+          <div className="border border-[#d0d7e8] rounded-lg overflow-hidden">
+            <div className="bg-[#0c1b38] px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+              <div className="flex items-center gap-4">
+                <span className="text-[26px] font-bold text-white leading-none tracking-tight">{data.company.ticker}</span>
+                <div>
+                  <p className="text-[13px] font-medium text-white/90">{data.company.name}</p>
+                  <p className="text-[10.5px] text-white/40">{data.company.sic_description || "—"} · SIC {data.company.sic || "—"} · CIK {data.company.cik}</p>
+                </div>
               </div>
-              <p className="text-[16px] font-medium text-[#0a0a0a] mb-0.5">{data.company.name}</p>
-              <p className="text-[11.5px] text-[#999]">{data.company.sic_description || "—"} · CIK {data.company.cik}</p>
+              <div className="flex items-center gap-6 text-right">
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Latest 10-K</p>
+                  <p className="text-[12px] font-semibold text-white">{data.annual?.period_of_report ?? "—"}</p>
+                  <p className="text-[9.5px] text-white/40">filed {data.annual?.filed_date ?? "—"}</p>
+                </div>
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest text-white/30 mb-0.5">Latest 10-Q</p>
+                  <p className="text-[12px] font-semibold text-white">{data.quarterly?.period_of_report ?? "—"}</p>
+                  <p className="text-[9.5px] text-white/40">filed {data.quarterly?.filed_date ?? "—"}</p>
+                </div>
+                {data.quarterly_period && (
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest text-white/30 mb-0.5">MRQ XBRL</p>
+                    <p className="text-[12px] font-semibold text-white">{data.quarterly_period}</p>
+                    <p className="text-[9.5px] text-white/40">most recent quarter</p>
+                  </div>
+                )}
+                <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${data.company.cik}&type=10-K&dateb=&owner=include&count=10`}
+                  target="_blank" rel="noopener noreferrer"
+                  className="flex items-center gap-1 text-white/50 hover:text-white text-[10.5px] font-semibold transition-colors">
+                  EDGAR <ExternalLink size={9} />
+                </a>
+              </div>
             </div>
-            <div className="flex gap-6 text-[11.5px] shrink-0 items-start">
-              <div className="text-right">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-[#bbb] mb-1">Latest 10-K</p>
-                <p className="font-semibold text-[#0a0a0a]">{data.annual?.period_of_report ?? "—"}</p>
-                <p className="text-[#bbb] text-[10.5px]">filed {data.annual?.filed_date ?? "—"}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[9px] font-bold uppercase tracking-wider text-[#bbb] mb-1">Latest 10-Q</p>
-                <p className="font-semibold text-[#0a0a0a]">{data.quarterly?.period_of_report ?? "—"}</p>
-                <p className="text-[#bbb] text-[10.5px]">filed {data.quarterly?.filed_date ?? "—"}</p>
-              </div>
-              <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${data.company.cik}&type=10-K&dateb=&owner=include&count=10`}
-                target="_blank" rel="noopener noreferrer"
-                className="flex items-center gap-1 self-center text-[#0c1b38] font-semibold text-[11.5px] hover:underline mt-4">
-                EDGAR <ExternalLink size={10} />
-              </a>
-            </div>
+            {/* Key headline metrics strip */}
+            {Object.keys(data.xbrl_facts).length > 0 && (() => {
+              const f = data.xbrl_facts;
+              const metrics = [
+                { label: "Revenue", value: fmtNum(f.revenue, "$"), sub: f.gross_margin_pct != null ? `${f.gross_margin_pct.toFixed(1)}% GM` : "" },
+                { label: "Net Income", value: fmtNum(f.net_income, "$"), sub: f.net_margin_pct != null ? `${f.net_margin_pct.toFixed(1)}% NM` : "" },
+                { label: "EBITDA", value: fmtNum(f.ebitda, "$"), sub: f.ebitda && f.revenue ? `${(f.ebitda/f.revenue*100).toFixed(1)}% margin` : "" },
+                { label: "Free CF", value: fmtNum(f.free_cash_flow, "$"), sub: f.free_cash_flow && f.revenue ? `${(f.free_cash_flow/f.revenue*100).toFixed(1)}% FCF margin` : "" },
+                { label: "EPS Diluted", value: fmtNum(f.eps_diluted, "$"), sub: "" },
+                { label: "Total Assets", value: fmtNum(f.total_assets, "$"), sub: "" },
+                { label: "Net Debt", value: f.long_term_debt != null && f.cash != null ? fmtNum(f.long_term_debt - f.cash, "$") : "—", sub: f.long_term_debt != null && f.cash != null && f.long_term_debt < f.cash ? "net cash" : "" },
+              ].filter(m => m.value !== "—");
+              return (
+                <div className="grid border-t border-[#1e3560]" style={{ gridTemplateColumns: `repeat(${metrics.length}, 1fr)` }}>
+                  {metrics.map((m, i) => (
+                    <div key={m.label} className={`px-4 py-3 text-center ${i < metrics.length - 1 ? "border-r border-[#1e3560]" : ""}`}>
+                      <p className="text-[8.5px] font-bold uppercase tracking-widest text-white/30 mb-0.5">{m.label}</p>
+                      <p className="text-[14px] font-bold text-white tabular-nums">{m.value}</p>
+                      {m.sub && <p className="text-[9px] text-white/40 mt-0.5">{m.sub}</p>}
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
-          {/* Key Financials */}
+          {/* Key Financials — tabbed statements */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Key Financials — Most Recent Annual (XBRL)</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Statements — Most Recent Annual (10-K XBRL)</p>
             <FinancialStatements facts={data.xbrl_facts} history={data.history ?? {}} />
           </div>
+
+          {/* Financial Ratios */}
+          {Object.keys(data.xbrl_facts).length > 0 && (
+            <FinancialRatios facts={data.xbrl_facts} />
+          )}
+
+          {/* Quarterly vs Annual Snapshot */}
+          {data.quarterly_xbrl && Object.keys(data.quarterly_xbrl).length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Most Recent Quarter vs Annual Run-Rate</p>
+              <QuarterlySnapshot
+                annual={data.xbrl_facts}
+                quarterly={data.quarterly_xbrl}
+                period={data.quarterly_period}
+              />
+            </div>
+          )}
 
           {/* 5-Year History */}
           {data.history && Object.keys(data.history).length > 0 && (
