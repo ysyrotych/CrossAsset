@@ -1110,7 +1110,7 @@ async function downloadExcel(
   quarterly: Record<string, number>,
   quarterlyPeriod: string
 ) {
-  const XLSX = (await import("xlsx")).default;
+  const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
 
   const allYears = Array.from(new Set(Object.values(history).flatMap(d => Object.keys(d)))).sort();
@@ -1296,7 +1296,16 @@ async function downloadExcel(
     XLSX.utils.book_append_sheet(wb, qSheet, "Most Recent Quarter");
   }
 
-  XLSX.writeFile(wb, `${ticker}_Financial_Model_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
+  const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = `${ticker}_Financial_Model_${new Date().toISOString().slice(0, 10)}.xlsx`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -1534,7 +1543,7 @@ export default function TenKPage() {
                   data.history ?? {},
                   data.quarterly_xbrl ?? {},
                   data.quarterly_period ?? ""
-                )}
+                ).catch(e => alert(`Excel export failed: ${e?.message ?? e}`))}
                 className="flex items-center gap-1.5 px-3 py-1.5 text-[10.5px] font-semibold border border-[#d0d7e8] rounded text-[#0c1b38] hover:bg-[#eef1f8] transition-colors">
                 <Download size={11} /> Export Excel
               </button>
