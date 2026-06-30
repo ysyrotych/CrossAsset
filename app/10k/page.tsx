@@ -65,23 +65,29 @@ function Sparkline({ values }: { values: number[] }) {
 
 // ── 5-Year History Table ──────────────────────────────────────────────────────
 
+function cagr(first: number | null, last: number | null, years: number): number | null {
+  if (first == null || last == null || first <= 0 || last <= 0 || years <= 0) return null;
+  return (Math.pow(last / first, 1 / years) - 1) * 100;
+}
+
 function HistoryTable({ history }: { history: Record<string, Record<string, number>> }) {
   const revData = history.revenue || {};
   const niData  = history.net_income || {};
   const oiData  = history.operating_income || {};
   const cfData  = history.operating_cf || {};
+  const gpData  = history.gross_profit || {};
 
   const allYears = Array.from(new Set([
-    ...Object.keys(revData),
-    ...Object.keys(niData),
-    ...Object.keys(oiData),
-    ...Object.keys(cfData),
+    ...Object.keys(revData), ...Object.keys(niData),
+    ...Object.keys(oiData),  ...Object.keys(cfData),
+    ...Object.keys(gpData),
   ])).sort();
 
   if (!allYears.length) return null;
 
   const rows: { label: string; data: Record<string, number>; prefix: string }[] = [
     { label: "Revenue",        data: revData, prefix: "$" },
+    { label: "Gross Profit",   data: gpData,  prefix: "$" },
     { label: "Operating Inc.", data: oiData,  prefix: "$" },
     { label: "Net Income",     data: niData,  prefix: "$" },
     { label: "Operating CF",   data: cfData,  prefix: "$" },
@@ -98,7 +104,7 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
         <TrendingUp size={12} className="text-white/40" />
       </div>
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[520px]">
+        <table className="w-full min-w-[620px]">
           <thead>
             <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
               <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[#999] w-36">Metric</th>
@@ -107,6 +113,7 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
                   {y.slice(0, 4)}
                 </th>
               ))}
+              <th className="px-2 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-[#999] w-16">CAGR</th>
               <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-[#999] w-20">Trend</th>
             </tr>
           </thead>
@@ -116,15 +123,19 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
               const sparkVals = vals.filter((v): v is number => v != null);
               const latest = vals[vals.length - 1];
               const prev   = vals.slice(0, -1).reverse().find(v => v != null);
+              const first  = vals.find(v => v != null);
               const yoy    = latest != null && prev != null && prev !== 0
                 ? ((latest - prev) / Math.abs(prev)) * 100 : null;
+              const nYears = sparkVals.length > 1 ? sparkVals.length - 1 : 0;
+              const c = cagr(first ?? null, latest ?? null, nYears);
+
               return (
                 <tr key={label} className={`border-b border-[#f0f0f0] last:border-0 ${ri % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
                   <td className="px-4 py-2.5 text-[11.5px] font-semibold text-[#333]">
                     <div>{label}</div>
                     {yoy != null && (
-                      <div className="text-[10px] font-normal mt-0.5" style={{ color: pctColor(yoy) }}>
-                        {yoy > 0 ? "+" : ""}{yoy.toFixed(1)}% YoY
+                      <div className="text-[9.5px] font-medium mt-0.5" style={{ color: pctColor(yoy) }}>
+                        {yoy > 0 ? "▲" : "▼"}{Math.abs(yoy).toFixed(1)}% YoY
                       </div>
                     )}
                   </td>
@@ -136,6 +147,9 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
                       </td>
                     );
                   })}
+                  <td className="px-2 py-2.5 text-right text-[10.5px] font-semibold tabular-nums" style={{ color: c != null ? pctColor(c) : "#ddd" }}>
+                    {c != null ? `${c > 0 ? "+" : ""}${c.toFixed(0)}%` : "—"}
+                  </td>
                   <td className="px-3 py-2.5 text-right">
                     {sparkVals.length >= 2 && <Sparkline values={sparkVals} />}
                   </td>
