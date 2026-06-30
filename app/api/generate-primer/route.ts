@@ -8,7 +8,7 @@ type Msg = { role: "user" | "assistant"; content: string };
 export async function POST(req: NextRequest) {
   const {
     ticker, companyName, industry, facts, history,
-    quarterlyFacts, quarterlyPeriod, sections,
+    quarterlyFacts, quarterlyPeriod, sections, fmpExtended,
   } = await req.json() as {
     ticker: string;
     companyName: string;
@@ -18,6 +18,7 @@ export async function POST(req: NextRequest) {
     quarterlyFacts: Record<string, number>;
     quarterlyPeriod: string;
     sections: { item: string; title: string; text: string }[];
+    fmpExtended?: Record<string, any>;
   };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -55,17 +56,48 @@ export async function POST(req: NextRequest) {
   const roa  = f.net_income && f.total_assets ? (f.net_income / f.total_assets * 100) : null;
   const netDebt = f.long_term_debt != null && f.cash != null ? f.long_term_debt - f.cash : null;
 
+  // Build extended context from fmp_extended
+  const ext = fmpExtended ?? {};
+  const buildSegStr = (segObj: any) => {
+    if (!segObj?.data) return "N/A";
+    const total = Object.values(segObj.data as Record<string,number>).reduce((s:number, v:any) => s + Math.abs(v), 0);
+    return Object.entries(segObj.data as Record<string,number>)
+      .sort(([,a],[,b]) => Math.abs(b as number) - Math.abs(a as number))
+      .map(([k, v]) => `${k}: ${fmt(v as number)} (${total > 0 ? ((Math.abs(v as number)/total)*100).toFixed(0) : 0}%)`)
+      .join(", ");
+  };
+  const segStr = buildSegStr(ext.segments);
+  const geoStr = buildSegStr(ext.geo_segments);
+  const estStr = (ext.analyst_estimates as any[])?.slice(0,3)
+    .map((e:any) => `${e.date?.slice(0,4)}: Rev ${fmt(e.rev_avg)}, EPS $${e.eps_avg?.toFixed(2) ?? "N/A"}`)
+    .join(" | ") ?? "N/A";
+  const surpriseStr = (ext.earnings_surprises as any[])?.slice(0,4)
+    .map((e:any) => `${e.date?.slice(0,7)}: actual $${e.eps_actual?.toFixed(2) ?? "?"} vs est $${e.eps_est?.toFixed(2) ?? "?"} (${e.surprise_pct != null ? (e.surprise_pct > 0 ? "+" : "") + e.surprise_pct.toFixed(1) + "%" : "?"})`)
+    .join("; ") ?? "N/A";
+
   const prompt = `You are a senior equity research analyst at Edgewood Management, an institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}).
+
+COMPANY PROFILE:
+CEO: ${ext.ceo ?? "N/A"} | Sector: ${ext.sector ?? "N/A"} | Industry: ${ext.fmp_industry ?? industry} | Country: ${ext.country ?? "N/A"}
+Employees: ${f.employees != null ? f.employees.toLocaleString() : "N/A"} | Exchange: ${ext.exchange ?? "N/A"} | IPO: ${ext.ipo_date ?? "N/A"}
+Market Cap: ${fmt(f.market_cap)} | Enterprise Value: ${fmt(f.enterprise_value)} | Beta: ${f.beta != null ? f.beta.toFixed(2) : "N/A"}
 
 FINANCIAL DATA:
 Revenue: ${fmt(f.revenue)} | Gross Margin: ${pct(f.gross_margin_pct)} | Op Margin: ${pct(f.operating_margin_pct)} | Net Margin: ${pct(f.net_margin_pct)}
 EBITDA: ${fmt(f.ebitda)} | FCF: ${fmt(f.free_cash_flow)} | Operating CF: ${fmt(f.operating_cf)}
 Net Income: ${fmt(f.net_income)} | EPS Diluted: ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"}
 Cash: ${fmt(f.cash)} | LT Debt: ${fmt(f.long_term_debt)} | Net Debt: ${netDebt != null ? fmt(netDebt) : "N/A"} | Total Assets: ${fmt(f.total_assets)} | Equity: ${fmt(f.equity)}
-ROE: ${roe != null ? pct(roe) : "N/A"} | ROA: ${roa != null ? pct(roa) : "N/A"}
+ROE: ${roe != null ? pct(roe) : "N/A"} | ROA: ${roa != null ? pct(roa) : "N/A"} | ROIC: ${f.roic != null ? pct(f.roic) : "N/A"}
 R&D: ${fmt(f.rd_expense)} | CapEx: ${fmt(f.capex)} | SBC: ${fmt(f.sbc_expense)} | D&A: ${fmt(f.da_expense)}
 Interest Expense: ${fmt(f.interest_expense)} | Pretax Income: ${fmt(f.pretax_income)} | Tax Rate: ${pct(f.effective_tax_rate)}
 EPS Basic: ${f.eps_basic != null ? `$${f.eps_basic.toFixed(2)}` : "N/A"} | Shares (diluted): ${f.shares_diluted_wtd != null ? fmt(f.shares_diluted_wtd) : "N/A"}
+
+VALUATION MULTIPLES:
+P/E: ${f.pe_ratio != null ? x(f.pe_ratio) : "N/A"} | EV/EBITDA: ${f.ev_ebitda != null ? x(f.ev_ebitda) : "N/A"} | P/FCF: ${f.p_fcf != null ? x(f.p_fcf) : "N/A"} | P/Sales: ${f.p_sales != null ? x(f.p_sales) : "N/A"} | P/Book: ${f.p_book != null ? x(f.p_book) : "N/A"}
+Debt/Equity: ${f.debt_to_equity != null ? x(f.debt_to_equity) : "N/A"} | Current Ratio: ${f.current_ratio != null ? x(f.current_ratio) : "N/A"} | Div Yield: ${f.dividend_yield != null ? pct(f.dividend_yield) : "N/A"} | FCF Yield: ${f.fcf_yield != null ? pct(f.fcf_yield) : "N/A"}
+
+GROWTH RATES (YoY):
+Revenue: ${f.revenue_growth_yoy != null ? pct(f.revenue_growth_yoy) : "N/A"} | EPS: ${f.eps_growth_yoy != null ? pct(f.eps_growth_yoy) : "N/A"} | FCF: ${f.fcf_growth_yoy != null ? pct(f.fcf_growth_yoy) : "N/A"} | Net Income: ${f.ni_growth_yoy != null ? pct(f.ni_growth_yoy) : "N/A"}
 
 5-YEAR REVENUE TREND: ${revTable || "N/A"}
 5-YEAR NET INCOME: ${Object.keys(history.net_income ?? {}).sort().slice(-5).map(y => `${y.slice(0,4)}: ${fmt(history.net_income?.[y])}`).join(" | ") || "N/A"}
@@ -75,6 +107,15 @@ EPS Basic: ${f.eps_basic != null ? `$${f.eps_basic.toFixed(2)}` : "N/A"} | Share
 MOST RECENT QUARTER (${quarterlyPeriod}):
 Revenue: ${fmt(quarterlyFacts.revenue)} | Gross Margin: ${pct(quarterlyFacts.gross_margin_pct)} | Op Margin: ${pct(quarterlyFacts.operating_margin_pct)} | Net Margin: ${pct(quarterlyFacts.net_margin_pct)}
 Net Income: ${fmt(quarterlyFacts.net_income)} | EPS: ${quarterlyFacts.eps_diluted != null ? `$${quarterlyFacts.eps_diluted.toFixed(2)}` : "N/A"} | FCF: ${fmt(quarterlyFacts.free_cash_flow)}
+
+ANALYST CONSENSUS:
+FMP Rating: ${ext.fmp_rating ?? "N/A"} | Price Target (consensus): ${f.pt_consensus != null ? fmt(f.pt_consensus) : "N/A"} | # Analysts: ${f.num_analysts != null ? f.num_analysts.toFixed(0) : "N/A"}
+Forward Estimates: ${estStr}
+EPS Surprise History: ${surpriseStr}
+
+REVENUE SEGMENTS (latest annual):
+Business Segments: ${segStr}
+Geographic Breakdown: ${geoStr}
 
 INDUSTRY: ${industry}
 

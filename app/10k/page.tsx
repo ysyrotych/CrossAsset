@@ -14,6 +14,18 @@ const PrimerDownloadButton = dynamic(
 type FilingSection = { item: string; title: string; text: string; char_count: number };
 type FilingData    = { form_type: string; accession: string; filed_date: string; period_of_report: string; sections: FilingSection[]; raw_financials: Record<string, number> };
 type CompanyInfo   = { ticker: string; name: string; cik: string; sic: string; sic_description: string };
+type SegmentData   = { date: string; data: Record<string, number> };
+type KmHistory     = { date: string; pe: number|null; ev_ebitda: number|null; roic: number|null; p_fcf: number|null; current_ratio: number|null; debt_equity: number|null }[];
+type GrowthHistory = { date: string; rev_growth: number; eps_growth: number; fcf_growth: number }[];
+type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number|null; surprise_pct: number|null }[];
+type AnalystEstimate = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
+type FmpExtended   = {
+  ceo?: string; sector?: string; fmp_industry?: string; country?: string; exchange?: string;
+  website?: string; ipo_date?: string; company_description?: string; fmp_rating?: string;
+  segments?: SegmentData; geo_segments?: SegmentData;
+  km_history?: KmHistory; growth_history?: GrowthHistory;
+  earnings_surprises?: EarningsSurprise; analyst_estimates?: AnalystEstimate;
+};
 type Payload       = {
   company: CompanyInfo;
   annual: FilingData | null;
@@ -24,6 +36,7 @@ type Payload       = {
   quarterly_period: string;
   prior_quarter_xbrl: Record<string, number>;
   prior_quarter_period: string;
+  fmp_extended?: FmpExtended;
 };
 
 // ── Quick-picks ───────────────────────────────────────────────────────────────
@@ -1528,12 +1541,13 @@ export default function TenKPage() {
         body: JSON.stringify({
           ticker: data.company.ticker,
           companyName: data.company.name,
-          industry: data.company.sic_description ?? "",
+          industry: data.fmp_extended?.fmp_industry ?? data.company.sic_description ?? "",
           facts: data.xbrl_facts,
           history: data.history ?? {},
           quarterlyFacts: data.quarterly_xbrl ?? {},
           quarterlyPeriod: data.quarterly_period ?? "",
           sections: allSections,
+          fmpExtended: data.fmp_extended ?? {},
         }),
       });
       if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
@@ -1685,7 +1699,12 @@ export default function TenKPage() {
                 <span className="text-[26px] font-bold text-white leading-none tracking-tight">{data.company.ticker}</span>
                 <div>
                   <p className="text-[13px] font-medium text-white/90">{data.company.name}</p>
-                  <p className="text-[10.5px] text-white/40">{data.company.sic_description || "—"} · SIC {data.company.sic || "—"} · CIK {data.company.cik}</p>
+                  <p className="text-[10.5px] text-white/40">
+                    {data.fmp_extended?.sector ?? data.company.sic_description ?? "—"}
+                    {data.fmp_extended?.fmp_industry ? ` · ${data.fmp_extended.fmp_industry}` : ` · SIC ${data.company.sic || "—"}`}
+                    {data.fmp_extended?.ceo ? ` · CEO: ${data.fmp_extended.ceo}` : ""}
+                    {data.xbrl_facts.employees ? ` · ${(data.xbrl_facts.employees/1000).toFixed(0)}K employees` : ""}
+                  </p>
                 </div>
               </div>
               <div className="flex items-center gap-6 text-right">
@@ -1717,14 +1736,15 @@ export default function TenKPage() {
             {Object.keys(data.xbrl_facts).length > 0 && (() => {
               const f = data.xbrl_facts;
               const metrics = [
+                f.market_cap != null ? { label: "Mkt Cap", value: fmtNum(f.market_cap, "$"), sub: f.beta != null ? `β ${f.beta.toFixed(2)}` : "" } : null,
                 { label: "Revenue", value: fmtNum(f.revenue, "$"), sub: f.gross_margin_pct != null ? `${f.gross_margin_pct.toFixed(1)}% GM` : "" },
                 { label: "Net Income", value: fmtNum(f.net_income, "$"), sub: f.net_margin_pct != null ? `${f.net_margin_pct.toFixed(1)}% NM` : "" },
                 { label: "EBITDA", value: fmtNum(f.ebitda, "$"), sub: f.ebitda && f.revenue ? `${(f.ebitda/f.revenue*100).toFixed(1)}% margin` : "" },
                 { label: "Free CF", value: fmtNum(f.free_cash_flow, "$"), sub: f.free_cash_flow && f.revenue ? `${(f.free_cash_flow/f.revenue*100).toFixed(1)}% FCF margin` : "" },
+                f.pe_ratio != null ? { label: "P/E", value: `${f.pe_ratio.toFixed(1)}x`, sub: f.ev_ebitda != null ? `${f.ev_ebitda.toFixed(1)}x EV/EBITDA` : "" } : null,
                 { label: "EPS Diluted", value: fmtNum(f.eps_diluted, "$"), sub: "" },
-                { label: "Total Assets", value: fmtNum(f.total_assets, "$"), sub: "" },
                 { label: "Net Debt", value: f.long_term_debt != null && f.cash != null ? fmtNum(f.long_term_debt - f.cash, "$") : "—", sub: f.long_term_debt != null && f.cash != null && f.long_term_debt < f.cash ? "net cash" : "" },
-              ].filter(m => m.value !== "—");
+              ].filter((m): m is {label:string;value:string;sub:string} => m !== null && m.value !== "—");
               return (
                 <div className="grid border-t border-[#1e3560] bg-[#0c1b38]" style={{ gridTemplateColumns: `repeat(${metrics.length}, 1fr)` }}>
                   {metrics.map((m, i) => (
@@ -1777,6 +1797,199 @@ export default function TenKPage() {
           {data.history && Object.keys(data.history).length > 0 && (
             <HistoryTable history={data.history} />
           )}
+
+          {/* Valuation & Returns */}
+          {Object.keys(data.xbrl_facts).length > 0 && (() => {
+            const f = data.xbrl_facts;
+            const valRows = [
+              ["P/E Ratio",     f.pe_ratio    != null ? `${f.pe_ratio.toFixed(1)}x` : null],
+              ["EV / EBITDA",   f.ev_ebitda   != null ? `${f.ev_ebitda.toFixed(1)}x` : null],
+              ["P / FCF",       f.p_fcf       != null ? `${f.p_fcf.toFixed(1)}x` : null],
+              ["P / Sales",     f.p_sales     != null ? `${f.p_sales.toFixed(1)}x` : null],
+              ["P / Book",      f.p_book      != null ? `${f.p_book.toFixed(1)}x` : null],
+              ["EV / Revenue",  f.ev_revenue  != null ? `${f.ev_revenue.toFixed(1)}x` : null],
+              ["Ent. Value",    f.enterprise_value != null ? fmtNum(f.enterprise_value, "$") : null],
+              ["ROIC",          f.roic        != null ? `${f.roic.toFixed(1)}%` : null],
+              ["ROE",           (() => { const v = f.roe_km ?? (f.net_income != null && f.equity != null ? f.net_income/f.equity*100 : null); return v != null ? `${v.toFixed(1)}%` : null; })()],
+              ["Current Ratio", f.current_ratio != null ? `${f.current_ratio.toFixed(2)}x` : null],
+              ["Debt / Equity", f.debt_to_equity != null ? `${f.debt_to_equity.toFixed(2)}x` : null],
+              ["Dividend Yield",f.dividend_yield != null ? `${f.dividend_yield.toFixed(2)}%` : null],
+              ["FCF Yield",     f.fcf_yield   != null ? `${f.fcf_yield.toFixed(2)}%` : null],
+              ["Rev Growth YoY",f.revenue_growth_yoy != null ? `${f.revenue_growth_yoy.toFixed(1)}%` : null],
+              ["EPS Growth YoY",f.eps_growth_yoy != null ? `${f.eps_growth_yoy.toFixed(1)}%` : null],
+            ].filter((r): r is [string, string] => r[1] !== null);
+            if (valRows.length === 0) return null;
+            return (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Valuation & Returns</p>
+                <div className="border border-[#1e3560] rounded-lg overflow-hidden">
+                  <div className="grid" style={{ gridTemplateColumns: "repeat(4, 1fr)" }}>
+                    {valRows.map(([label, val], i) => {
+                      const isGrowth = label.includes("Growth") || label.includes("Yield") || label.includes("ROE") || label.includes("ROIC");
+                      const numVal = isGrowth ? parseFloat(val) : null;
+                      const color = isGrowth && numVal != null ? (numVal >= 0 ? "#0d6b45" : "#b42318") : "#e0e8f7";
+                      return (
+                        <div key={label} className={`px-4 py-2.5 border-[#1e3560] ${i % 4 !== 3 ? "border-r" : ""} ${i >= 4 ? "border-t" : ""}`} style={{ backgroundColor: "#0c1b38" }}>
+                          <p className="text-[8px] font-bold uppercase tracking-widest text-white/30 mb-0.5">{label}</p>
+                          <p className="text-[13px] font-bold tabular-nums" style={{ color }}>{val}</p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Analyst Consensus & Estimates */}
+          {(() => {
+            const f = data.xbrl_facts;
+            const ext = data.fmp_extended;
+            const hasRating = ext?.fmp_rating || f.pt_consensus != null;
+            const hasEstimates = (ext?.analyst_estimates?.length ?? 0) > 0;
+            const hasEarnings = (ext?.earnings_surprises?.length ?? 0) > 0;
+            if (!hasRating && !hasEstimates && !hasEarnings) return null;
+            const fmt2 = (v: number|null|undefined, prefix="") => v == null ? "—" : fmtNum(v, prefix);
+            return (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Analyst Consensus</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {(hasRating || hasEstimates) && (
+                    <div className="border border-[#1e3560] rounded-lg overflow-hidden" style={{ backgroundColor: "#0c1b38" }}>
+                      <div className="px-4 py-2 border-b border-[#1e3560]">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">FMP Rating & Price Target</p>
+                      </div>
+                      <div className="px-4 py-3 space-y-2">
+                        {ext?.fmp_rating && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-white/50">FMP Rating</span>
+                            <span className="text-[11px] font-bold text-[#60a5fa]">{ext.fmp_rating}</span>
+                          </div>
+                        )}
+                        {f.pt_consensus != null && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-white/50">Price Target (last mo.)</span>
+                            <span className="text-[11px] font-bold text-white">{fmt2(f.pt_consensus, "$")}</span>
+                          </div>
+                        )}
+                        {f.num_analysts != null && (
+                          <div className="flex justify-between items-center">
+                            <span className="text-[10px] text-white/50"># Analysts</span>
+                            <span className="text-[11px] font-bold text-white">{f.num_analysts.toFixed(0)}</span>
+                          </div>
+                        )}
+                      </div>
+                      {hasEstimates && (
+                        <>
+                          <div className="px-4 py-2 border-t border-[#1e3560]">
+                            <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">Forward Estimates</p>
+                          </div>
+                          <div className="px-4 py-2">
+                            <table className="w-full text-[10px]">
+                              <thead>
+                                <tr className="text-white/30">
+                                  <th className="text-left pb-1 font-semibold">Period</th>
+                                  <th className="text-right pb-1 font-semibold">Rev Est</th>
+                                  <th className="text-right pb-1 font-semibold">EPS Est</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {ext!.analyst_estimates!.map(e => (
+                                  <tr key={e.date} className="border-t border-[#1e3560]">
+                                    <td className="py-1 text-white/60">{e.date?.slice(0,4)}</td>
+                                    <td className="py-1 text-right text-white tabular-nums">{fmt2(e.rev_avg, "$")}</td>
+                                    <td className="py-1 text-right text-white tabular-nums">{e.eps_avg != null ? `$${e.eps_avg.toFixed(2)}` : "—"}</td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </>
+                      )}
+                    </div>
+                  )}
+                  {hasEarnings && (
+                    <div className="border border-[#1e3560] rounded-lg overflow-hidden" style={{ backgroundColor: "#0c1b38" }}>
+                      <div className="px-4 py-2 border-b border-[#1e3560]">
+                        <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">EPS Surprises (last 8 quarters)</p>
+                      </div>
+                      <div className="px-4 py-2">
+                        <table className="w-full text-[10px]">
+                          <thead>
+                            <tr className="text-white/30">
+                              <th className="text-left pb-1 font-semibold">Quarter</th>
+                              <th className="text-right pb-1 font-semibold">Actual</th>
+                              <th className="text-right pb-1 font-semibold">Est</th>
+                              <th className="text-right pb-1 font-semibold">Beat</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {ext!.earnings_surprises!.map(e => {
+                              const color = e.surprise_pct != null ? (e.surprise_pct >= 0 ? "#0d6b45" : "#b42318") : "#888";
+                              return (
+                                <tr key={e.date} className="border-t border-[#1e3560]">
+                                  <td className="py-1 text-white/60">{e.date?.slice(0,7)}</td>
+                                  <td className="py-1 text-right text-white tabular-nums">{e.eps_actual != null ? `$${e.eps_actual.toFixed(2)}` : "—"}</td>
+                                  <td className="py-1 text-right text-white/60 tabular-nums">{e.eps_est != null ? `$${e.eps_est.toFixed(2)}` : "—"}</td>
+                                  <td className="py-1 text-right tabular-nums font-bold" style={{ color }}>{e.surprise_pct != null ? `${e.surprise_pct > 0 ? "+" : ""}${e.surprise_pct.toFixed(1)}%` : "—"}</td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            );
+          })()}
+
+          {/* Revenue Segments */}
+          {(() => {
+            const ext = data.fmp_extended;
+            const hasSeg = ext?.segments && Object.keys(ext.segments.data).length > 0;
+            const hasGeo = ext?.geo_segments && Object.keys(ext.geo_segments.data).length > 0;
+            if (!hasSeg && !hasGeo) return null;
+            const renderBars = (segData: Record<string, number>, title: string, date: string) => {
+              const total = Object.values(segData).reduce((s, v) => s + Math.abs(v), 0);
+              const sorted = Object.entries(segData).sort(([,a],[,b]) => Math.abs(b) - Math.abs(a));
+              const COLORS = ["#3b82f6","#60a5fa","#93c5fd","#1d4ed8","#7dd3fc","#2563eb","#bfdbfe"];
+              return (
+                <div className="border border-[#1e3560] rounded-lg overflow-hidden" style={{ backgroundColor: "#0c1b38" }}>
+                  <div className="px-4 py-2 border-b border-[#1e3560] flex justify-between items-center">
+                    <p className="text-[9px] font-bold uppercase tracking-widest text-white/40">{title}</p>
+                    <p className="text-[8.5px] text-white/30">{date}</p>
+                  </div>
+                  <div className="px-4 py-3 space-y-2">
+                    {sorted.map(([name, val], i) => {
+                      const pct = total > 0 ? Math.abs(val) / total * 100 : 0;
+                      return (
+                        <div key={name}>
+                          <div className="flex justify-between mb-0.5">
+                            <span className="text-[9.5px] text-white/70 truncate max-w-[60%]">{name}</span>
+                            <span className="text-[9.5px] font-semibold text-white tabular-nums">{fmtNum(val, "$")} <span className="text-white/40">({pct.toFixed(1)}%)</span></span>
+                          </div>
+                          <div className="h-1.5 rounded-full bg-[#1e3560]">
+                            <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: COLORS[i % COLORS.length] }} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              );
+            };
+            return (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Revenue Segmentation</p>
+                <div className="grid grid-cols-2 gap-4">
+                  {hasSeg && renderBars(ext!.segments!.data, "Business Segments", ext!.segments!.date)}
+                  {hasGeo && renderBars(ext!.geo_segments!.data, "Geographic Revenue", ext!.geo_segments!.date)}
+                </div>
+              </div>
+            );
+          })()}
 
           {/* Filing Sections */}
           <div>

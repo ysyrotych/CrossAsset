@@ -43,46 +43,83 @@ except ImportError:
 # ── FMP (Financial Modeling Prep) ─────────────────────────────────────────────
 
 import os as _os
+import concurrent.futures as _cf
 FMP_API_KEY = _os.environ.get("FMP_API_KEY", "").strip()
 FMP_BASE    = "https://financialmodelingprep.com/api/v3"
 
 def get_fmp_financials(ticker: str) -> dict:
     """
-    Fetch full financial statements from Financial Modeling Prep.
+    Fetch comprehensive data from Financial Modeling Prep (free tier).
     Returns {} if FMP_API_KEY not set or request fails.
-    Field names follow FMP's camelCase convention — mapped below.
+    All requests run in parallel via ThreadPoolExecutor.
     """
     if not FMP_API_KEY:
+        print(f"FMP_API_KEY not set — skipping FMP for {ticker}")
         return {}
     try:
-        def fetch(path: str) -> list:
-            url = f"{FMP_BASE}/{path}?limit=6&apikey={FMP_API_KEY}"
-            r = httpx.get(url, timeout=20, headers={"User-Agent": "CrossAsset/1.0"})
+        def fetch(path: str, limit: int = 6) -> list:
+            sep = "&" if "?" in path else "?"
+            url = f"{FMP_BASE}/{path}{sep}limit={limit}&apikey={FMP_API_KEY}"
+            r = httpx.get(url, timeout=25, headers={"User-Agent": "CrossAsset/1.0"})
             if r.status_code != 200:
                 print(f"FMP {path}: HTTP {r.status_code}")
                 return []
             data = r.json()
             return data if isinstance(data, list) else []
 
-        inc_a  = fetch(f"income-statement/{ticker}")
-        bal_a  = fetch(f"balance-sheet-statement/{ticker}")
-        cf_a   = fetch(f"cash-flow-statement/{ticker}")
-        inc_q  = fetch(f"income-statement/{ticker}?period=quarter")
-        bal_q  = fetch(f"balance-sheet-statement/{ticker}?period=quarter")
-        cf_q   = fetch(f"cash-flow-statement/{ticker}?period=quarter")
+        def fetch_one(path: str) -> dict:
+            sep = "&" if "?" in path else "?"
+            url = f"{FMP_BASE}/{path}{sep}apikey={FMP_API_KEY}"
+            r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
+            if r.status_code != 200:
+                return {}
+            data = r.json()
+            if isinstance(data, list):
+                return data[0] if data else {}
+            return data if isinstance(data, dict) else {}
 
-        if not inc_a:
+        t = ticker
+        with _cf.ThreadPoolExecutor(max_workers=15) as ex:
+            fs = {
+                "inc_a":     ex.submit(fetch, f"income-statement/{t}"),
+                "bal_a":     ex.submit(fetch, f"balance-sheet-statement/{t}"),
+                "cf_a":      ex.submit(fetch, f"cash-flow-statement/{t}"),
+                "inc_q":     ex.submit(fetch, f"income-statement/{t}?period=quarter"),
+                "bal_q":     ex.submit(fetch, f"balance-sheet-statement/{t}?period=quarter"),
+                "cf_q":      ex.submit(fetch, f"cash-flow-statement/{t}?period=quarter"),
+                "profile":   ex.submit(fetch_one, f"profile/{t}"),
+                "km":        ex.submit(fetch, f"key-metrics/{t}"),
+                "growth":    ex.submit(fetch, f"financial-growth/{t}"),
+                "estimates": ex.submit(fetch, f"analyst-estimates/{t}", 4),
+                "rating":    ex.submit(fetch_one, f"ratings/{t}"),
+                "pt":        ex.submit(fetch_one, f"price-target-summary/{t}"),
+                "earnings":  ex.submit(fetch, f"earnings-surprises/{t}", 8),
+                "segments":  ex.submit(fetch, f"revenue-product-segmentation/{t}", 3),
+                "geo_segs":  ex.submit(fetch, f"revenue-geographic-segmentation/{t}", 3),
+            }
+            res = {k: v.result() for k, v in fs.items()}
+
+        if not res["inc_a"]:
             print(f"FMP: no income statement for {ticker}")
             return {}
 
-        print(f"FMP: {len(inc_a)} annual + {len(inc_q)} quarterly periods for {ticker}")
+        print(f"FMP OK {ticker}: {len(res['inc_a'])}a/{len(res['inc_q'])}q | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'}")
         return {
-            "income_annual":   inc_a,
-            "balance_annual":  bal_a,
-            "cashflow_annual": cf_a,
-            "income_quarterly":   inc_q,
-            "balance_quarterly":  bal_q,
-            "cashflow_quarterly": cf_q,
+            "income_annual":     res["inc_a"],
+            "balance_annual":    res["bal_a"],
+            "cashflow_annual":   res["cf_a"],
+            "income_quarterly":  res["inc_q"],
+            "balance_quarterly": res["bal_q"],
+            "cashflow_quarterly":res["cf_q"],
+            "profile":           res["profile"],
+            "key_metrics":       res["km"],
+            "financial_growth":  res["growth"],
+            "analyst_estimates": res["estimates"],
+            "rating":            res["rating"],
+            "price_target":      res["pt"],
+            "earnings":          res["earnings"],
+            "segments":          res["segments"],
+            "geo_segments":      res["geo_segs"],
         }
     except Exception as e:
         print(f"FMP error for {ticker}: {e}")
@@ -357,7 +394,149 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         if pq_rev and pq_oi:  pqfacts["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
         if pq_rev and pq_ni:  pqfacts["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
 
-    return facts, history, qfacts, pqfacts, q_period, {}, prior_q_period
+    # ── Extended data (profile, valuation, analyst) ───────────────────────────
+    fmp_ext: dict = {}
+
+    profile = fmp.get("profile", {})
+    if profile:
+        for k, pk in [("ceo","ceo"),("sector","sector"),("fmp_industry","industry"),
+                      ("country","country"),("exchange","exchangeShortName"),
+                      ("website","website"),("ipo_date","ipoDate"),
+                      ("company_description","description")]:
+            v = profile.get(pk)
+            if v:
+                fmp_ext[k] = v
+        mc = safe_float(profile.get("mktCap"))
+        if mc: facts["market_cap"] = mc
+        beta = safe_float(profile.get("beta"))
+        if beta: facts["beta"] = beta
+        emp = profile.get("fullTimeEmployees")
+        if emp:
+            try:
+                facts["employees"] = float(str(emp).replace(",", ""))
+            except Exception:
+                pass
+
+    km_list = fmp.get("key_metrics", [])
+    if km_list:
+        km = km_list[0]
+        for k, fk in [("pe_ratio","peRatio"),("p_sales","priceToSalesRatio"),
+                      ("p_fcf","pfcfRatio"),("p_book","pbRatio"),
+                      ("enterprise_value","enterpriseValue"),
+                      ("ev_ebitda","enterpriseValueOverEBITDA"),
+                      ("ev_revenue","evToSales"),
+                      ("current_ratio","currentRatio"),
+                      ("debt_to_equity","debtToEquity"),
+                      ("interest_coverage","interestCoverage"),
+                      ("income_quality","incomeQuality")]:
+            v = safe_float(km.get(fk))
+            if v is not None: facts[k] = round(v, 2)
+        for k, fk in [("roic","roic"),("roe_km","roe"),("dividend_yield","dividendYield"),
+                      ("fcf_yield","freeCashFlowYield")]:
+            v = safe_float(km.get(fk))
+            if v is not None: facts[k] = round(v * 100, 2)
+        # history of key ratios
+        km_hist = []
+        for p in km_list[:6]:
+            km_hist.append({
+                "date": p.get("date","")[:10],
+                "pe": safe_float(p.get("peRatio")),
+                "ev_ebitda": safe_float(p.get("enterpriseValueOverEBITDA")),
+                "roic": round(safe_float(p.get("roic") or 0) * 100, 1),
+                "p_fcf": safe_float(p.get("pfcfRatio")),
+                "current_ratio": safe_float(p.get("currentRatio")),
+                "debt_equity": safe_float(p.get("debtToEquity")),
+            })
+        if km_hist:
+            fmp_ext["km_history"] = km_hist
+
+    growth_list = fmp.get("financial_growth", [])
+    if growth_list:
+        fg = growth_list[0]
+        for k, fk in [("revenue_growth_yoy","revenueGrowth"),
+                      ("eps_growth_yoy","epsgrowth"),
+                      ("fcf_growth_yoy","freeCashFlowGrowth"),
+                      ("ni_growth_yoy","netIncomeGrowth"),
+                      ("ocf_growth_yoy","operatingCashFlowGrowth")]:
+            v = safe_float(fg.get(fk))
+            if v is not None: facts[k] = round(v * 100, 1)
+        # growth history for trend
+        gh = []
+        for p in growth_list[:6]:
+            gh.append({
+                "date": p.get("date","")[:10],
+                "rev_growth": round((safe_float(p.get("revenueGrowth")) or 0) * 100, 1),
+                "eps_growth": round((safe_float(p.get("epsgrowth")) or 0) * 100, 1),
+                "fcf_growth": round((safe_float(p.get("freeCashFlowGrowth")) or 0) * 100, 1),
+            })
+        if gh:
+            fmp_ext["growth_history"] = gh
+
+    estimates = fmp.get("analyst_estimates", [])
+    if estimates:
+        ne = estimates[0]
+        for k, ek in [("rev_est_next","estimatedRevenueAvg"),
+                      ("ebitda_est_next","estimatedEbitdaAvg"),
+                      ("eps_est_next","estimatedEpsAverage"),
+                      ("ni_est_next","estimatedNetIncomeAvg")]:
+            v = safe_float(ne.get(ek))
+            if v is not None: facts[k] = v
+        na = safe_float(ne.get("numberAnalystEstimatedRevenue"))
+        if na: facts["num_analysts"] = na
+        # store full estimates array for primer
+        fmp_ext["analyst_estimates"] = [
+            {
+                "date": p.get("date","")[:10],
+                "rev_avg": safe_float(p.get("estimatedRevenueAvg")),
+                "eps_avg": safe_float(p.get("estimatedEpsAverage")),
+                "ebitda_avg": safe_float(p.get("estimatedEbitdaAvg")),
+                "num_analysts": safe_float(p.get("numberAnalystEstimatedRevenue")),
+            }
+            for p in estimates[:4]
+        ]
+
+    rating = fmp.get("rating", {})
+    if rating:
+        fmp_ext["fmp_rating"] = rating.get("ratingRecommendation", "")
+        v = safe_float(rating.get("ratingScore"))
+        if v: facts["fmp_rating_score"] = v
+
+    pt = fmp.get("price_target", {})
+    if pt:
+        for k, pk in [("pt_consensus","lastMonthAvgPriceTarget"),
+                      ("pt_last_month","lastMonth"),
+                      ("pt_last_quarter","lastQuarterAvgPriceTarget")]:
+            v = safe_float(pt.get(pk))
+            if v: facts[k] = v
+
+    raw_earnings = fmp.get("earnings", [])
+    if raw_earnings:
+        fmp_ext["earnings_surprises"] = [
+            {
+                "date": p.get("date","")[:10],
+                "eps_actual": safe_float(p.get("actualEarningResult")),
+                "eps_est": safe_float(p.get("estimatedEarning")),
+                "surprise_pct": round((safe_float(p.get("actualEarningResult") or 0) - (safe_float(p.get("estimatedEarning")) or 0)) / abs(safe_float(p.get("estimatedEarning")) or 1) * 100, 1) if p.get("estimatedEarning") else None,
+            }
+            for p in raw_earnings[:8]
+        ]
+
+    # Revenue segments — each period is {date, seg1: val, seg2: val, ...}
+    raw_segs = fmp.get("segments", [])
+    if raw_segs:
+        latest_seg = raw_segs[0] if raw_segs else {}
+        seg_data = {k: v for k, v in latest_seg.items() if k != "date" and isinstance(v, (int, float)) and v}
+        if seg_data:
+            fmp_ext["segments"] = {"date": latest_seg.get("date",""), "data": seg_data}
+
+    raw_geo = fmp.get("geo_segments", [])
+    if raw_geo:
+        latest_geo = raw_geo[0] if raw_geo else {}
+        geo_data = {k: v for k, v in latest_geo.items() if k != "date" and isinstance(v, (int, float)) and v}
+        if geo_data:
+            fmp_ext["geo_segments"] = {"date": latest_geo.get("date",""), "data": geo_data}
+
+    return facts, history, qfacts, pqfacts, q_period, fmp_ext, prior_q_period
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -1185,12 +1364,22 @@ class AnalysisPayload(BaseModel):
     quarterly_period: str = ""
     prior_quarter_xbrl: dict = {}
     prior_quarter_period: str = ""
+    fmp_extended: dict = {}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
 @app.get("/health")
 def health():
     return {"status": "ok", "edgar_available": EDGAR_AVAILABLE}
+
+@app.get("/debug")
+def debug():
+    return {
+        "fmp_key_set": bool(FMP_API_KEY),
+        "fmp_key_length": len(FMP_API_KEY),
+        "edgar_available": EDGAR_AVAILABLE,
+        "yf_available": YF_AVAILABLE,
+    }
 
 @app.get("/company/{ticker}", response_model=AnalysisPayload)
 async def get_company_analysis(ticker: str, sections: str = "business,risks,cybersecurity,properties,legal,mda,quantitative,controls,accountant_fees,q_quantitative,q_controls,q_legal"):
@@ -1226,7 +1415,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
     # ── Financial data priority: FMP > yfinance > XBRL ───────────────────────
     if fmp_data:
         print(f"Using FMP as primary financial data source for {ticker}")
-        merged_facts, merged_history, qxbrl, pqxbrl, q_period, _, prior_q_period = build_from_fmp(fmp_data)
+        merged_facts, merged_history, qxbrl, pqxbrl, q_period, fmp_ext, prior_q_period = build_from_fmp(fmp_data)
     else:
         print(f"FMP not available — falling back to yfinance+XBRL for {ticker}")
         merged_facts   = merge_yf_into_facts(dict(xbrl_result.get("facts", {})), yf_data)
@@ -1235,6 +1424,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         pqxbrl         = dict(xbrl_result.get("prior_quarter_facts", {}))
         q_period       = xbrl_result.get("quarterly_period", "")
         prior_q_period = xbrl_result.get("prior_quarter_period", "")
+        fmp_ext        = {}
 
     return AnalysisPayload(
         company=info,
@@ -1246,6 +1436,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         quarterly_period=q_period,
         prior_quarter_xbrl=pqxbrl,
         prior_quarter_period=prior_q_period,
+        fmp_extended=fmp_ext,
     )
 
 def _get_company(ticker: str):
