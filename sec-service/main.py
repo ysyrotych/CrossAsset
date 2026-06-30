@@ -44,58 +44,64 @@ except ImportError:
 
 import os as _os
 import concurrent.futures as _cf
-FMP_API_KEY = _os.environ.get("FMP_API_KEY", "").strip()
-FMP_BASE    = "https://financialmodelingprep.com/api/v3"
+FMP_API_KEY  = _os.environ.get("FMP_API_KEY", "").strip()
+FMP_BASE     = "https://financialmodelingprep.com/stable"
 
 def get_fmp_financials(ticker: str) -> dict:
     """
-    Fetch comprehensive data from Financial Modeling Prep (free tier).
+    Fetch comprehensive data from Financial Modeling Prep (stable API, post-Aug 2025).
+    New base: financialmodelingprep.com/stable  — params use ?symbol= not path segments.
     Returns {} if FMP_API_KEY not set or request fails.
-    All requests run in parallel via ThreadPoolExecutor.
     """
     if not FMP_API_KEY:
         print(f"FMP_API_KEY not set — skipping FMP for {ticker}")
         return {}
     try:
-        def fetch(path: str, limit: int = 6) -> list:
-            sep = "&" if "?" in path else "?"
-            url = f"{FMP_BASE}/{path}{sep}limit={limit}&apikey={FMP_API_KEY}"
+        def _qs(extra: dict = None, limit: int = None) -> str:
+            p = {"symbol": ticker, "apikey": FMP_API_KEY}
+            if limit is not None:
+                p["limit"] = limit
+            if extra:
+                p.update(extra)
+            return "&".join(f"{k}={v}" for k, v in p.items())
+
+        def fetch(endpoint: str, extra: dict = None, limit: int = 6) -> list:
+            url = f"{FMP_BASE}/{endpoint}?{_qs(extra, limit)}"
             r = httpx.get(url, timeout=25, headers={"User-Agent": "CrossAsset/1.0"})
             if r.status_code != 200:
-                print(f"FMP {path}: HTTP {r.status_code}")
+                print(f"FMP {endpoint}: HTTP {r.status_code} — {r.text[:300]}")
                 return []
             data = r.json()
             return data if isinstance(data, list) else []
 
-        def fetch_one(path: str) -> dict:
-            sep = "&" if "?" in path else "?"
-            url = f"{FMP_BASE}/{path}{sep}apikey={FMP_API_KEY}"
+        def fetch_one(endpoint: str, extra: dict = None) -> dict:
+            url = f"{FMP_BASE}/{endpoint}?{_qs(extra)}"
             r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
             if r.status_code != 200:
+                print(f"FMP {endpoint} (one): HTTP {r.status_code} — {r.text[:200]}")
                 return {}
             data = r.json()
             if isinstance(data, list):
                 return data[0] if data else {}
             return data if isinstance(data, dict) else {}
 
-        t = ticker
         with _cf.ThreadPoolExecutor(max_workers=15) as ex:
             fs = {
-                "inc_a":     ex.submit(fetch, f"income-statement/{t}"),
-                "bal_a":     ex.submit(fetch, f"balance-sheet-statement/{t}"),
-                "cf_a":      ex.submit(fetch, f"cash-flow-statement/{t}"),
-                "inc_q":     ex.submit(fetch, f"income-statement/{t}?period=quarter"),
-                "bal_q":     ex.submit(fetch, f"balance-sheet-statement/{t}?period=quarter"),
-                "cf_q":      ex.submit(fetch, f"cash-flow-statement/{t}?period=quarter"),
-                "profile":   ex.submit(fetch_one, f"profile/{t}"),
-                "km":        ex.submit(fetch, f"key-metrics/{t}"),
-                "growth":    ex.submit(fetch, f"financial-growth/{t}"),
-                "estimates": ex.submit(fetch, f"analyst-estimates/{t}", 4),
-                "rating":    ex.submit(fetch_one, f"ratings/{t}"),
-                "pt":        ex.submit(fetch_one, f"price-target-summary/{t}"),
-                "earnings":  ex.submit(fetch, f"earnings-surprises/{t}", 8),
-                "segments":  ex.submit(fetch, f"revenue-product-segmentation/{t}", 3),
-                "geo_segs":  ex.submit(fetch, f"revenue-geographic-segmentation/{t}", 3),
+                "inc_a":     ex.submit(fetch, "income-statement"),
+                "bal_a":     ex.submit(fetch, "balance-sheet-statement"),
+                "cf_a":      ex.submit(fetch, "cash-flow-statement"),
+                "inc_q":     ex.submit(fetch, "income-statement",         {"period": "quarterly"}),
+                "bal_q":     ex.submit(fetch, "balance-sheet-statement",  {"period": "quarterly"}),
+                "cf_q":      ex.submit(fetch, "cash-flow-statement",      {"period": "quarterly"}),
+                "profile":   ex.submit(fetch_one, "profile"),
+                "km":        ex.submit(fetch, "key-metrics"),
+                "growth":    ex.submit(fetch, "financial-growth"),
+                "estimates": ex.submit(fetch, "analyst-estimates", None, 4),
+                "rating":    ex.submit(fetch_one, "ratings"),
+                "pt":        ex.submit(fetch_one, "price-target-summary"),
+                "earnings":  ex.submit(fetch, "earnings-surprises", None, 8),
+                "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
+                "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
             }
             res = {k: v.result() for k, v in fs.items()}
 
@@ -1388,7 +1394,7 @@ def test_fmp():
     if not FMP_API_KEY:
         return {"error": "FMP_API_KEY not set"}
     try:
-        url = f"{FMP_BASE}/income-statement/AAPL?limit=1&apikey={FMP_API_KEY}"
+        url = f"{FMP_BASE}/income-statement?symbol=AAPL&limit=1&apikey={FMP_API_KEY}"
         r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
         body = r.text[:500]
         data = r.json() if r.status_code == 200 else None
