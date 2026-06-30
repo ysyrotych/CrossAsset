@@ -105,11 +105,8 @@ def get_fmp_financials(ticker: str) -> dict:
             }
             res = {k: v.result() for k, v in fs.items()}
 
-        if not res["inc_a"]:
-            print(f"FMP: no income statement for {ticker}")
-            return {}
-
-        print(f"FMP OK {ticker}: {len(res['inc_a'])}a/{len(res['inc_q'])}q | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'}")
+        has_statements = bool(res["inc_a"])
+        print(f"FMP {ticker}: statements={'yes' if has_statements else 'NO'} | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'} | segments={'yes' if res['segments'] else 'no'}")
         return {
             "income_annual":     res["inc_a"],
             "balance_annual":    res["bal_a"],
@@ -1440,19 +1437,36 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         annual_task, quarterly_task, xbrl_task, fmp_task, yf_task
     )
 
-    # ── Financial data priority: FMP > yfinance > XBRL ───────────────────────
-    if fmp_data:
-        print(f"Using FMP as primary financial data source for {ticker}")
+    # ── Financial data priority: FMP statements > yfinance > XBRL ───────────
+    # FMP supplemental (profile, valuation, analyst, segments) always used when available.
+    FMP_SUPPLEMENTAL = {
+        "market_cap","beta","pe_ratio","ev_ebitda","p_fcf","p_sales","p_book",
+        "enterprise_value","ev_revenue","roic","roe_km","current_ratio","debt_to_equity",
+        "interest_coverage","dividend_yield","fcf_yield","income_quality",
+        "revenue_growth_yoy","eps_growth_yoy","fcf_growth_yoy","ni_growth_yoy","ocf_growth_yoy",
+        "rev_est_next","ebitda_est_next","eps_est_next","ni_est_next","num_analysts",
+        "fmp_rating_score","pt_consensus","pt_last_month","pt_last_quarter","employees",
+    }
+
+    fmp_ext = {}
+    if fmp_data and fmp_data.get("income_annual"):
+        print(f"FMP full: using as primary source for {ticker}")
         merged_facts, merged_history, qxbrl, pqxbrl, q_period, fmp_ext, prior_q_period = build_from_fmp(fmp_data)
     else:
-        print(f"FMP not available — falling back to yfinance+XBRL for {ticker}")
+        # Core financials from XBRL + yfinance
+        print(f"FMP supplemental only for {ticker} — XBRL/yfinance for statements")
         merged_facts   = merge_yf_into_facts(dict(xbrl_result.get("facts", {})), yf_data)
         merged_history = build_history_from_yf(yf_data) or xbrl_result.get("history", {})
         qxbrl          = dict(xbrl_result.get("quarterly_facts", {}))
         pqxbrl         = dict(xbrl_result.get("prior_quarter_facts", {}))
         q_period       = xbrl_result.get("quarterly_period", "")
         prior_q_period = xbrl_result.get("prior_quarter_period", "")
-        fmp_ext        = {}
+        # Overlay FMP supplemental facts (market_cap, PE, segments, analyst data)
+        if fmp_data:
+            supp_facts, _, _, _, _, fmp_ext, _ = build_from_fmp(fmp_data)
+            for k, v in supp_facts.items():
+                if k in FMP_SUPPLEMENTAL:
+                    merged_facts[k] = v
 
     return AnalysisPayload(
         company=info,
