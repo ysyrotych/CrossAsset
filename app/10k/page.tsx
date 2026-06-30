@@ -16,27 +16,115 @@ const SUGGESTIONS = ["AAPL","MSFT","NVDA","META","AMZN","GOOGL","TSLA","JPM","BR
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
-function fmtNum(n: number | null | undefined, prefix = ""): string {
+function fmtNum(n: number | null | undefined, prefix = "", suffix = ""): string {
   if (n == null || isNaN(n)) return "—";
   const abs = Math.abs(n);
   const sign = n < 0 ? "-" : "";
+  if (suffix === "%") return `${sign}${abs.toFixed(1)}${suffix}`;
   if (abs >= 1e9) return `${sign}${prefix}${(abs / 1e9).toFixed(2)}B`;
   if (abs >= 1e6) return `${sign}${prefix}${(abs / 1e6).toFixed(1)}M`;
   if (abs >= 1e3) return `${sign}${prefix}${(abs / 1e3).toFixed(1)}K`;
-  return `${sign}${prefix}${n.toFixed(2)}`;
+  return `${sign}${prefix}${abs.toFixed(2)}${suffix}`;
 }
 
-const XBRL_LABELS: Record<string, { label: string; prefix: string; color?: string }> = {
-  revenue:           { label: "Revenue",            prefix: "$" },
-  gross_profit:      { label: "Gross Profit",        prefix: "$" },
-  operating_income:  { label: "Operating Income",    prefix: "$", color: "dynamic" },
-  net_income:        { label: "Net Income",          prefix: "$", color: "dynamic" },
-  eps_diluted:       { label: "EPS (Diluted)",       prefix: "$", color: "dynamic" },
-  cash:              { label: "Cash & Equiv.",       prefix: "$" },
-  long_term_debt:    { label: "Long-Term Debt",      prefix: "$" },
-  rd_expense:        { label: "R&D Expense",         prefix: "$" },
-  shares_outstanding:{ label: "Shares Outstanding",  prefix: "" },
-};
+// ── Financial Statements ─────────────────────────────────────────────────────
+
+function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts: XBRLFacts }) {
+  const available = rows.filter(r => facts[r.key] != null);
+  if (!available.length) return null;
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38]">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">{title}</p>
+      </div>
+      <table className="w-full">
+        <tbody>
+          {available.map(({ key, label, prefix = "", suffix = "", dynamic, bold }, i) => {
+            const val = facts[key];
+            const color = dynamic ? (val >= 0 ? "#147a4f" : "#b42318") : "#0a0a0a";
+            return (
+              <tr key={key} className={i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}>
+                <td className={`px-4 py-2 text-[11.5px] text-[#666] ${bold ? "font-semibold" : ""}`}>{label}</td>
+                <td className={`px-4 py-2 text-[13px] tabular-nums text-right font-${bold ? "bold" : "medium"}`}
+                  style={{ color }}>{fmtNum(val, prefix, suffix)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FinancialStatements({ facts }: { facts: XBRLFacts }) {
+  const hasData = Object.keys(facts).length > 0;
+  if (!hasData) return (
+    <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
+      <p className="text-[11.5px] text-[#999]">XBRL financial data unavailable — SEC filing may not include structured data or extraction failed.</p>
+    </div>
+  );
+
+  const marginAvailable = MARGIN_ROWS.some(r => facts[r.key] != null);
+
+  return (
+    <div className="space-y-4">
+      {marginAvailable && (
+        <div className="flex gap-3 flex-wrap">
+          {MARGIN_ROWS.filter(r => facts[r.key] != null).map(({ key, label, suffix = "%", dynamic }) => {
+            const val = facts[key];
+            const color = dynamic ? (val >= 0 ? "#147a4f" : "#b42318") : "#0a0a0a";
+            return (
+              <div key={key} className="flex-1 min-w-[120px] border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
+                <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
+                <p className="text-[22px] font-bold tabular-nums" style={{ color }}>{fmtNum(val, "", suffix)}</p>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <FinTable title="Income Statement" rows={INCOME_ROWS} facts={facts} />
+        <FinTable title="Balance Sheet"    rows={BALANCE_ROWS} facts={facts} />
+        <FinTable title="Cash Flow"        rows={CASHFLOW_ROWS} facts={facts} />
+      </div>
+    </div>
+  );
+}
+
+type XBRLFacts = Record<string, number>;
+
+type FinRow = { key: string; label: string; prefix?: string; suffix?: string; dynamic?: boolean; bold?: boolean };
+
+const INCOME_ROWS: FinRow[] = [
+  { key: "revenue",            label: "Revenue",            prefix: "$", bold: true },
+  { key: "gross_profit",       label: "Gross Profit",       prefix: "$" },
+  { key: "rd_expense",         label: "R&D Expense",        prefix: "$" },
+  { key: "sga_expense",        label: "SG&A Expense",       prefix: "$" },
+  { key: "operating_income",   label: "Operating Income",   prefix: "$", dynamic: true },
+  { key: "net_income",         label: "Net Income",         prefix: "$", dynamic: true, bold: true },
+  { key: "eps_diluted",        label: "EPS (Diluted)",      prefix: "$", dynamic: true },
+];
+
+const BALANCE_ROWS: FinRow[] = [
+  { key: "total_assets",       label: "Total Assets",       prefix: "$", bold: true },
+  { key: "cash",               label: "Cash & Equiv.",      prefix: "$" },
+  { key: "total_liabilities",  label: "Total Liabilities",  prefix: "$" },
+  { key: "long_term_debt",     label: "Long-Term Debt",     prefix: "$" },
+  { key: "equity",             label: "Shareholders Equity",prefix: "$", dynamic: true, bold: true },
+  { key: "shares_outstanding", label: "Shares Outstanding", prefix: "" },
+];
+
+const CASHFLOW_ROWS: FinRow[] = [
+  { key: "operating_cf",       label: "Operating CF",       prefix: "$", dynamic: true, bold: true },
+  { key: "capex",              label: "CapEx",              prefix: "$" },
+  { key: "free_cash_flow",     label: "Free Cash Flow",     prefix: "$", dynamic: true, bold: true },
+];
+
+const MARGIN_ROWS: FinRow[] = [
+  { key: "gross_margin_pct",     label: "Gross Margin",     suffix: "%" },
+  { key: "operating_margin_pct", label: "Operating Margin", suffix: "%", dynamic: true },
+  { key: "net_margin_pct",       label: "Net Margin",       suffix: "%", dynamic: true },
+];
 
 // ── Markdown renderer ─────────────────────────────────────────────────────────
 
@@ -291,31 +379,11 @@ export default function TenKPage() {
             </div>
           </div>
 
-          {/* XBRL Financial Snapshot */}
-          {Object.keys(data.xbrl_facts).length > 0 ? (
-            <div>
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Snapshot (XBRL — Most Recent Annual)</p>
-              <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-                {Object.entries(XBRL_LABELS).map(([key, { label, prefix, color }]) => {
-                  const val = data.xbrl_facts[key];
-                  if (val == null) return null;
-                  const textColor = color === "dynamic" ? (val >= 0 ? "#147a4f" : "#b42318") : "#0a0a0a";
-                  return (
-                    <div key={key} className="border border-[#ebebeb] rounded-md px-3 py-3 bg-white">
-                      <p className="text-[9px] text-[#999] uppercase tracking-wide mb-1.5">{label}</p>
-                      <p className="text-[16px] font-semibold tabular-nums leading-none" style={{ color: textColor }}>
-                        {fmtNum(val, prefix)}
-                      </p>
-                    </div>
-                  );
-                }).filter(Boolean)}
-              </div>
-            </div>
-          ) : (
-            <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
-              <p className="text-[11.5px] text-[#999]">XBRL financial data not available for this filing — section text is still accessible below.</p>
-            </div>
-          )}
+          {/* Financial Statements */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Statements (XBRL — Most Recent Annual)</p>
+            <FinancialStatements facts={data.xbrl_facts} />
+          </div>
 
           {/* Filing Sections */}
           <div>

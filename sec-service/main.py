@@ -47,44 +47,115 @@ def safe_float(val) -> Optional[float]:
         return None
 
 def extract_xbrl_facts(company) -> dict:
-    """Pull key financial facts from XBRL company facts."""
+    """Pull comprehensive financial facts from XBRL — income stmt, balance sheet, cash flow."""
     try:
-        facts = company.get_facts()
-        if not facts:
+        facts_obj = company.get_facts()
+        if not facts_obj:
             return {}
-        # Navigate XBRL fact structure
-        us_gaap = getattr(facts, 'us_gaap', None) or {}
-        result = {}
-        WANTED = {
-            "Revenues": "revenue",
-            "RevenueFromContractWithCustomerExcludingAssessedTax": "revenue",
-            "NetIncomeLoss": "net_income",
-            "EarningsPerShareDiluted": "eps_diluted",
-            "GrossProfit": "gross_profit",
-            "OperatingIncomeLoss": "operating_income",
-            "LongTermDebt": "long_term_debt",
-            "CashAndCashEquivalentsAtCarryingValue": "cash",
-            "CommonStockSharesOutstanding": "shares_outstanding",
-            "ResearchAndDevelopmentExpense": "rd_expense",
-        }
-        for xbrl_key, our_key in WANTED.items():
-            if our_key in result:
-                continue
-            fact = us_gaap.get(xbrl_key)
+
+        # Try multiple access patterns for us-gaap facts
+        us_gaap: dict = {}
+        raw = getattr(facts_obj, 'facts', None)
+        if isinstance(raw, dict):
+            us_gaap = raw.get('us-gaap') or raw.get('us_gaap') or {}
+        if not us_gaap:
+            us_gaap = getattr(facts_obj, 'us_gaap', None) or {}
+
+        if not us_gaap:
+            return {}
+
+        def get_latest(concept: str) -> Optional[float]:
+            fact = us_gaap.get(concept)
             if fact is None:
-                continue
+                return None
             try:
-                # Get most recent annual value
-                units = getattr(fact, 'units', None)
-                if units:
-                    entries = list(units.values())[0] if isinstance(units, dict) else []
-                    annual = [e for e in entries if getattr(e, 'form', '') in ('10-K', '10-Q') and getattr(e, 'val', None) is not None]
-                    if annual:
-                        annual.sort(key=lambda e: getattr(e, 'end', ''), reverse=True)
-                        result[our_key] = safe_float(getattr(annual[0], 'val', None))
+                if isinstance(fact, dict):
+                    units = fact.get('units', {})
+                    entries = units.get('USD') or units.get('shares') or (list(units.values())[0] if units else [])
+                else:
+                    u = getattr(fact, 'units', {})
+                    entries = (u.get('USD') or u.get('shares') or list(u.values())[0]) if isinstance(u, dict) else []
+                if not entries:
+                    return None
+                def val_of(e):  return e.get('val') if isinstance(e, dict) else getattr(e, 'val', None)
+                def end_of(e):  return e.get('end', '') if isinstance(e, dict) else str(getattr(e, 'end', ''))
+                def form_of(e): return e.get('form', '') if isinstance(e, dict) else str(getattr(e, 'form', ''))
+                annual = [e for e in entries if form_of(e) == '10-K' and val_of(e) is not None]
+                if not annual:
+                    annual = [e for e in entries if val_of(e) is not None]
+                if annual:
+                    annual.sort(key=end_of, reverse=True)
+                    return safe_float(val_of(annual[0]))
             except Exception:
                 pass
-        return result
+            return None
+
+        r: dict = {}
+
+        # ── Income Statement ─────────────────────────────────────────────────
+        rev = (get_latest("Revenues") or
+               get_latest("RevenueFromContractWithCustomerExcludingAssessedTax") or
+               get_latest("SalesRevenueNet") or
+               get_latest("RevenueFromContractWithCustomerIncludingAssessedTax"))
+        if rev is not None: r["revenue"] = rev
+
+        gp = get_latest("GrossProfit")
+        if gp is not None: r["gross_profit"] = gp
+
+        oi = get_latest("OperatingIncomeLoss")
+        if oi is not None: r["operating_income"] = oi
+
+        ni = (get_latest("NetIncomeLoss") or
+              get_latest("NetIncomeLossAvailableToCommonStockholdersDiluted"))
+        if ni is not None: r["net_income"] = ni
+
+        eps = get_latest("EarningsPerShareDiluted")
+        if eps is not None: r["eps_diluted"] = eps
+
+        rd = get_latest("ResearchAndDevelopmentExpense")
+        if rd is not None: r["rd_expense"] = rd
+
+        sga = get_latest("SellingGeneralAndAdministrativeExpense")
+        if sga is not None: r["sga_expense"] = sga
+
+        # ── Balance Sheet ────────────────────────────────────────────────────
+        assets = get_latest("Assets")
+        if assets is not None: r["total_assets"] = assets
+
+        liab = get_latest("Liabilities")
+        if liab is not None: r["total_liabilities"] = liab
+
+        eq = (get_latest("StockholdersEquity") or
+              get_latest("StockholdersEquityAttributableToParent"))
+        if eq is not None: r["equity"] = eq
+
+        cash = (get_latest("CashAndCashEquivalentsAtCarryingValue") or
+                get_latest("CashCashEquivalentsAndShortTermInvestments"))
+        if cash is not None: r["cash"] = cash
+
+        ltd = (get_latest("LongTermDebt") or
+               get_latest("LongTermDebtNoncurrent"))
+        if ltd is not None: r["long_term_debt"] = ltd
+
+        # ── Cash Flow ────────────────────────────────────────────────────────
+        ocf = get_latest("NetCashProvidedByUsedInOperatingActivities")
+        if ocf is not None: r["operating_cf"] = ocf
+
+        capex = (get_latest("PaymentsToAcquirePropertyPlantAndEquipment") or
+                 get_latest("AcquisitionsNetOfCashAcquiredAndPurchasesOfBusinesses"))
+        if capex is not None: r["capex"] = capex
+
+        shares = get_latest("CommonStockSharesOutstanding")
+        if shares is not None: r["shares_outstanding"] = shares
+
+        # ── Derived ratios ───────────────────────────────────────────────────
+        if rev and gp:   r["gross_margin_pct"]     = round((gp / rev) * 100, 1)
+        if rev and oi:   r["operating_margin_pct"] = round((oi / rev) * 100, 1)
+        if rev and ni:   r["net_margin_pct"]        = round((ni / rev) * 100, 1)
+        if ocf is not None and capex is not None:
+            r["free_cash_flow"] = ocf - abs(capex)
+
+        return r
     except Exception:
         return {}
 
