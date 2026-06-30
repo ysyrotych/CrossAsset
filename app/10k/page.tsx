@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen } from "lucide-react";
+import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -1105,6 +1105,7 @@ function BriefBody({ text }: { text: string }) {
 
 async function downloadExcel(
   ticker: string,
+  companyName: string,
   facts: Record<string, number>,
   history: Record<string, Record<string, number>>,
   quarterly: Record<string, number>,
@@ -1113,189 +1114,267 @@ async function downloadExcel(
   const XLSX = await import("xlsx");
   const wb = XLSX.utils.book_new();
 
-  const allYears = Array.from(new Set(Object.values(history).flatMap(d => Object.keys(d)))).sort();
-  const recent5 = allYears.slice(-5);
+  // Numbers in millions — standard for financial models
+  const M = (v: number | null | undefined): number | string =>
+    v != null ? Math.round(v / 1e3) / 1e3 : "";  // → stored as billions float; use 1e6 for millions
+  const toM = (v: number | null | undefined): number | string =>
+    v != null ? parseFloat((v / 1e6).toFixed(1)) : "";
+  const toPct = (v: number | null | undefined): number | string =>
+    v != null ? parseFloat(v.toFixed(1)) : "";
 
-  // Helper: get historical value
-  const hv = (key: string, yr: string): string | number => {
-    const v = history[key]?.[yr];
-    return v != null ? v : "";
+  // Derive revenue history — try direct, then GP+COGS
+  const getRevHist = (yr: string): number | undefined => {
+    const direct = history.revenue?.[yr];
+    if (direct != null) return direct;
+    const gp = history.gross_profit?.[yr];
+    const cogs = history.cost_of_revenue?.[yr];
+    if (gp != null && cogs != null) return gp + cogs;
+    return undefined;
   };
 
-  // ── Income Statement ─────────────────────────────────────────────────────────
-  const IS_ROWS: [string, string, string][] = [
-    // [label, facts_key, history_key]
-    ["Revenue",                  "revenue",           "revenue"],
-    ["Cost of Revenue",          "cost_of_revenue",   "cost_of_revenue"],
-    ["Gross Profit",             "gross_profit",      "gross_profit"],
-    ["Gross Margin %",           "gross_margin_pct",  ""],
-    ["R&D Expense",              "rd_expense",        "rd_expense"],
-    ["SG&A Expense",             "sga_expense",       "sga_expense"],
-    ["Operating Income",         "operating_income",  "operating_income"],
-    ["Operating Margin %",       "operating_margin_pct", ""],
-    ["EBITDA",                   "ebitda",            ""],
-    ["EBITDA Margin %",          "ebitda_margin_pct", ""],
-    ["Interest Expense",         "interest_expense",  ""],
-    ["Pre-tax Income",           "pretax_income",     ""],
-    ["Income Tax",               "income_tax",        ""],
-    ["Effective Tax Rate %",     "effective_tax_rate",""],
-    ["Net Income",               "net_income",        "net_income"],
-    ["Net Margin %",             "net_margin_pct",    ""],
-    ["EPS Basic",                "eps_basic",         ""],
-    ["EPS Diluted",              "eps_diluted",       ""],
-    ["Shares Basic (wtd avg)",   "shares_basic_wtd",  ""],
-    ["Shares Diluted (wtd avg)", "shares_diluted_wtd",""],
-    ["SBC Expense",              "sbc_expense",       ""],
-  ];
+  // Compute gross profit from history if not direct
+  const getGPHist = (yr: string): number | undefined => {
+    const direct = history.gross_profit?.[yr];
+    if (direct != null) return direct;
+    const rev = getRevHist(yr);
+    const cogs = history.cost_of_revenue?.[yr];
+    if (rev != null && cogs != null) return rev - cogs;
+    return undefined;
+  };
 
-  const isHeader = ["Metric", ...recent5.map(y => y.slice(0, 4)), "MRQ", "Notes"];
-  const isData = IS_ROWS.map(([label, fKey, hKey]) => {
-    const row: (string | number)[] = [label];
-    for (const yr of recent5) {
-      row.push(hKey ? hv(hKey, yr) : "");
-    }
-    const v = facts[fKey];
-    row.push(v != null ? v : "");
-    row.push("");
-    return row;
-  });
+  // Years: union of all available years from history
+  const allYears = Array.from(new Set([
+    ...Object.keys(history.revenue ?? {}),
+    ...Object.keys(history.net_income ?? {}),
+    ...Object.keys(history.operating_income ?? {}),
+    ...Object.keys(history.cost_of_revenue ?? {}),
+    ...Object.keys(history.gross_profit ?? {}),
+  ])).sort().slice(-5);
 
-  const isSheet = XLSX.utils.aoa_to_sheet([isHeader, ...isData]);
-  isSheet["!cols"] = [{ wch: 28 }, ...recent5.map(() => ({ wch: 16 })), { wch: 16 }, { wch: 20 }];
+  const yoy = (curr?: number, prev?: number): number | string => {
+    if (curr == null || prev == null || prev === 0) return "";
+    return parseFloat(((curr - prev) / Math.abs(prev) * 100).toFixed(1));
+  };
+
+  const setCell = (ws: Record<string, unknown>, addr: string, v: unknown, numFmt?: string) => {
+    const cell: Record<string, unknown> = { v, t: typeof v === "number" ? "n" : "s" };
+    if (numFmt) cell.z = numFmt;
+    ws[addr] = cell;
+  };
+
+  // ── Income Statement ──────────────────────────────────────────────────────────
+  const fy = allYears;
+  const isRows: (string | number | "")[][] = [];
+
+  isRows.push([`${companyName} (${ticker}) — INCOME STATEMENT`, "", "", "", "", "", "", "", ""]);
+  isRows.push(["$ in Millions", ...fy.map(y => `FY${y.slice(0,4)}`), `MRQ ${quarterlyPeriod.slice(0,7)}`, "% Rev (FY)", "Notes"]);
+  isRows.push([""]);
+
+  // Revenue
+  const revVals = fy.map(yr => toM(getRevHist(yr)));
+  isRows.push(["Revenue", ...revVals, toM(quarterly.revenue), "100.0%", ""]);
+  isRows.push(["  YoY Revenue Growth", ...fy.map((yr, i) => {
+    if (i === 0) return "";
+    return yoy(getRevHist(yr), getRevHist(fy[i-1]));
+  }), "", "", "(%))"]);
+
+  isRows.push([""]);
+
+  // COGS & GP
+  isRows.push(["Cost of Revenue", ...fy.map(yr => toM(history.cost_of_revenue?.[yr])),
+    toM(quarterly.cost_of_revenue),
+    facts.revenue && facts.cost_of_revenue ? toPct(facts.cost_of_revenue / facts.revenue * 100) : "", ""]);
+  isRows.push(["Gross Profit", ...fy.map(yr => toM(getGPHist(yr))),
+    toM(quarterly.gross_profit),
+    toPct(facts.gross_margin_pct), ""]);
+  isRows.push(["  Gross Margin %", ...fy.map(yr => {
+    const gp = getGPHist(yr); const rev = getRevHist(yr);
+    return (gp != null && rev && rev > 0) ? toPct(gp / rev * 100) : "";
+  }), toPct(quarterly.gross_margin_pct), toPct(facts.gross_margin_pct), "(margin, %)"]);
+
+  isRows.push([""]);
+
+  // OpEx
+  isRows.push(["R&D Expense", ...fy.map(yr => toM(history.rd_expense?.[yr])),
+    toM(quarterly.rd_expense),
+    facts.revenue && facts.rd_expense ? toPct(facts.rd_expense / facts.revenue * 100) : "", ""]);
+  isRows.push(["SG&A Expense", ...fy.map(yr => toM(history.sga_expense?.[yr])),
+    toM(quarterly.sga_expense),
+    facts.revenue && facts.sga_expense ? toPct(facts.sga_expense / facts.revenue * 100) : "", ""]);
+  isRows.push(["Operating Income (EBIT)", ...fy.map(yr => toM(history.operating_income?.[yr])),
+    toM(quarterly.operating_income),
+    toPct(facts.operating_margin_pct), ""]);
+  isRows.push(["  Operating Margin %", ...fy.map(yr => {
+    const oi = history.operating_income?.[yr]; const rev = getRevHist(yr);
+    return (oi != null && rev && rev > 0) ? toPct(oi / rev * 100) : "";
+  }), toPct(quarterly.operating_margin_pct), toPct(facts.operating_margin_pct), "(margin, %)"]);
+  isRows.push(["EBITDA", ...fy.map(() => ""), "", toPct(facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue * 100 : undefined), ""]);
+
+  isRows.push([""]);
+
+  // Below the line
+  isRows.push(["Interest Expense", ...fy.map(() => ""), "", "", ""]);
+  isRows.push(["Pre-tax Income", ...fy.map(() => ""), toM(quarterly.pretax_income), "", ""]);
+  isRows.push(["Income Tax", ...fy.map(() => ""), toM(quarterly.income_tax), "", ""]);
+  isRows.push(["Effective Tax Rate %", ...fy.map(() => ""), toPct(quarterly.effective_tax_rate), toPct(facts.effective_tax_rate), "(tax rate)"]);
+  isRows.push(["Net Income", ...fy.map(yr => toM(history.net_income?.[yr])),
+    toM(quarterly.net_income),
+    toPct(facts.net_margin_pct), ""]);
+  isRows.push(["  YoY Net Income Growth", ...fy.map((yr, i) => {
+    if (i === 0) return "";
+    return yoy(history.net_income?.[yr], history.net_income?.[fy[i-1]]);
+  }), "", "", "(%)"]);
+  isRows.push(["  Net Margin %", ...fy.map(yr => {
+    const ni = history.net_income?.[yr]; const rev = getRevHist(yr);
+    return (ni != null && rev && rev > 0) ? toPct(ni / rev * 100) : "";
+  }), toPct(quarterly.net_margin_pct), toPct(facts.net_margin_pct), "(margin, %)"]);
+
+  isRows.push([""]);
+
+  // Per share
+  isRows.push(["EPS — Basic", ...fy.map(() => ""), quarterly.eps_basic ? toPct(quarterly.eps_basic) : "", facts.eps_basic ? toPct(facts.eps_basic) : "", "($)"]);
+  isRows.push(["EPS — Diluted", ...fy.map(() => ""), quarterly.eps_diluted ? toPct(quarterly.eps_diluted) : "", facts.eps_diluted ? toPct(facts.eps_diluted) : "", "($)"]);
+  isRows.push(["Diluted Shares (wtd avg)", ...fy.map(() => ""), toM(quarterly.shares_diluted_wtd), toM(facts.shares_diluted_wtd), "($M)"]);
+  isRows.push(["SBC Expense", ...fy.map(() => ""), toM(quarterly.sbc_expense), toM(facts.sbc_expense), ""]);
+
+  const isSheet = XLSX.utils.aoa_to_sheet(isRows);
+  isSheet["!cols"] = [{ wch: 32 }, ...fy.map(() => ({ wch: 14 })), { wch: 16 }, { wch: 13 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, isSheet, "Income Statement");
 
   // ── Balance Sheet ─────────────────────────────────────────────────────────────
-  const BS_ROWS: [string, string][] = [
-    ["Cash & Equivalents",     "cash"],
-    ["Accounts Receivable",    "accounts_receivable"],
-    ["Inventory",              "inventory"],
-    ["Current Assets",         "current_assets"],
-    ["PP&E (net)",             "ppe_net"],
-    ["Goodwill",               "goodwill"],
-    ["Total Assets",           "total_assets"],
-    ["Current Liabilities",    "current_liabilities"],
-    ["Long-term Debt",         "long_term_debt"],
-    ["Total Liabilities",      "total_liabilities"],
-    ["Stockholders Equity",    "equity"],
-    ["Net Debt (LTD - Cash)",  "net_debt_calc"],
-  ];
-
-  const bsHistYears = Array.from(new Set([
+  const bsYears = Array.from(new Set([
     ...Object.keys(history.total_assets ?? {}),
     ...Object.keys(history.cash ?? {}),
     ...Object.keys(history.equity ?? {}),
+    ...Object.keys(history.current_assets ?? {}),
   ])).sort().slice(-5);
 
-  const bsHeader = ["Metric", ...bsHistYears.map(y => y.slice(0, 4)), "Current"];
-  const bsData = BS_ROWS.map(([label, key]) => {
-    const row: (string | number)[] = [label];
-    for (const yr of bsHistYears) {
-      row.push(hv(key, yr));
-    }
-    if (key === "net_debt_calc") {
-      const nd = facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : "";
-      row.push(nd);
-    } else {
-      const v = facts[key];
-      row.push(v != null ? v : "");
-    }
-    return row;
-  });
+  const bsRows: (string | number | "")[][] = [];
+  bsRows.push([`${companyName} (${ticker}) — BALANCE SHEET`]);
+  bsRows.push(["$ in Millions", ...bsYears.map(y => `FY${y.slice(0,4)}`), "Current"]);
+  bsRows.push([""]);
+  bsRows.push(["ASSETS"]);
+  bsRows.push(["Cash & Equivalents", ...bsYears.map(yr => toM(history.cash?.[yr])), toM(facts.cash)]);
+  bsRows.push(["Accounts Receivable", ...bsYears.map(() => ""), toM(facts.accounts_receivable)]);
+  bsRows.push(["Inventory", ...bsYears.map(() => ""), toM(facts.inventory)]);
+  bsRows.push(["Current Assets", ...bsYears.map(yr => toM(history.current_assets?.[yr])), toM(facts.current_assets)]);
+  bsRows.push(["PP&E (net)", ...bsYears.map(() => ""), toM(facts.ppe_net)]);
+  bsRows.push(["Goodwill", ...bsYears.map(() => ""), toM(facts.goodwill)]);
+  bsRows.push(["Total Assets", ...bsYears.map(yr => toM(history.total_assets?.[yr])), toM(facts.total_assets)]);
+  bsRows.push([""]);
+  bsRows.push(["LIABILITIES"]);
+  bsRows.push(["Current Liabilities", ...bsYears.map(() => ""), toM(facts.current_liabilities)]);
+  bsRows.push(["Long-term Debt", ...bsYears.map(yr => toM(history.long_term_debt?.[yr])), toM(facts.long_term_debt)]);
+  bsRows.push(["Total Liabilities", ...bsYears.map(yr => toM(history.total_liabilities?.[yr])), toM(facts.total_liabilities)]);
+  bsRows.push([""]);
+  bsRows.push(["EQUITY"]);
+  bsRows.push(["Stockholders Equity", ...bsYears.map(yr => toM(history.equity?.[yr])), toM(facts.equity)]);
+  bsRows.push([""]);
+  bsRows.push(["DERIVED"]);
+  const nd = facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : undefined;
+  bsRows.push(["Net Debt (LTD − Cash)", ...bsYears.map(() => ""), toM(nd)]);
+  bsRows.push(["Current Ratio", ...bsYears.map(() => ""),
+    facts.current_assets && facts.current_liabilities ? parseFloat((facts.current_assets / facts.current_liabilities).toFixed(2)) : ""]);
 
-  const bsSheet = XLSX.utils.aoa_to_sheet([bsHeader, ...bsData]);
-  bsSheet["!cols"] = [{ wch: 28 }, ...bsHistYears.map(() => ({ wch: 14 })), { wch: 14 }];
+  const bsSheet = XLSX.utils.aoa_to_sheet(bsRows);
+  bsSheet["!cols"] = [{ wch: 32 }, ...bsYears.map(() => ({ wch: 14 })), { wch: 14 }];
   XLSX.utils.book_append_sheet(wb, bsSheet, "Balance Sheet");
 
   // ── Cash Flow ─────────────────────────────────────────────────────────────────
-  const CF_ROWS: [string, string, string][] = [
-    ["Operating Cash Flow",  "operating_cf",   "operating_cf"],
-    ["Capital Expenditures", "capex",           ""],
-    ["Free Cash Flow",       "free_cash_flow",  ""],
-    ["SBC (non-cash)",       "sbc_expense",     ""],
-    ["FCF / Net Income %",   "fcf_conversion",  ""],
-    ["FCF Margin %",         "fcf_margin_pct",  ""],
-  ];
+  const cfRows: (string | number | "")[][] = [];
+  cfRows.push([`${companyName} (${ticker}) — CASH FLOW STATEMENT`]);
+  cfRows.push(["$ in Millions", ...fy.map(y => `FY${y.slice(0,4)}`), `MRQ ${quarterlyPeriod.slice(0,7)}`]);
+  cfRows.push([""]);
+  cfRows.push(["Operating Cash Flow", ...fy.map(yr => toM(history.operating_cf?.[yr])), toM(quarterly.operating_cf)]);
+  cfRows.push(["  YoY Growth", ...fy.map((yr, i) => i === 0 ? "" : yoy(history.operating_cf?.[yr], history.operating_cf?.[fy[i-1]])), ""]);
+  cfRows.push(["Capital Expenditures", ...fy.map(() => ""), toM(quarterly.capex)]);
+  cfRows.push(["Free Cash Flow (OCF − CapEx)", ...fy.map(() => ""), toM(quarterly.free_cash_flow)]);
+  cfRows.push([""]);
+  cfRows.push(["ANNUAL FREE CASH FLOW (FY)"]);
+  cfRows.push(["Free Cash Flow", ...fy.map(() => ""), toM(facts.free_cash_flow)]);
+  cfRows.push(["  FCF Margin %", ...fy.map(() => ""),
+    facts.free_cash_flow && facts.revenue ? toPct(facts.free_cash_flow / facts.revenue * 100) : ""]);
+  cfRows.push(["  FCF / Net Income", ...fy.map(() => ""),
+    facts.free_cash_flow && facts.net_income ? toPct(facts.free_cash_flow / facts.net_income * 100) : ""]);
+  cfRows.push(["SBC (non-cash add-back)", ...fy.map(() => ""), toM(facts.sbc_expense)]);
 
-  const cfHeader = ["Metric", ...recent5.map(y => y.slice(0, 4)), "MRQ"];
-  const cfData = CF_ROWS.map(([label, fKey, hKey]) => {
-    const row: (string | number)[] = [label];
-    for (const yr of recent5) {
-      row.push(hKey ? hv(hKey, yr) : "");
-    }
-    let v: number | string = "";
-    if (fKey === "fcf_conversion") {
-      v = facts.free_cash_flow != null && facts.net_income != null && facts.net_income > 0
-        ? parseFloat(((facts.free_cash_flow / facts.net_income) * 100).toFixed(1)) : "";
-    } else if (fKey === "fcf_margin_pct") {
-      v = facts.free_cash_flow != null && facts.revenue != null && facts.revenue > 0
-        ? parseFloat(((facts.free_cash_flow / facts.revenue) * 100).toFixed(1)) : "";
-    } else {
-      v = facts[fKey] != null ? facts[fKey] : "";
-    }
-    row.push(v);
-    return row;
-  });
-
-  const cfSheet = XLSX.utils.aoa_to_sheet([cfHeader, ...cfData]);
-  cfSheet["!cols"] = [{ wch: 28 }, ...recent5.map(() => ({ wch: 16 })), { wch: 16 }];
+  const cfSheet = XLSX.utils.aoa_to_sheet(cfRows);
+  cfSheet["!cols"] = [{ wch: 34 }, ...fy.map(() => ({ wch: 14 })), { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, cfSheet, "Cash Flow");
 
   // ── Key Ratios ─────────────────────────────────────────────────────────────────
-  const ratioRows: [string, string | number][] = [
-    ["Return on Equity %", facts.net_income != null && facts.equity != null && facts.equity !== 0 ? parseFloat(((facts.net_income / facts.equity) * 100).toFixed(1)) : ""],
-    ["Return on Assets %", facts.net_income != null && facts.total_assets != null && facts.total_assets !== 0 ? parseFloat(((facts.net_income / facts.total_assets) * 100).toFixed(1)) : ""],
-    ["Gross Margin %",     facts.gross_margin_pct ?? ""],
-    ["Operating Margin %", facts.operating_margin_pct ?? ""],
-    ["EBITDA Margin %",    facts.ebitda != null && facts.revenue != null && facts.revenue !== 0 ? parseFloat(((facts.ebitda / facts.revenue) * 100).toFixed(1)) : ""],
-    ["Net Margin %",       facts.net_margin_pct ?? ""],
-    ["FCF Margin %",       facts.free_cash_flow != null && facts.revenue != null && facts.revenue !== 0 ? parseFloat(((facts.free_cash_flow / facts.revenue) * 100).toFixed(1)) : ""],
-    ["Current Ratio",      facts.current_assets != null && facts.current_liabilities != null && facts.current_liabilities !== 0 ? parseFloat((facts.current_assets / facts.current_liabilities).toFixed(2)) : ""],
-    ["Debt / Equity",      facts.total_liabilities != null && facts.equity != null && facts.equity !== 0 ? parseFloat((facts.total_liabilities / facts.equity).toFixed(2)) : ""],
-    ["Net Debt ($)",       facts.long_term_debt != null && facts.cash != null ? facts.long_term_debt - facts.cash : ""],
-    ["Interest Coverage",  facts.operating_income != null && facts.interest_expense != null && facts.interest_expense !== 0 ? parseFloat((facts.operating_income / facts.interest_expense).toFixed(1)) : ""],
-    ["Asset Turnover",     facts.revenue != null && facts.total_assets != null && facts.total_assets !== 0 ? parseFloat((facts.revenue / facts.total_assets).toFixed(2)) : ""],
-    ["EPS Diluted ($)",    facts.eps_diluted ?? ""],
-    ["Book Value / Share", facts.equity != null && facts.shares_outstanding != null && facts.shares_outstanding !== 0 ? parseFloat((facts.equity / facts.shares_outstanding).toFixed(2)) : ""],
-    ["FCF / Share",        facts.free_cash_flow != null && facts.shares_diluted_wtd != null && facts.shares_diluted_wtd !== 0 ? parseFloat((facts.free_cash_flow / facts.shares_diluted_wtd).toFixed(2)) : ""],
+  const roe = facts.net_income && facts.equity ? facts.net_income / facts.equity * 100 : undefined;
+  const roa = facts.net_income && facts.total_assets ? facts.net_income / facts.total_assets * 100 : undefined;
+  const ratioRows: (string | number | "")[][] = [
+    [companyName, "Key Ratios — Most Recent Annual (FY)"],
+    [""],
+    ["PROFITABILITY", "Value"],
+    ["Gross Margin %", toPct(facts.gross_margin_pct)],
+    ["Operating Margin %", toPct(facts.operating_margin_pct)],
+    ["EBITDA Margin %", facts.ebitda && facts.revenue ? toPct(facts.ebitda / facts.revenue * 100) : ""],
+    ["Net Margin %", toPct(facts.net_margin_pct)],
+    ["FCF Margin %", facts.free_cash_flow && facts.revenue ? toPct(facts.free_cash_flow / facts.revenue * 100) : ""],
+    [""],
+    ["RETURNS", "Value"],
+    ["Return on Equity (ROE) %", toPct(roe)],
+    ["Return on Assets (ROA) %", toPct(roa)],
+    ["Asset Turnover", facts.revenue && facts.total_assets ? parseFloat((facts.revenue / facts.total_assets).toFixed(2)) : ""],
+    [""],
+    ["LEVERAGE & LIQUIDITY", "Value"],
+    ["Net Debt ($M)", toM(nd)],
+    ["Debt / Equity", facts.total_liabilities && facts.equity ? parseFloat((facts.total_liabilities / facts.equity).toFixed(2)) : ""],
+    ["Current Ratio", facts.current_assets && facts.current_liabilities ? parseFloat((facts.current_assets / facts.current_liabilities).toFixed(2)) : ""],
+    ["Interest Coverage", facts.operating_income && facts.interest_expense ? parseFloat((facts.operating_income / facts.interest_expense).toFixed(0)) : ""],
+    [""],
+    ["PER SHARE", "Value"],
+    ["EPS — Diluted ($)", facts.eps_diluted ? parseFloat(facts.eps_diluted.toFixed(2)) : ""],
+    ["Book Value / Share ($)", facts.equity && facts.shares_outstanding ? parseFloat((facts.equity / facts.shares_outstanding).toFixed(2)) : ""],
+    ["Revenue / Share ($)", facts.revenue && facts.shares_diluted_wtd ? parseFloat((facts.revenue / facts.shares_diluted_wtd).toFixed(2)) : ""],
+    ["FCF / Share ($)", facts.free_cash_flow && facts.shares_diluted_wtd ? parseFloat((facts.free_cash_flow / facts.shares_diluted_wtd).toFixed(2)) : ""],
+    [""],
+    ["QUALITY", "Value"],
+    ["FCF / Net Income %", facts.free_cash_flow && facts.net_income ? toPct(facts.free_cash_flow / facts.net_income * 100) : ""],
+    ["Accruals Ratio %", facts.net_income && facts.operating_cf && facts.total_assets ?
+      toPct((facts.net_income - facts.operating_cf) / facts.total_assets * 100) : ""],
+    ["SBC % of Revenue", facts.sbc_expense && facts.revenue ? toPct(facts.sbc_expense / facts.revenue * 100) : ""],
+    ["R&D % of Revenue", facts.rd_expense && facts.revenue ? toPct(facts.rd_expense / facts.revenue * 100) : ""],
   ];
 
-  const ratioSheet = XLSX.utils.aoa_to_sheet([
-    ["Metric", "Value"],
-    ...ratioRows,
-  ]);
-  ratioSheet["!cols"] = [{ wch: 30 }, { wch: 16 }];
+  const ratioSheet = XLSX.utils.aoa_to_sheet(ratioRows);
+  ratioSheet["!cols"] = [{ wch: 34 }, { wch: 16 }];
   XLSX.utils.book_append_sheet(wb, ratioSheet, "Key Ratios");
 
-  // ── Quarterly ─────────────────────────────────────────────────────────────────
+  // ── Quarterly Snapshot ────────────────────────────────────────────────────────
   if (Object.keys(quarterly).length > 0) {
-    const qRows: [string, string][] = [
-      ["Revenue",            "revenue"],
-      ["Gross Profit",       "gross_profit"],
-      ["Gross Margin %",     "gross_margin_pct"],
-      ["Operating Income",   "operating_income"],
-      ["Operating Margin %", "operating_margin_pct"],
-      ["Net Income",         "net_income"],
-      ["Net Margin %",       "net_margin_pct"],
-      ["Operating CF",       "operating_cf"],
-      ["Free Cash Flow",     "free_cash_flow"],
-      ["EPS Diluted",        "eps_diluted"],
-      ["Cash",               "cash"],
-      ["Total Assets",       "total_assets"],
-      ["Equity",             "equity"],
+    const qRows: (string | number | "")[][] = [
+      [`${companyName} — Most Recent Quarter (${quarterlyPeriod})`],
+      ["$ in Millions | % are margins", `MRQ ${quarterlyPeriod.slice(0,7)}`, "Implied Annual (×4)", "% of Implied Rev"],
+      [""],
+      ["Revenue", toM(quarterly.revenue), toM(quarterly.revenue != null ? quarterly.revenue * 4 : undefined), "100.0%"],
+      ["Cost of Revenue", toM(quarterly.cost_of_revenue), toM(quarterly.cost_of_revenue != null ? quarterly.cost_of_revenue * 4 : undefined),
+        quarterly.cost_of_revenue && quarterly.revenue ? toPct(quarterly.cost_of_revenue / quarterly.revenue * 100) : ""],
+      ["Gross Profit", toM(quarterly.gross_profit), toM(quarterly.gross_profit != null ? quarterly.gross_profit * 4 : undefined),
+        toPct(quarterly.gross_margin_pct)],
+      ["R&D Expense", toM(quarterly.rd_expense), "", quarterly.rd_expense && quarterly.revenue ? toPct(quarterly.rd_expense / quarterly.revenue * 100) : ""],
+      ["Operating Income", toM(quarterly.operating_income), toM(quarterly.operating_income != null ? quarterly.operating_income * 4 : undefined),
+        toPct(quarterly.operating_margin_pct)],
+      ["Net Income", toM(quarterly.net_income), toM(quarterly.net_income != null ? quarterly.net_income * 4 : undefined),
+        toPct(quarterly.net_margin_pct)],
+      ["Operating Cash Flow", toM(quarterly.operating_cf), toM(quarterly.operating_cf != null ? quarterly.operating_cf * 4 : undefined), ""],
+      ["Free Cash Flow", toM(quarterly.free_cash_flow), toM(quarterly.free_cash_flow != null ? quarterly.free_cash_flow * 4 : undefined), ""],
+      ["EPS — Diluted ($)", quarterly.eps_diluted ? parseFloat(quarterly.eps_diluted.toFixed(2)) : "", "", ""],
+      [""],
+      ["BALANCE SHEET (end of quarter)"],
+      ["Cash & Equivalents", toM(quarterly.cash), "", ""],
+      ["Total Assets", toM(quarterly.total_assets), "", ""],
+      ["Stockholders Equity", toM(quarterly.equity), "", ""],
     ];
-    const qSheet = XLSX.utils.aoa_to_sheet([
-      ["Metric", `MRQ (${quarterlyPeriod})`, "Implied Annual (×4)"],
-      ...qRows.map(([label, key]) => {
-        const v = quarterly[key];
-        const isMargin = key.endsWith("_pct") || key === "eps_diluted";
-        const implied = !isMargin && v != null ? v * 4 : "";
-        return [label, v != null ? v : "", implied];
-      }),
-    ]);
-    qSheet["!cols"] = [{ wch: 28 }, { wch: 20 }, { wch: 20 }];
+    const qSheet = XLSX.utils.aoa_to_sheet(qRows);
+    qSheet["!cols"] = [{ wch: 32 }, { wch: 20 }, { wch: 22 }, { wch: 18 }];
     XLSX.utils.book_append_sheet(wb, qSheet, "Most Recent Quarter");
   }
 
+  // ── Write & download ──────────────────────────────────────────────────────────
   const wbout = XLSX.write(wb, { bookType: "xlsx", type: "array" });
   const blob = new Blob([wbout], { type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" });
   const url = URL.createObjectURL(blob);
@@ -1310,13 +1389,18 @@ async function downloadExcel(
 
 // ── Page ──────────────────────────────────────────────────────────────────────
 
+type ChatMsg = { role: "user" | "assistant"; content: string };
+
 export default function TenKPage() {
-  const [ticker, setTicker]       = useState("");
-  const [loading, setLoading]     = useState(false);
-  const [error, setError]         = useState("");
-  const [data, setData]           = useState<Payload | null>(null);
-  const [aiText, setAiText]       = useState("");
-  const [aiRunning, setAiRunning] = useState(false);
+  const [ticker, setTicker]           = useState("");
+  const [loading, setLoading]         = useState(false);
+  const [error, setError]             = useState("");
+  const [data, setData]               = useState<Payload | null>(null);
+  const [aiText, setAiText]           = useState("");
+  const [aiRunning, setAiRunning]     = useState(false);
+  const [chatMsgs, setChatMsgs]       = useState<ChatMsg[]>([]);
+  const [chatInput, setChatInput]     = useState("");
+  const [chatRunning, setChatRunning] = useState(false);
 
   async function fetchFiling(sym?: string) {
     const t = (sym ?? ticker).toUpperCase().trim();
@@ -1326,6 +1410,7 @@ export default function TenKPage() {
     setError("");
     setData(null);
     setAiText("");
+    setChatMsgs([]);
     try {
       const r = await fetch(`/api/sec?ticker=${encodeURIComponent(t)}`);
       const j = await r.json();
@@ -1367,6 +1452,58 @@ export default function TenKPage() {
       setAiText(`Error: ${e instanceof Error ? e.message : "Unknown error"}`);
     } finally {
       setAiRunning(false);
+    }
+  }
+
+  async function sendChat(msg?: string) {
+    if (!data || chatRunning) return;
+    const text = (msg ?? chatInput).trim();
+    if (!text) return;
+    setChatInput("");
+    setChatRunning(true);
+    const newMsgs: ChatMsg[] = [...chatMsgs, { role: "user", content: text }];
+    setChatMsgs(newMsgs);
+    try {
+      const r = await fetch("/api/chat-filing", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker: data.company.ticker,
+          companyName: data.company.name,
+          industry: data.company.sic_description ?? "",
+          messages: newMsgs,
+          facts: data.xbrl_facts,
+          history: data.history ?? {},
+          quarterlyPeriod: data.quarterly_period ?? "",
+        }),
+      });
+      if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
+      const idx = newMsgs.length;
+      setChatMsgs(m => [...m, { role: "assistant", content: "" }]);
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buf = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buf += dec.decode(value, { stream: true });
+        const lines = buf.split("\n");
+        buf = lines.pop() ?? "";
+        for (const line of lines) {
+          const raw = line.startsWith("data: ") ? line.slice(6).trim() : null;
+          if (!raw || raw === "[DONE]") continue;
+          try {
+            const j = JSON.parse(raw);
+            if (j.text) setChatMsgs(m => m.map((msg, i) =>
+              i === idx ? { ...msg, content: msg.content + j.text } : msg
+            ));
+          } catch { /* skip */ }
+        }
+      }
+    } catch (e) {
+      setChatMsgs(m => [...m, { role: "assistant", content: `Error: ${e instanceof Error ? e.message : "Unknown"}` }]);
+    } finally {
+      setChatRunning(false);
     }
   }
 
@@ -1539,6 +1676,7 @@ export default function TenKPage() {
               <button
                 onClick={() => downloadExcel(
                   data.company.ticker,
+                  data.company.name,
                   data.xbrl_facts,
                   data.history ?? {},
                   data.quarterly_xbrl ?? {},
@@ -1586,6 +1724,101 @@ export default function TenKPage() {
             )}
           </div>
 
+          {/* ── Ask the Filing — AI Chat ──────────────────────────────────────── */}
+          <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+            <div className="px-5 py-3.5 bg-gradient-to-r from-[#0c1b38] to-[#1a3361] flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center">
+                  <MessageCircle size={14} className="text-white/70" />
+                </div>
+                <div>
+                  <p className="text-[12px] font-bold text-white">Ask the Filing</p>
+                  <p className="text-[9.5px] text-white/40">Chat with {data.company.name}'s 10-K & 10-Q — grounded in real XBRL data</p>
+                </div>
+              </div>
+              {chatMsgs.length > 0 && (
+                <button onClick={() => setChatMsgs([])} className="text-[9.5px] text-white/30 hover:text-white/60 transition-colors">
+                  Clear
+                </button>
+              )}
+            </div>
+
+            {/* Quick starter questions */}
+            {chatMsgs.length === 0 && (
+              <div className="px-4 py-3 border-b border-[#f0f0f0] bg-[#fafafa]">
+                <p className="text-[9px] font-bold uppercase tracking-widest text-[#bbb] mb-2">Try asking:</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    "What drove revenue growth?",
+                    "How is FCF quality?",
+                    "What are the key risks?",
+                    "How does the balance sheet look?",
+                    "What's the earnings quality?",
+                    "Summarize the investment thesis",
+                  ].map(q => (
+                    <button key={q} onClick={() => sendChat(q)}
+                      className="text-[10.5px] px-2.5 py-1 rounded border border-[#e0e0e0] text-[#555] hover:border-[#0c1b38] hover:text-[#0c1b38] hover:bg-[#eef1f8] transition-colors">
+                      {q}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Chat history */}
+            {chatMsgs.length > 0 && (
+              <div className="px-4 py-3 space-y-4 max-h-[500px] overflow-y-auto">
+                {chatMsgs.map((msg, i) => (
+                  <div key={i} className={`flex gap-3 ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
+                    {msg.role === "assistant" && (
+                      <div className="w-6 h-6 rounded-full bg-[#0c1b38] flex items-center justify-center shrink-0 mt-0.5">
+                        <Sparkles size={10} className="text-white/70" />
+                      </div>
+                    )}
+                    <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${
+                      msg.role === "user"
+                        ? "bg-[#0c1b38] text-white text-[12.5px] leading-[1.7]"
+                        : "bg-[#f5f6f8] text-[#1a1a1a] text-[12.5px] leading-[1.8]"
+                    }`}>
+                      {msg.role === "assistant" && !msg.content
+                        ? <span className="inline-flex gap-1 items-center text-[#bbb]">
+                            <span className="w-1 h-1 rounded-full bg-[#0c1b38] animate-bounce" style={{ animationDelay: "0ms" }} />
+                            <span className="w-1 h-1 rounded-full bg-[#0c1b38] animate-bounce" style={{ animationDelay: "150ms" }} />
+                            <span className="w-1 h-1 rounded-full bg-[#0c1b38] animate-bounce" style={{ animationDelay: "300ms" }} />
+                          </span>
+                        : msg.content}
+                    </div>
+                    {msg.role === "user" && (
+                      <div className="w-6 h-6 rounded-full bg-[#e8edf5] flex items-center justify-center shrink-0 mt-0.5">
+                        <span className="text-[9px] font-bold text-[#0c1b38]">You</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {/* Input */}
+            <div className={`flex gap-2 px-4 py-3 border-t border-[#f0f0f0] ${chatMsgs.length === 0 ? "" : "bg-white"}`}>
+              <input
+                value={chatInput}
+                onChange={e => setChatInput(e.target.value)}
+                onKeyDown={e => e.key === "Enter" && !e.shiftKey && !chatRunning && sendChat()}
+                placeholder={`Ask anything about ${data.company.name}…`}
+                disabled={chatRunning}
+                className="flex-1 text-[12.5px] border border-[#e0e0e0] rounded-lg px-3.5 py-2 focus:outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 placeholder:text-[#ccc] disabled:opacity-50 transition-colors"
+              />
+              <button
+                onClick={() => sendChat()}
+                disabled={!chatInput.trim() || chatRunning}
+                className="px-3.5 py-2 bg-[#0c1b38] text-white rounded-lg hover:bg-[#1a3361] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-1.5 text-[11.5px] font-semibold shrink-0">
+                {chatRunning
+                  ? <span className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                  : <Send size={12} />}
+              </button>
+            </div>
+          </div>
+
         </div>
       )}
 
@@ -1607,6 +1840,7 @@ export default function TenKPage() {
             <span>✓ XBRL financials</span>
             <span>✓ 5-year history</span>
             <span>✓ AI research note</span>
+            <span>✓ Ask the Filing</span>
           </div>
         </div>
       )}

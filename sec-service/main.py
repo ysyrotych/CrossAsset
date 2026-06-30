@@ -776,7 +776,7 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                     continue
                 sections.append(FilingSection(
                     item=key, title=title,
-                    text=truncate(text),
+                    text=truncate(text, 200000),
                     char_count=len(text),
                 ))
             except Exception:
