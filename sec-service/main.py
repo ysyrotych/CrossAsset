@@ -95,8 +95,30 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
             units = fact.get("units", {})
             return units.get("USD") or units.get("shares") or (list(units.values())[0] if units else [])
 
+        # Determine canonical fiscal-year-end date from the primary revenue concept,
+        # then anchor ALL other concepts to that same period to prevent cross-period mixing.
+        def _find_fy_end() -> str:
+            for concept in ("Revenues", "RevenueFromContractWithCustomerExcludingAssessedTax",
+                            "SalesRevenueNet", "RevenueFromContractWithCustomerIncludingAssessedTax"):
+                entries = get_entries(concept)
+                if not entries:
+                    continue
+                annual = [e for e in entries
+                          if e.get("form") == "10-K"
+                          and e.get("val") is not None
+                          and _duration_days(e) >= 335]
+                if not annual:
+                    annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
+                if annual:
+                    annual.sort(key=lambda e: e.get("end", ""), reverse=True)
+                    return annual[0].get("end", "")
+            return ""
+
+        fy_end = _find_fy_end()
+        print(f"Canonical FY end date: {fy_end}")
+
         def get_latest_flow(concept: str) -> Optional[float]:
-            """For income-statement and CF items: require annual period (>=335 days)."""
+            """Annual income-stmt/CF item, anchored to the canonical FY end date."""
             entries = get_entries(concept)
             if not entries:
                 return None
@@ -105,17 +127,21 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
                       and e.get("val") is not None
                       and _duration_days(e) >= 335]
             if not annual:
-                # Fall back to any 10-K entry if none have start/end dates
                 annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
             if not annual:
                 annual = [e for e in entries if e.get("val") is not None]
             if not annual:
                 return None
+            # Prefer entries matching the canonical FY end
+            if fy_end:
+                matched = [e for e in annual if e.get("end", "") == fy_end]
+                if matched:
+                    return safe_float(matched[0]["val"])
             annual.sort(key=lambda e: e.get("end", ""), reverse=True)
             return safe_float(annual[0]["val"])
 
         def get_latest_bs(concept: str) -> Optional[float]:
-            """For balance-sheet items: point-in-time, just pick most recent 10-K."""
+            """Balance-sheet item anchored to the canonical FY end date."""
             entries = get_entries(concept)
             if not entries:
                 return None
@@ -124,6 +150,10 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
                 annual = [e for e in entries if e.get("val") is not None]
             if not annual:
                 return None
+            if fy_end:
+                matched = [e for e in annual if e.get("end", "") == fy_end]
+                if matched:
+                    return safe_float(matched[0]["val"])
             annual.sort(key=lambda e: e.get("end", ""), reverse=True)
             return safe_float(annual[0]["val"])
 
