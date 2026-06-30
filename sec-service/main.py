@@ -1,13 +1,12 @@
 """
 SEC Analysis Microservice — powered by edgartools
 FastAPI service that exposes 10-K / 10-Q data to the CrossAsset Next.js app.
-
-Deploy on Railway / Fly.io / Render. Set SEC_SERVICE_URL in Vercel env vars.
 """
 
 import asyncio
 import re
 import httpx
+from datetime import datetime, date
 from typing import Optional
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,7 +25,6 @@ app.add_middleware(
 
 try:
     from edgar import Company, set_identity
-    # SEC requires a User-Agent identifying you — set once at startup
     set_identity("CrossAsset Research crossasset@research.com")
     EDGAR_AVAILABLE = True
 except ImportError:
@@ -35,7 +33,6 @@ except ImportError:
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 def truncate(text: str, max_chars: int = 8000) -> str:
-    """Trim text for LLM context — keep first max_chars characters."""
     if not text:
         return ""
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
@@ -47,10 +44,24 @@ def safe_float(val) -> Optional[float]:
     except (TypeError, ValueError):
         return None
 
+def _duration_days(e: dict) -> int:
+    """Return number of days between 'start' and 'end' for a fact entry."""
+    try:
+        start = e.get("start")
+        end   = e.get("end")
+        if not start or not end:
+            return 0
+        s = datetime.strptime(start, "%Y-%m-%d")
+        en = datetime.strptime(end, "%Y-%m-%d")
+        return (en - s).days
+    except Exception:
+        return 0
+
 def fetch_xbrl_from_sec_api(cik: str) -> dict:
     """
-    Fetch financial facts directly from SEC EDGAR company facts API.
-    Format is guaranteed: data.sec.gov/api/xbrl/companyfacts/CIK{10-digit}.json
+    Fetch financial facts from SEC EDGAR company facts API.
+    Filters flow variables (income stmt, CF) to annual periods only (>=335 days)
+    to avoid picking quarterly entries and computing wrong margins.
     """
     try:
         cik_padded = str(int(cik)).zfill(10)
@@ -64,15 +75,37 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         if not us_gaap:
             return {}
 
-        def get_latest(concept: str) -> Optional[float]:
+        def get_entries(concept: str):
             fact = us_gaap.get(concept)
             if not fact:
-                return None
-            units: dict = fact.get("units", {})
-            entries = units.get("USD") or units.get("shares") or (list(units.values())[0] if units else [])
+                return []
+            units = fact.get("units", {})
+            return units.get("USD") or units.get("shares") or (list(units.values())[0] if units else [])
+
+        def get_latest_flow(concept: str) -> Optional[float]:
+            """For income-statement and CF items: require annual period (>=335 days)."""
+            entries = get_entries(concept)
             if not entries:
                 return None
-            # Prefer most-recent 10-K annual entry
+            annual = [e for e in entries
+                      if e.get("form") == "10-K"
+                      and e.get("val") is not None
+                      and _duration_days(e) >= 335]
+            if not annual:
+                # Fall back to any 10-K entry if none have start/end dates
+                annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
+            if not annual:
+                annual = [e for e in entries if e.get("val") is not None]
+            if not annual:
+                return None
+            annual.sort(key=lambda e: e.get("end", ""), reverse=True)
+            return safe_float(annual[0]["val"])
+
+        def get_latest_bs(concept: str) -> Optional[float]:
+            """For balance-sheet items: point-in-time, just pick most recent 10-K."""
+            entries = get_entries(concept)
+            if not entries:
+                return None
             annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
             if not annual:
                 annual = [e for e in entries if e.get("val") is not None]
@@ -81,60 +114,83 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
             annual.sort(key=lambda e: e.get("end", ""), reverse=True)
             return safe_float(annual[0]["val"])
 
+        def get_history_flow(concept: str, years: int = 5) -> dict:
+            """Return last N annual 10-K values keyed by fiscal year end date."""
+            entries = get_entries(concept)
+            if not entries:
+                return {}
+            annual = [e for e in entries
+                      if e.get("form") == "10-K"
+                      and e.get("val") is not None
+                      and _duration_days(e) >= 335]
+            if not annual:
+                annual = [e for e in entries if e.get("form") == "10-K" and e.get("val") is not None]
+            if not annual:
+                return {}
+            # Deduplicate by end date — keep highest value per end date
+            by_end: dict = {}
+            for e in annual:
+                end = e.get("end", "")
+                val = safe_float(e["val"])
+                if val is not None and (end not in by_end or val > by_end[end]):
+                    by_end[end] = val
+            sorted_ends = sorted(by_end.keys(), reverse=True)[:years]
+            return {k: by_end[k] for k in sorted(sorted_ends)}
+
         r: dict = {}
 
-        # ── Income Statement ─────────────────────────────────────────────────
-        rev = (get_latest("Revenues") or
-               get_latest("RevenueFromContractWithCustomerExcludingAssessedTax") or
-               get_latest("SalesRevenueNet") or
-               get_latest("RevenueFromContractWithCustomerIncludingAssessedTax"))
+        # ── Income Statement (flow — use duration filter) ─────────────────────
+        rev = (get_latest_flow("Revenues") or
+               get_latest_flow("RevenueFromContractWithCustomerExcludingAssessedTax") or
+               get_latest_flow("SalesRevenueNet") or
+               get_latest_flow("RevenueFromContractWithCustomerIncludingAssessedTax"))
         if rev is not None: r["revenue"] = rev
 
-        gp = get_latest("GrossProfit")
+        gp = get_latest_flow("GrossProfit")
         if gp is not None: r["gross_profit"] = gp
 
-        oi = get_latest("OperatingIncomeLoss")
+        oi = get_latest_flow("OperatingIncomeLoss")
         if oi is not None: r["operating_income"] = oi
 
-        ni = get_latest("NetIncomeLoss") or get_latest("NetIncomeLossAvailableToCommonStockholdersDiluted")
+        ni = get_latest_flow("NetIncomeLoss") or get_latest_flow("NetIncomeLossAvailableToCommonStockholdersDiluted")
         if ni is not None: r["net_income"] = ni
 
-        eps = get_latest("EarningsPerShareDiluted")
+        eps = get_latest_flow("EarningsPerShareDiluted")
         if eps is not None: r["eps_diluted"] = eps
 
-        rd = get_latest("ResearchAndDevelopmentExpense")
+        rd = get_latest_flow("ResearchAndDevelopmentExpense")
         if rd is not None: r["rd_expense"] = rd
 
-        sga = get_latest("SellingGeneralAndAdministrativeExpense")
+        sga = get_latest_flow("SellingGeneralAndAdministrativeExpense")
         if sga is not None: r["sga_expense"] = sga
 
-        # ── Balance Sheet ────────────────────────────────────────────────────
-        assets = get_latest("Assets")
+        # ── Balance Sheet (point-in-time) ─────────────────────────────────────
+        assets = get_latest_bs("Assets")
         if assets is not None: r["total_assets"] = assets
 
-        liab = get_latest("Liabilities")
+        liab = get_latest_bs("Liabilities")
         if liab is not None: r["total_liabilities"] = liab
 
-        eq = get_latest("StockholdersEquity") or get_latest("StockholdersEquityAttributableToParent")
+        eq = get_latest_bs("StockholdersEquity") or get_latest_bs("StockholdersEquityAttributableToParent")
         if eq is not None: r["equity"] = eq
 
-        cash = get_latest("CashAndCashEquivalentsAtCarryingValue") or get_latest("CashCashEquivalentsAndShortTermInvestments")
+        cash = get_latest_bs("CashAndCashEquivalentsAtCarryingValue") or get_latest_bs("CashCashEquivalentsAndShortTermInvestments")
         if cash is not None: r["cash"] = cash
 
-        ltd = get_latest("LongTermDebt") or get_latest("LongTermDebtNoncurrent")
+        ltd = get_latest_bs("LongTermDebt") or get_latest_bs("LongTermDebtNoncurrent")
         if ltd is not None: r["long_term_debt"] = ltd
 
-        # ── Cash Flow ────────────────────────────────────────────────────────
-        ocf = get_latest("NetCashProvidedByUsedInOperatingActivities")
-        if ocf is not None: r["operating_cf"] = ocf
-
-        capex = get_latest("PaymentsToAcquirePropertyPlantAndEquipment")
-        if capex is not None: r["capex"] = capex
-
-        shares = get_latest("CommonStockSharesOutstanding")
+        shares = get_latest_bs("CommonStockSharesOutstanding")
         if shares is not None: r["shares_outstanding"] = shares
 
-        # ── Derived ratios ───────────────────────────────────────────────────
+        # ── Cash Flow (flow — use duration filter) ────────────────────────────
+        ocf = get_latest_flow("NetCashProvidedByUsedInOperatingActivities")
+        if ocf is not None: r["operating_cf"] = ocf
+
+        capex = get_latest_flow("PaymentsToAcquirePropertyPlantAndEquipment")
+        if capex is not None: r["capex"] = capex
+
+        # ── Derived ratios ────────────────────────────────────────────────────
         if rev and gp:  r["gross_margin_pct"]     = round((gp  / rev) * 100, 1)
         if rev and oi:  r["operating_margin_pct"] = round((oi  / rev) * 100, 1)
         if rev and ni:  r["net_margin_pct"]        = round((ni  / rev) * 100, 1)
@@ -142,11 +198,29 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
             r["free_cash_flow"] = ocf - abs(capex)
 
         print(f"XBRL SEC API: extracted {len(r)} facts for CIK {cik}")
-        return r
+
+        # ── 5-year history ────────────────────────────────────────────────────
+        history: dict = {}
+        rev_hist = (get_history_flow("Revenues") or
+                    get_history_flow("RevenueFromContractWithCustomerExcludingAssessedTax") or
+                    get_history_flow("SalesRevenueNet") or
+                    get_history_flow("RevenueFromContractWithCustomerIncludingAssessedTax"))
+        if rev_hist: history["revenue"] = rev_hist
+
+        ni_hist = get_history_flow("NetIncomeLoss") or get_history_flow("NetIncomeLossAvailableToCommonStockholdersDiluted")
+        if ni_hist: history["net_income"] = ni_hist
+
+        oi_hist = get_history_flow("OperatingIncomeLoss")
+        if oi_hist: history["operating_income"] = oi_hist
+
+        ocf_hist = get_history_flow("NetCashProvidedByUsedInOperatingActivities")
+        if ocf_hist: history["operating_cf"] = ocf_hist
+
+        return {"facts": r, "history": history}
 
     except Exception as e:
         print(f"XBRL SEC API error for CIK {cik}: {e}")
-        return {}
+        return {"facts": {}, "history": {}}
 
 # ── Response models ───────────────────────────────────────────────────────────
 
@@ -164,18 +238,19 @@ class FilingSection(BaseModel):
     char_count: int
 
 class FilingData(BaseModel):
-    form_type: str        # "10-K" or "10-Q"
+    form_type: str
     accession: str
     filed_date: str
     period_of_report: str
     sections: list[FilingSection]
-    raw_financials: dict  # XBRL numbers
+    raw_financials: dict
 
 class AnalysisPayload(BaseModel):
     company: CompanyInfo
     annual: Optional[FilingData] = None
     quarterly: Optional[FilingData] = None
     xbrl_facts: dict = {}
+    history: dict = {}
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -185,10 +260,6 @@ def health():
 
 @app.get("/company/{ticker}", response_model=AnalysisPayload)
 async def get_company_analysis(ticker: str, sections: str = "mda,risks,business"):
-    """
-    Main endpoint. Returns company info + latest 10-K + latest 10-Q sections.
-    sections: comma-separated list of: mda, risks, business
-    """
     if not EDGAR_AVAILABLE:
         raise HTTPException(503, "edgartools not installed — run: pip install edgartools")
 
@@ -208,17 +279,18 @@ async def get_company_analysis(ticker: str, sections: str = "mda,risks,business"
         sic_description=str(getattr(company, 'sic_description', '') or ''),
     )
 
-    annual, quarterly, xbrl_facts = await asyncio.gather(
-        asyncio.to_thread(_get_filing, company, "10-K", want),
-        asyncio.to_thread(_get_filing, company, "10-Q", want),
-        asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', ''))),
-    )
+    annual_task   = asyncio.to_thread(_get_filing, company, "10-K", want)
+    quarterly_task = asyncio.to_thread(_get_filing, company, "10-Q", want)
+    xbrl_task     = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
+
+    annual, quarterly, xbrl_result = await asyncio.gather(annual_task, quarterly_task, xbrl_task)
 
     return AnalysisPayload(
         company=info,
         annual=annual,
         quarterly=quarterly,
-        xbrl_facts=xbrl_facts,
+        xbrl_facts=xbrl_result.get("facts", {}),
+        history=xbrl_result.get("history", {}),
     )
 
 def _get_company(ticker: str):
@@ -233,40 +305,66 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
         if not latest:
             return None
 
-        accession    = str(getattr(latest, 'accession_number', '') or '')
-        filed_date   = str(getattr(latest, 'filing_date', '')     or '')
-        period       = str(getattr(latest, 'period_of_report', '') or '')
+        accession  = str(getattr(latest, 'accession_number', '') or '')
+        filed_date = str(getattr(latest, 'filing_date', '')     or '')
+        period     = str(getattr(latest, 'period_of_report', '') or '')
 
         sections: list[FilingSection] = []
 
-        # Try to get the parsed document object (TenK / TenQ)
         try:
             doc = latest.obj()
         except Exception:
             doc = None
 
+        if doc is not None:
+            # Log available attrs to Railway console for debugging
+            doc_attrs = [a for a in dir(doc) if not a.startswith('_')]
+            print(f"[{form_type}] doc attrs: {doc_attrs}")
+
+        # Multiple fallback attribute names per section
         SECTION_MAP = {
-            "business":  ("Item 1 — Business",              lambda d: getattr(d, 'business',      None)),
-            "risks":     ("Item 1A — Risk Factors",         lambda d: getattr(d, 'risk_factors',   None)),
-            "mda":       ("Item 7 — MD&A",                  lambda d: getattr(d, 'mda',            None)),
-            "quantitative": ("Item 7A — Market Risk",       lambda d: getattr(d, 'quantitative_disclosures', None)),
+            "business": ("Item 1 — Business", [
+                "business", "item1", "item_1", "item1_business",
+            ]),
+            "risks": ("Item 1A — Risk Factors", [
+                "risk_factors", "risks", "item1a", "item_1a", "risk_factors_text",
+            ]),
+            "mda": ("Item 7 — MD&A", [
+                "mda", "management_discussion_and_analysis", "item7", "item_7",
+                "md_and_a", "management_s_discussion_and_analysis",
+                "managements_discussion_and_analysis",
+            ]),
+            "quantitative": ("Item 7A — Market Risk", [
+                "quantitative_disclosures", "item7a", "item_7a",
+                "quantitative_and_qualitative_disclosures_about_market_risk",
+            ]),
         }
 
-        for key, (title, getter) in SECTION_MAP.items():
+        for key, (title, attr_names) in SECTION_MAP.items():
             if key not in want:
                 continue
             if doc is None:
                 continue
-            try:
-                raw = getter(doc)
-                if raw is None:
+            raw = None
+            for attr in attr_names:
+                try:
+                    val = getattr(doc, attr, None)
+                    if val is not None:
+                        raw = val
+                        print(f"[{form_type}] section '{key}' found via attr '{attr}'")
+                        break
+                except Exception:
                     continue
+            if raw is None:
+                print(f"[{form_type}] section '{key}' not found — tried: {attr_names}")
+                continue
+            try:
                 text = str(raw)
                 if len(text) < 50:
                     continue
                 sections.append(FilingSection(
                     item=key, title=title,
-                    text=truncate(text, 10000),
+                    text=truncate(text, 12000),
                     char_count=len(text),
                 ))
             except Exception:
@@ -280,5 +378,6 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
             sections=sections,
             raw_financials={},
         )
-    except Exception:
+    except Exception as e:
+        print(f"_get_filing error for {form_type}: {e}")
         return None

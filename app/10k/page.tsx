@@ -8,7 +8,13 @@ import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, Exte
 type FilingSection = { item: string; title: string; text: string; char_count: number };
 type FilingData    = { form_type: string; accession: string; filed_date: string; period_of_report: string; sections: FilingSection[]; raw_financials: Record<string, number> };
 type CompanyInfo   = { ticker: string; name: string; cik: string; sic: string; sic_description: string };
-type Payload       = { company: CompanyInfo; annual: FilingData | null; quarterly: FilingData | null; xbrl_facts: Record<string, number> };
+type Payload       = {
+  company: CompanyInfo;
+  annual: FilingData | null;
+  quarterly: FilingData | null;
+  xbrl_facts: Record<string, number>;
+  history: Record<string, Record<string, number>>;
+};
 
 // ── Quick-picks ───────────────────────────────────────────────────────────────
 
@@ -20,16 +26,163 @@ function fmtNum(n: number | null | undefined, prefix = "", suffix = ""): string 
   if (n == null || isNaN(n)) return "—";
   const abs = Math.abs(n);
   const sign = n < 0 ? "-" : "";
-  if (suffix === "%") return `${sign}${abs.toFixed(1)}${suffix}`;
-  if (abs >= 1e9) return `${sign}${prefix}${(abs / 1e9).toFixed(2)}B`;
-  if (abs >= 1e6) return `${sign}${prefix}${(abs / 1e6).toFixed(1)}M`;
-  if (abs >= 1e3) return `${sign}${prefix}${(abs / 1e3).toFixed(1)}K`;
+  if (suffix === "%") return `${sign}${abs.toFixed(1)}%`;
+  if (abs >= 1e12) return `${sign}${prefix}${(abs / 1e12).toFixed(2)}T`;
+  if (abs >= 1e9)  return `${sign}${prefix}${(abs / 1e9).toFixed(2)}B`;
+  if (abs >= 1e6)  return `${sign}${prefix}${(abs / 1e6).toFixed(1)}M`;
+  if (abs >= 1e3)  return `${sign}${prefix}${(abs / 1e3).toFixed(1)}K`;
   return `${sign}${prefix}${abs.toFixed(2)}${suffix}`;
+}
+
+function pctColor(v: number | null | undefined): string {
+  if (v == null) return "#666";
+  return v >= 0 ? "#0d6b45" : "#b42318";
+}
+
+// ── Trend Sparkline ───────────────────────────────────────────────────────────
+
+function Sparkline({ values }: { values: number[] }) {
+  if (values.length < 2) return null;
+  const min = Math.min(...values);
+  const max = Math.max(...values);
+  const range = max - min || 1;
+  const W = 80; const H = 28;
+  const pts = values.map((v, i) => {
+    const x = (i / (values.length - 1)) * W;
+    const y = H - ((v - min) / range) * H;
+    return `${x},${y}`;
+  }).join(" ");
+  const positive = values[values.length - 1] >= values[0];
+  const color = positive ? "#0d6b45" : "#b42318";
+  return (
+    <svg width={W} height={H} className="overflow-visible">
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ── 5-Year History Table ──────────────────────────────────────────────────────
+
+function HistoryTable({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue || {};
+  const niData  = history.net_income || {};
+  const oiData  = history.operating_income || {};
+  const cfData  = history.operating_cf || {};
+
+  const allYears = Array.from(new Set([
+    ...Object.keys(revData),
+    ...Object.keys(niData),
+    ...Object.keys(oiData),
+    ...Object.keys(cfData),
+  ])).sort();
+
+  if (!allYears.length) return null;
+
+  const rows: { label: string; data: Record<string, number>; prefix: string }[] = [
+    { label: "Revenue",        data: revData, prefix: "$" },
+    { label: "Operating Inc.", data: oiData,  prefix: "$" },
+    { label: "Net Income",     data: niData,  prefix: "$" },
+    { label: "Operating CF",   data: cfData,  prefix: "$" },
+  ].filter(r => Object.keys(r.data).length > 0);
+
+  if (!rows.length) return null;
+
+  const displayYears = allYears.slice(-5);
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">5-Year Financial History</p>
+        <TrendingUp size={12} className="text-white/40" />
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+              <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[#999] w-36">Metric</th>
+              {displayYears.map(y => (
+                <th key={y} className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-[#999]">
+                  {y.slice(0, 4)}
+                </th>
+              ))}
+              <th className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-[#999] w-20">Trend</th>
+            </tr>
+          </thead>
+          <tbody>
+            {rows.map(({ label, data, prefix }, ri) => {
+              const vals = displayYears.map(y => data[y] ?? null);
+              const sparkVals = vals.filter((v): v is number => v != null);
+              const latest = vals[vals.length - 1];
+              const prev   = vals.slice(0, -1).reverse().find(v => v != null);
+              const yoy    = latest != null && prev != null && prev !== 0
+                ? ((latest - prev) / Math.abs(prev)) * 100 : null;
+              return (
+                <tr key={label} className={`border-b border-[#f0f0f0] last:border-0 ${ri % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
+                  <td className="px-4 py-2.5 text-[11.5px] font-semibold text-[#333]">
+                    <div>{label}</div>
+                    {yoy != null && (
+                      <div className="text-[10px] font-normal mt-0.5" style={{ color: pctColor(yoy) }}>
+                        {yoy > 0 ? "+" : ""}{yoy.toFixed(1)}% YoY
+                      </div>
+                    )}
+                  </td>
+                  {displayYears.map(y => {
+                    const v = data[y] ?? null;
+                    return (
+                      <td key={y} className="px-3 py-2.5 text-right text-[12px] tabular-nums text-[#1a1a1a] font-medium">
+                        {v != null ? fmtNum(v, prefix) : <span className="text-[#ddd]">—</span>}
+                      </td>
+                    );
+                  })}
+                  <td className="px-3 py-2.5 text-right">
+                    {sparkVals.length >= 2 && <Sparkline values={sparkVals} />}
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
 }
 
 // ── Financial Statements ─────────────────────────────────────────────────────
 
-function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts: XBRLFacts }) {
+type FinRow = { key: string; label: string; prefix?: string; suffix?: string; dynamic?: boolean; bold?: boolean };
+
+const INCOME_ROWS: FinRow[] = [
+  { key: "revenue",           label: "Revenue",             prefix: "$", bold: true },
+  { key: "gross_profit",      label: "Gross Profit",        prefix: "$" },
+  { key: "rd_expense",        label: "R&D Expense",         prefix: "$" },
+  { key: "sga_expense",       label: "SG&A Expense",        prefix: "$" },
+  { key: "operating_income",  label: "Operating Income",    prefix: "$", dynamic: true },
+  { key: "net_income",        label: "Net Income",          prefix: "$", dynamic: true, bold: true },
+  { key: "eps_diluted",       label: "EPS (Diluted)",       prefix: "$", dynamic: true },
+];
+
+const BALANCE_ROWS: FinRow[] = [
+  { key: "total_assets",      label: "Total Assets",        prefix: "$", bold: true },
+  { key: "cash",              label: "Cash & Equivalents",  prefix: "$" },
+  { key: "total_liabilities", label: "Total Liabilities",   prefix: "$" },
+  { key: "long_term_debt",    label: "Long-Term Debt",      prefix: "$" },
+  { key: "equity",            label: "Shareholders Equity", prefix: "$", dynamic: true, bold: true },
+  { key: "shares_outstanding",label: "Shares Outstanding",  prefix: "" },
+];
+
+const CASHFLOW_ROWS: FinRow[] = [
+  { key: "operating_cf",      label: "Operating CF",         prefix: "$", dynamic: true, bold: true },
+  { key: "capex",             label: "Capital Expenditures", prefix: "$" },
+  { key: "free_cash_flow",    label: "Free Cash Flow",       prefix: "$", dynamic: true, bold: true },
+];
+
+const MARGIN_ROWS: FinRow[] = [
+  { key: "gross_margin_pct",     label: "Gross Margin",     suffix: "%" },
+  { key: "operating_margin_pct", label: "Operating Margin", suffix: "%", dynamic: true },
+  { key: "net_margin_pct",       label: "Net Margin",       suffix: "%", dynamic: true },
+];
+
+function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts: Record<string, number> }) {
   const available = rows.filter(r => facts[r.key] != null);
   if (!available.length) return null;
   return (
@@ -41,11 +194,11 @@ function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts
         <tbody>
           {available.map(({ key, label, prefix = "", suffix = "", dynamic, bold }, i) => {
             const val = facts[key];
-            const color = dynamic ? (val >= 0 ? "#147a4f" : "#b42318") : "#0a0a0a";
+            const color = dynamic ? (val >= 0 ? "#0d6b45" : "#b42318") : "#0a0a0a";
             return (
-              <tr key={key} className={i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}>
-                <td className={`px-4 py-2 text-[11.5px] text-[#666] ${bold ? "font-semibold" : ""}`}>{label}</td>
-                <td className={`px-4 py-2 text-[13px] tabular-nums text-right font-${bold ? "bold" : "medium"}`}
+              <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
+                <td className={`px-4 py-2.5 text-[11.5px] text-[#555] ${bold ? "font-semibold text-[#222]" : ""}`}>{label}</td>
+                <td className={`px-4 py-2.5 text-[12.5px] tabular-nums text-right ${bold ? "font-bold" : "font-medium"}`}
                   style={{ color }}>{fmtNum(val, prefix, suffix)}</td>
               </tr>
             );
@@ -56,106 +209,66 @@ function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts
   );
 }
 
-function FinancialStatements({ facts }: { facts: XBRLFacts }) {
-  const hasData = Object.keys(facts).length > 0;
-  if (!hasData) return (
+function MarginBadges({ facts }: { facts: Record<string, number> }) {
+  const available = MARGIN_ROWS.filter(r => facts[r.key] != null);
+  if (!available.length) return null;
+  return (
+    <div className="flex gap-3 flex-wrap mb-4">
+      {available.map(({ key, label }) => {
+        const val = facts[key];
+        return (
+          <div key={key} className="flex-1 min-w-[120px] border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
+            <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
+            <p className="text-[22px] font-bold tabular-nums" style={{ color: pctColor(val) }}>{fmtNum(val, "", "%")}</p>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function FinancialStatements({ facts }: { facts: Record<string, number> }) {
+  if (!Object.keys(facts).length) return (
     <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
       <p className="text-[11.5px] text-[#999]">XBRL financial data unavailable — SEC filing may not include structured data or extraction failed.</p>
     </div>
   );
-
-  const marginAvailable = MARGIN_ROWS.some(r => facts[r.key] != null);
-
   return (
     <div className="space-y-4">
-      {marginAvailable && (
-        <div className="flex gap-3 flex-wrap">
-          {MARGIN_ROWS.filter(r => facts[r.key] != null).map(({ key, label, suffix = "%", dynamic }) => {
-            const val = facts[key];
-            const color = dynamic ? (val >= 0 ? "#147a4f" : "#b42318") : "#0a0a0a";
-            return (
-              <div key={key} className="flex-1 min-w-[120px] border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
-                <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
-                <p className="text-[22px] font-bold tabular-nums" style={{ color }}>{fmtNum(val, "", suffix)}</p>
-              </div>
-            );
-          })}
-        </div>
-      )}
+      <MarginBadges facts={facts} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <FinTable title="Income Statement" rows={INCOME_ROWS} facts={facts} />
-        <FinTable title="Balance Sheet"    rows={BALANCE_ROWS} facts={facts} />
-        <FinTable title="Cash Flow"        rows={CASHFLOW_ROWS} facts={facts} />
+        <FinTable title="Income Statement (Annual)" rows={INCOME_ROWS} facts={facts} />
+        <FinTable title="Balance Sheet"             rows={BALANCE_ROWS} facts={facts} />
+        <FinTable title="Cash Flow Statement"       rows={CASHFLOW_ROWS} facts={facts} />
       </div>
     </div>
   );
 }
 
-type XBRLFacts = Record<string, number>;
+// ── Section text renderer ─────────────────────────────────────────────────────
 
-type FinRow = { key: string; label: string; prefix?: string; suffix?: string; dynamic?: boolean; bold?: boolean };
+function SectionText({ text }: { text: string }) {
+  const cleaned = text
+    .replace(/^(ITEM\s+\d+[A-Z]?\s*[\.\-—]+\s*[^\n]*\n)/im, "")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
 
-const INCOME_ROWS: FinRow[] = [
-  { key: "revenue",            label: "Revenue",            prefix: "$", bold: true },
-  { key: "gross_profit",       label: "Gross Profit",       prefix: "$" },
-  { key: "rd_expense",         label: "R&D Expense",        prefix: "$" },
-  { key: "sga_expense",        label: "SG&A Expense",       prefix: "$" },
-  { key: "operating_income",   label: "Operating Income",   prefix: "$", dynamic: true },
-  { key: "net_income",         label: "Net Income",         prefix: "$", dynamic: true, bold: true },
-  { key: "eps_diluted",        label: "EPS (Diluted)",      prefix: "$", dynamic: true },
-];
-
-const BALANCE_ROWS: FinRow[] = [
-  { key: "total_assets",       label: "Total Assets",       prefix: "$", bold: true },
-  { key: "cash",               label: "Cash & Equiv.",      prefix: "$" },
-  { key: "total_liabilities",  label: "Total Liabilities",  prefix: "$" },
-  { key: "long_term_debt",     label: "Long-Term Debt",     prefix: "$" },
-  { key: "equity",             label: "Shareholders Equity",prefix: "$", dynamic: true, bold: true },
-  { key: "shares_outstanding", label: "Shares Outstanding", prefix: "" },
-];
-
-const CASHFLOW_ROWS: FinRow[] = [
-  { key: "operating_cf",       label: "Operating CF",       prefix: "$", dynamic: true, bold: true },
-  { key: "capex",              label: "CapEx",              prefix: "$" },
-  { key: "free_cash_flow",     label: "Free Cash Flow",     prefix: "$", dynamic: true, bold: true },
-];
-
-const MARGIN_ROWS: FinRow[] = [
-  { key: "gross_margin_pct",     label: "Gross Margin",     suffix: "%" },
-  { key: "operating_margin_pct", label: "Operating Margin", suffix: "%", dynamic: true },
-  { key: "net_margin_pct",       label: "Net Margin",       suffix: "%", dynamic: true },
-];
-
-// ── Markdown renderer ─────────────────────────────────────────────────────────
-
-function BriefBody({ text }: { text: string }) {
-  const lines = text.split("\n");
-  const nodes: React.ReactNode[] = [];
-  const inline = (s: string, k: number): React.ReactNode => {
-    const parts = s.split(/(\*\*[^*]+\*\*)/g);
-    return <span key={k}>{parts.map((p, i) =>
-      p.startsWith("**") && p.endsWith("**")
-        ? <strong key={i} className="font-semibold text-[#0a0a0a]">{p.slice(2, -2)}</strong>
-        : p
-    )}</span>;
-  };
-  lines.forEach((line, i) => {
-    const t = line.trim();
-    if (!t) { nodes.push(<div key={i} className="h-2" />); return; }
-    if (t.startsWith("**") && t.endsWith("**") && !t.slice(2, -2).includes("**")) {
-      nodes.push(<p key={i} className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#0c1b38] mt-5 mb-2 first:mt-0">{t.slice(2, -2)}</p>);
-    } else if (t.startsWith("• ") || t.startsWith("- ")) {
-      nodes.push(<div key={i} className="flex items-start gap-2 py-0.5"><span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" /><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.slice(2), i)}</p></div>);
-    } else if (/^\d+\.\s/.test(t)) {
-      const num = t.match(/^(\d+)\./)?.[1] ?? "";
-      nodes.push(<div key={i} className="flex items-start gap-2.5 py-0.5"><span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.replace(/^\d+\.\s*/, ""), i)}</p></div>);
-    } else if (t.startsWith("---")) {
-      nodes.push(<hr key={i} className="border-[#ebebeb] my-3" />);
-    } else {
-      nodes.push(<p key={i} className="text-[12.5px] text-[#1a1a1a] leading-[1.8]">{inline(t, i)}</p>);
-    }
-  });
-  return <div className="space-y-[2px]">{nodes}</div>;
+  const paragraphs = cleaned.split(/\n\n+/);
+  return (
+    <div className="space-y-3">
+      {paragraphs.slice(0, 40).map((para, i) => {
+        const t = para.trim();
+        if (!t) return null;
+        const isHeader = t.length < 120 && /^[A-Z\s\d\-—:]+$/.test(t) && !t.endsWith(".");
+        if (isHeader) return (
+          <p key={i} className="text-[10.5px] font-bold tracking-[0.12em] uppercase text-[#0c1b38] mt-4 first:mt-0">{t}</p>
+        );
+        return (
+          <p key={i} className="text-[12.5px] text-[#333] leading-[1.75]">{t}</p>
+        );
+      })}
+    </div>
+  );
 }
 
 // ── Section viewer ────────────────────────────────────────────────────────────
@@ -163,8 +276,8 @@ function BriefBody({ text }: { text: string }) {
 const SECTION_TABS = [
   { key: "business", label: "Business Overview" },
   { key: "risks",    label: "Risk Factors" },
-  { key: "mda",      label: "MD&A (Annual)" },
-  { key: "mda_q",    label: "MD&A (Quarterly)" },
+  { key: "mda",      label: "MD&A Annual" },
+  { key: "mda_q",    label: "MD&A Quarterly" },
 ];
 
 function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quarterly: FilingData | null }) {
@@ -200,21 +313,20 @@ function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quart
       <div className="p-5">
         {section ? (
           <>
-            <div className="flex items-center justify-between mb-3">
-              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb]">
-                {section.char_count.toLocaleString()} chars · {section.title}
-              </p>
+            <div className="flex items-center justify-between mb-4">
+              <div>
+                <p className="text-[12px] font-semibold text-[#0a0a0a]">{section.title}</p>
+                <p className="text-[10px] text-[#bbb] mt-0.5">{section.char_count.toLocaleString()} characters</p>
+              </div>
               <button onClick={() => setExpanded(e => !e)}
-                className="flex items-center gap-1 text-[10.5px] text-[#0c1b38] font-semibold hover:underline">
+                className="flex items-center gap-1 text-[10.5px] text-[#0c1b38] font-semibold hover:underline shrink-0">
                 {expanded ? <><ChevronUp size={12}/> Collapse</> : <><ChevronDown size={12}/> Show full</>}
               </button>
             </div>
-            <div className={`relative overflow-hidden transition-all ${expanded ? "" : "max-h-72"}`}>
-              <pre className="text-[11px] text-[#333] leading-relaxed whitespace-pre-wrap font-mono">
-                {section.text}
-              </pre>
+            <div className={`relative overflow-hidden transition-all ${expanded ? "" : "max-h-80"}`}>
+              <SectionText text={section.text} />
               {!expanded && (
-                <div className="absolute bottom-0 left-0 right-0 h-12 bg-gradient-to-t from-white to-transparent pointer-events-none" />
+                <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-white to-transparent pointer-events-none" />
               )}
             </div>
           </>
@@ -224,6 +336,36 @@ function SectionViewer({ annual, quarterly }: { annual: FilingData | null; quart
       </div>
     </div>
   );
+}
+
+// ── Markdown renderer for AI output ──────────────────────────────────────────
+
+function BriefBody({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const nodes: React.ReactNode[] = [];
+  const inline = (s: string, k: number): React.ReactNode => {
+    const parts = s.split(/(\*\*[^*]+\*\*)/g);
+    return <span key={k}>{parts.map((p, i) =>
+      p.startsWith("**") && p.endsWith("**")
+        ? <strong key={i} className="font-semibold text-[#0a0a0a]">{p.slice(2, -2)}</strong>
+        : p
+    )}</span>;
+  };
+  lines.forEach((line, i) => {
+    const t = line.trim();
+    if (!t) { nodes.push(<div key={i} className="h-2" />); return; }
+    if (t.startsWith("**") && t.endsWith("**") && !t.slice(2, -2).includes("**")) {
+      nodes.push(<p key={i} className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#0c1b38] mt-5 mb-2 first:mt-0">{t.slice(2, -2)}</p>);
+    } else if (t.startsWith("• ") || t.startsWith("- ")) {
+      nodes.push(<div key={i} className="flex items-start gap-2 py-0.5"><span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" /><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.slice(2), i)}</p></div>);
+    } else if (/^\d+\.\s/.test(t)) {
+      const num = t.match(/^(\d+)\./)?.[1] ?? "";
+      nodes.push(<div key={i} className="flex items-start gap-2.5 py-0.5"><span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.replace(/^\d+\.\s*/, ""), i)}</p></div>);
+    } else {
+      nodes.push(<p key={i} className="text-[12.5px] text-[#1a1a1a] leading-[1.8]">{inline(t, i)}</p>);
+    }
+  });
+  return <div className="space-y-[2px]">{nodes}</div>;
 }
 
 // ── Page ──────────────────────────────────────────────────────────────────────
@@ -298,7 +440,7 @@ export default function TenKPage() {
           SEC Filing Intelligence
         </h1>
         <p className="text-[13px] text-[#9ca3af]">
-          Browse sections and financials directly from SEC EDGAR. AI research note is optional.
+          Institutional-grade financial data and filing analysis directly from SEC EDGAR.
         </p>
       </div>
 
@@ -342,7 +484,7 @@ export default function TenKPage() {
         <div className="flex flex-col items-center gap-3 py-16 justify-center text-center">
           <span className="w-6 h-6 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin" />
           <p className="text-[13px] text-[#999]">Fetching from SEC EDGAR…</p>
-          <p className="text-[11.5px] text-[#bbb]">This takes 15–30 seconds for first load</p>
+          <p className="text-[11.5px] text-[#bbb]">This may take 20–40 seconds</p>
         </div>
       )}
 
@@ -351,39 +493,44 @@ export default function TenKPage() {
         <div className="space-y-6">
 
           {/* Company card */}
-          <div className="p-5 border border-[#ebebeb] rounded-lg bg-[#fafafa] flex items-start justify-between gap-6 flex-wrap">
+          <div className="p-5 border border-[#d0d7e8] rounded-lg bg-[#fafcff] flex items-start justify-between gap-6 flex-wrap">
             <div>
-              <div className="flex items-center gap-3 mb-1">
-                <span className="text-[26px] font-semibold text-[#0c1b38]">{data.company.ticker}</span>
+              <div className="flex items-center gap-3 mb-1.5">
+                <span className="text-[30px] font-bold text-[#0c1b38] leading-none">{data.company.ticker}</span>
                 <span className="text-[9.5px] font-bold px-2 py-0.5 rounded-full border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38]">SEC EDGAR</span>
               </div>
-              <p className="text-[15px] font-medium text-[#0a0a0a] mb-0.5">{data.company.name}</p>
+              <p className="text-[16px] font-medium text-[#0a0a0a] mb-0.5">{data.company.name}</p>
               <p className="text-[11.5px] text-[#999]">{data.company.sic_description || "—"} · CIK {data.company.cik}</p>
             </div>
             <div className="flex gap-6 text-[11.5px] shrink-0 items-start">
               <div className="text-right">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-[#bbb] mb-1">Latest 10-K</p>
                 <p className="font-semibold text-[#0a0a0a]">{data.annual?.period_of_report ?? "—"}</p>
-                <p className="text-[#bbb] text-[11px]">filed {data.annual?.filed_date ?? "—"}</p>
+                <p className="text-[#bbb] text-[10.5px]">filed {data.annual?.filed_date ?? "—"}</p>
               </div>
               <div className="text-right">
                 <p className="text-[9px] font-bold uppercase tracking-wider text-[#bbb] mb-1">Latest 10-Q</p>
                 <p className="font-semibold text-[#0a0a0a]">{data.quarterly?.period_of_report ?? "—"}</p>
-                <p className="text-[#bbb] text-[11px]">filed {data.quarterly?.filed_date ?? "—"}</p>
+                <p className="text-[#bbb] text-[10.5px]">filed {data.quarterly?.filed_date ?? "—"}</p>
               </div>
               <a href={`https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK=${data.company.cik}&type=10-K&dateb=&owner=include&count=10`}
                 target="_blank" rel="noopener noreferrer"
                 className="flex items-center gap-1 self-center text-[#0c1b38] font-semibold text-[11.5px] hover:underline mt-4">
-                View on EDGAR <ExternalLink size={10} />
+                EDGAR <ExternalLink size={10} />
               </a>
             </div>
           </div>
 
-          {/* Financial Statements */}
+          {/* Key Financials */}
           <div>
-            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Statements (XBRL — Most Recent Annual)</p>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Key Financials — Most Recent Annual (XBRL)</p>
             <FinancialStatements facts={data.xbrl_facts} />
           </div>
+
+          {/* 5-Year History */}
+          {data.history && Object.keys(data.history).length > 0 && (
+            <HistoryTable history={data.history} />
+          )}
 
           {/* Filing Sections */}
           <div>
@@ -397,7 +544,7 @@ export default function TenKPage() {
               <div>
                 <p className="text-[11.5px] font-semibold text-[#0a0a0a]">AI Institutional Research Note</p>
                 <p className="text-[11px] text-[#999] mt-0.5">
-                  Claude Sonnet reads the filing and writes an analyst-grade research note with risk factors, investment thesis, and ratings.
+                  Claude reads the filing and writes an analyst-grade note with risk assessment, investment thesis, and ratings.
                 </p>
               </div>
               <button onClick={generateAI} disabled={aiRunning}
@@ -438,14 +585,15 @@ export default function TenKPage() {
           <div>
             <p className="text-[14px] font-medium text-[#0a0a0a] mb-1">SEC Filing Browser</p>
             <p className="text-[12.5px] text-[#999] max-w-md">
-              Enter a ticker to pull the latest 10-K and 10-Q from EDGAR. Browse sections and financials — generate an AI research note only when you need it.
+              Enter a ticker to pull the latest 10-K and 10-Q from EDGAR. Browse financial statements, 5-year history, MD&A, and risk factors.
             </p>
           </div>
           <div className="flex items-center gap-6 text-[11px] text-[#bbb] mt-2">
             <span>✓ Live EDGAR data</span>
             <span>✓ MD&A + Risk Factors</span>
             <span>✓ XBRL financials</span>
-            <span>✓ Optional AI note</span>
+            <span>✓ 5-year history</span>
+            <span>✓ AI research note</span>
           </div>
         </div>
       )}
