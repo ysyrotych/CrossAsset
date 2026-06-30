@@ -182,7 +182,26 @@ const MARGIN_ROWS: FinRow[] = [
   { key: "net_margin_pct",       label: "Net Margin",       suffix: "%", dynamic: true },
 ];
 
-function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts: Record<string, number> }) {
+function getPriorYearVal(history: Record<string, Record<string, number>>, key: string): number | null {
+  const series = history[key];
+  if (!series) return null;
+  const years = Object.keys(series).sort();
+  if (years.length < 2) return null;
+  return series[years[years.length - 2]] ?? null;
+}
+
+function YoYBadge({ current, prior }: { current: number; prior: number | null }) {
+  if (prior == null || prior === 0) return null;
+  const pct = ((current - prior) / Math.abs(prior)) * 100;
+  const pos = pct >= 0;
+  return (
+    <span className="ml-1.5 text-[9.5px] font-semibold tabular-nums" style={{ color: pos ? "#0d6b45" : "#b42318" }}>
+      {pos ? "▲" : "▼"}{Math.abs(pct).toFixed(1)}%
+    </span>
+  );
+}
+
+function FinTable({ title, rows, facts, history = {} }: { title: string; rows: FinRow[]; facts: Record<string, number>; history?: Record<string, Record<string, number>> }) {
   const available = rows.filter(r => facts[r.key] != null);
   if (!available.length) return null;
   return (
@@ -194,12 +213,15 @@ function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts
         <tbody>
           {available.map(({ key, label, prefix = "", suffix = "", dynamic, bold }, i) => {
             const val = facts[key];
+            const prior = getPriorYearVal(history, key);
             const color = dynamic ? (val >= 0 ? "#0d6b45" : "#b42318") : "#0a0a0a";
             return (
               <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
                 <td className={`px-4 py-2.5 text-[11.5px] text-[#555] ${bold ? "font-semibold text-[#222]" : ""}`}>{label}</td>
-                <td className={`px-4 py-2.5 text-[12.5px] tabular-nums text-right ${bold ? "font-bold" : "font-medium"}`}
-                  style={{ color }}>{fmtNum(val, prefix, suffix)}</td>
+                <td className={`px-4 py-2.5 text-[12.5px] tabular-nums text-right ${bold ? "font-bold" : "font-medium"}`} style={{ color }}>
+                  {fmtNum(val, prefix, suffix)}
+                  <YoYBadge current={val} prior={prior} />
+                </td>
               </tr>
             );
           })}
@@ -209,17 +231,44 @@ function FinTable({ title, rows, facts }: { title: string; rows: FinRow[]; facts
   );
 }
 
-function MarginBadges({ facts }: { facts: Record<string, number> }) {
+function MarginBadges({ facts, history }: { facts: Record<string, number>; history: Record<string, Record<string, number>> }) {
   const available = MARGIN_ROWS.filter(r => facts[r.key] != null);
   if (!available.length) return null;
+
+  // Compute prior-year margins from history when available
+  function priorMargin(pct_key: string, num_key: string, den_key: string): number | null {
+    const numSeries = history[num_key];
+    const denSeries = history[den_key];
+    if (!numSeries || !denSeries) return null;
+    const years = Object.keys(numSeries).sort().filter(y => denSeries[y] != null);
+    if (years.length < 2) return null;
+    const py = years[years.length - 2];
+    const n = numSeries[py], d = denSeries[py];
+    if (!d) return null;
+    return (n / d) * 100;
+  }
+
+  const priors: Record<string, number | null> = {
+    gross_margin_pct:     priorMargin("gross_margin_pct", "gross_profit", "revenue"),
+    operating_margin_pct: priorMargin("operating_margin_pct", "operating_income", "revenue"),
+    net_margin_pct:       priorMargin("net_margin_pct", "net_income", "revenue"),
+  };
+
   return (
     <div className="flex gap-3 flex-wrap mb-4">
       {available.map(({ key, label }) => {
         const val = facts[key];
+        const prior = priors[key];
+        const delta = prior != null ? val - prior : null;
         return (
           <div key={key} className="flex-1 min-w-[120px] border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
             <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
             <p className="text-[22px] font-bold tabular-nums" style={{ color: pctColor(val) }}>{fmtNum(val, "", "%")}</p>
+            {delta != null && (
+              <p className="text-[9.5px] font-semibold mt-0.5 tabular-nums" style={{ color: delta >= 0 ? "#0d6b45" : "#b42318" }}>
+                {delta >= 0 ? "▲" : "▼"}{Math.abs(delta).toFixed(1)} pp YoY
+              </p>
+            )}
           </div>
         );
       })}
@@ -227,7 +276,7 @@ function MarginBadges({ facts }: { facts: Record<string, number> }) {
   );
 }
 
-function FinancialStatements({ facts }: { facts: Record<string, number> }) {
+function FinancialStatements({ facts, history }: { facts: Record<string, number>; history: Record<string, Record<string, number>> }) {
   if (!Object.keys(facts).length) return (
     <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
       <p className="text-[11.5px] text-[#999]">XBRL financial data unavailable — SEC filing may not include structured data or extraction failed.</p>
@@ -235,11 +284,11 @@ function FinancialStatements({ facts }: { facts: Record<string, number> }) {
   );
   return (
     <div className="space-y-4">
-      <MarginBadges facts={facts} />
+      <MarginBadges facts={facts} history={history} />
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
-        <FinTable title="Income Statement (Annual)" rows={INCOME_ROWS} facts={facts} />
+        <FinTable title="Income Statement (Annual)" rows={INCOME_ROWS} facts={facts} history={history} />
         <FinTable title="Balance Sheet"             rows={BALANCE_ROWS} facts={facts} />
-        <FinTable title="Cash Flow Statement"       rows={CASHFLOW_ROWS} facts={facts} />
+        <FinTable title="Cash Flow Statement"       rows={CASHFLOW_ROWS} facts={facts} history={history} />
       </div>
     </div>
   );
@@ -524,7 +573,7 @@ export default function TenKPage() {
           {/* Key Financials */}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Key Financials — Most Recent Annual (XBRL)</p>
-            <FinancialStatements facts={data.xbrl_facts} />
+            <FinancialStatements facts={data.xbrl_facts} history={data.history ?? {}} />
           </div>
 
           {/* 5-Year History */}

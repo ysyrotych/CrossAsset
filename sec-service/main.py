@@ -4,6 +4,7 @@ FastAPI service that exposes 10-K / 10-Q data to the CrossAsset Next.js app.
 """
 
 import asyncio
+import html as html_module
 import re
 import httpx
 from datetime import datetime, date
@@ -32,9 +33,21 @@ except ImportError:
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
+def strip_html(text: str) -> str:
+    """Remove HTML tags, decode entities, normalize whitespace."""
+    text = re.sub(r'<style[^>]*>.*?</style>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<script[^>]*>.*?</script>', ' ', text, flags=re.DOTALL | re.IGNORECASE)
+    text = re.sub(r'<br\s*/?>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'</(p|div|li|tr|h[1-6])[^>]*>', '\n', text, flags=re.IGNORECASE)
+    text = re.sub(r'<[^>]+>', ' ', text)
+    text = html_module.unescape(text)
+    text = re.sub(r'[ \t]+', ' ', text)
+    return text.strip()
+
 def truncate(text: str, max_chars: int = 8000) -> str:
     if not text:
         return ""
+    text = strip_html(text)
     text = re.sub(r'\n{3,}', '\n\n', text.strip())
     return text[:max_chars] + ("\n\n[... truncated for length ...]" if len(text) > max_chars else "")
 
@@ -207,6 +220,9 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
                     get_history_flow("RevenueFromContractWithCustomerIncludingAssessedTax"))
         if rev_hist: history["revenue"] = rev_hist
 
+        gp_hist = get_history_flow("GrossProfit")
+        if gp_hist: history["gross_profit"] = gp_hist
+
         ni_hist = get_history_flow("NetIncomeLoss") or get_history_flow("NetIncomeLossAvailableToCommonStockholdersDiluted")
         if ni_hist: history["net_income"] = ni_hist
 
@@ -359,7 +375,13 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                 print(f"[{form_type}] section '{key}' not found — tried: {attr_names}")
                 continue
             try:
-                text = str(raw)
+                # edgartools Item objects may expose a .text property with clean content
+                if hasattr(raw, 'text') and isinstance(raw.text, str) and len(raw.text) > 50:
+                    text = raw.text
+                elif hasattr(raw, 'content') and isinstance(raw.content, str) and len(raw.content) > 50:
+                    text = raw.content
+                else:
+                    text = str(raw)
                 if len(text) < 50:
                     continue
                 sections.append(FilingSection(
