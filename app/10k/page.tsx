@@ -662,6 +662,188 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
   );
 }
 
+// ── Quality Scorecard ─────────────────────────────────────────────────────────
+
+type SignalType = "green" | "yellow" | "red";
+type Signal = { label: string; detail: string; type: SignalType };
+
+function QualityScorecard({
+  facts,
+  history,
+  quarterly,
+}: {
+  facts: Record<string, number>;
+  history: Record<string, Record<string, number>>;
+  quarterly: Record<string, number>;
+}) {
+  const f = facts;
+
+  // Revenue CAGR from history
+  const revHist = history.revenue ? Object.values(history.revenue) : [];
+  const revCAGR = revHist.length >= 2
+    ? ((Math.pow(revHist[revHist.length - 1] / revHist[0], 1 / (revHist.length - 1)) - 1) * 100)
+    : null;
+
+  // FCF conversion = FCF / Net Income
+  const fcfConversion = f.free_cash_flow != null && f.net_income != null && f.net_income > 0
+    ? f.free_cash_flow / f.net_income : null;
+
+  // SBC as % revenue
+  const sbcPct = f.sbc_expense != null && f.revenue != null && f.revenue > 0
+    ? f.sbc_expense / f.revenue * 100 : null;
+
+  // CapEx intensity
+  const capexPct = f.capex != null && f.revenue != null && f.revenue > 0
+    ? Math.abs(f.capex) / f.revenue * 100 : null;
+
+  // Working capital
+  const workingCapital = f.current_assets != null && f.current_liabilities != null
+    ? f.current_assets - f.current_liabilities : null;
+
+  // DSO (days sales outstanding)
+  const dso = f.accounts_receivable != null && f.revenue != null && f.revenue > 0
+    ? f.accounts_receivable / (f.revenue / 365) : null;
+
+  // DIO (days inventory outstanding)
+  const dio = f.inventory != null && f.cost_of_revenue != null && f.cost_of_revenue > 0
+    ? f.inventory / (f.cost_of_revenue / 365) : null;
+
+  // Revenue run-rate acceleration
+  const qRevRunRate = quarterly.revenue != null ? quarterly.revenue * 4 : null;
+  const runRateAccel = qRevRunRate != null && f.revenue != null && f.revenue > 0
+    ? (qRevRunRate - f.revenue) / f.revenue * 100 : null;
+
+  // Build signals
+  const signals: Signal[] = [];
+
+  if (revCAGR != null) {
+    if (revCAGR >= 25) signals.push({ label: "Revenue Growth", detail: `${revCAGR.toFixed(0)}% 5Y CAGR — exceptional compounding`, type: "green" });
+    else if (revCAGR >= 10) signals.push({ label: "Revenue Growth", detail: `${revCAGR.toFixed(0)}% 5Y CAGR — healthy growth`, type: "green" });
+    else if (revCAGR >= 3) signals.push({ label: "Revenue Growth", detail: `${revCAGR.toFixed(0)}% 5Y CAGR — moderate growth`, type: "yellow" });
+    else signals.push({ label: "Revenue Growth", detail: `${revCAGR.toFixed(0)}% 5Y CAGR — low/stagnant`, type: "red" });
+  }
+
+  if (runRateAccel != null) {
+    if (runRateAccel >= 30) signals.push({ label: "Momentum", detail: `MRQ run-rate ${runRateAccel > 0 ? "+" : ""}${runRateAccel.toFixed(0)}% vs last 10-K — strong acceleration`, type: "green" });
+    else if (runRateAccel >= 0) signals.push({ label: "Momentum", detail: `MRQ run-rate +${runRateAccel.toFixed(0)}% vs last 10-K`, type: "yellow" });
+    else signals.push({ label: "Momentum", detail: `MRQ run-rate ${runRateAccel.toFixed(0)}% vs last 10-K — decelerating`, type: "red" });
+  }
+
+  if (f.operating_margin_pct != null) {
+    if (f.operating_margin_pct >= 25) signals.push({ label: "Profitability", detail: `${f.operating_margin_pct.toFixed(1)}% operating margin — exceptional`, type: "green" });
+    else if (f.operating_margin_pct >= 12) signals.push({ label: "Profitability", detail: `${f.operating_margin_pct.toFixed(1)}% operating margin — solid`, type: "green" });
+    else if (f.operating_margin_pct >= 5) signals.push({ label: "Profitability", detail: `${f.operating_margin_pct.toFixed(1)}% operating margin — thin`, type: "yellow" });
+    else signals.push({ label: "Profitability", detail: `${f.operating_margin_pct.toFixed(1)}% operating margin — weak/breakeven`, type: "red" });
+  }
+
+  if (fcfConversion != null) {
+    if (fcfConversion >= 0.9) signals.push({ label: "FCF Quality", detail: `${(fcfConversion * 100).toFixed(0)}% FCF/NI conversion — high quality earnings`, type: "green" });
+    else if (fcfConversion >= 0.6) signals.push({ label: "FCF Quality", detail: `${(fcfConversion * 100).toFixed(0)}% FCF/NI conversion — acceptable`, type: "yellow" });
+    else signals.push({ label: "FCF Quality", detail: `${(fcfConversion * 100).toFixed(0)}% FCF/NI conversion — earnings not converting to cash`, type: "red" });
+  }
+
+  if (f.long_term_debt != null && f.cash != null) {
+    const netDebt = f.long_term_debt - f.cash;
+    if (netDebt < 0) signals.push({ label: "Balance Sheet", detail: `Net cash position of ${Math.abs(netDebt / 1e9).toFixed(1)}B — fortress balance sheet`, type: "green" });
+    else if (f.ebitda != null && f.ebitda > 0) {
+      const leverage = netDebt / f.ebitda;
+      if (leverage < 1.5) signals.push({ label: "Balance Sheet", detail: `${leverage.toFixed(1)}× Net Debt/EBITDA — manageable leverage`, type: "green" });
+      else if (leverage < 3) signals.push({ label: "Balance Sheet", detail: `${leverage.toFixed(1)}× Net Debt/EBITDA — moderate leverage`, type: "yellow" });
+      else signals.push({ label: "Balance Sheet", detail: `${leverage.toFixed(1)}× Net Debt/EBITDA — elevated leverage`, type: "red" });
+    }
+  }
+
+  if (sbcPct != null) {
+    if (sbcPct > 15) signals.push({ label: "Dilution Risk", detail: `SBC = ${sbcPct.toFixed(1)}% of revenue — significant shareholder dilution`, type: "red" });
+    else if (sbcPct > 6) signals.push({ label: "Dilution Risk", detail: `SBC = ${sbcPct.toFixed(1)}% of revenue — watch for dilution`, type: "yellow" });
+    else signals.push({ label: "SBC", detail: `SBC = ${sbcPct.toFixed(1)}% of revenue — contained`, type: "green" });
+  }
+
+  if (f.goodwill != null && f.total_assets != null && f.total_assets > 0) {
+    const goodwillPct = f.goodwill / f.total_assets * 100;
+    if (goodwillPct > 40) signals.push({ label: "Goodwill Risk", detail: `Goodwill = ${goodwillPct.toFixed(0)}% of total assets — M&A heavy, impairment risk`, type: "red" });
+    else if (goodwillPct > 20) signals.push({ label: "Goodwill", detail: `Goodwill = ${goodwillPct.toFixed(0)}% of assets — moderate M&A exposure`, type: "yellow" });
+  }
+
+  if (!signals.length) return null;
+
+  const colorMap: Record<SignalType, { bg: string; border: string; dot: string; text: string }> = {
+    green:  { bg: "#f0faf5", border: "#b7e4c7", dot: "#0d6b45", text: "#0d6b45" },
+    yellow: { bg: "#fffbeb", border: "#fde68a", dot: "#b58b00", text: "#92680a" },
+    red:    { bg: "#fef2f2", border: "#fca5a5", dot: "#b42318", text: "#b42318" },
+  };
+
+  const greens  = signals.filter(s => s.type === "green").length;
+  const yellows = signals.filter(s => s.type === "yellow").length;
+  const reds    = signals.filter(s => s.type === "red").length;
+  const score   = Math.round((greens * 10 + yellows * 5) / signals.length);
+  const grade   = score >= 8 ? "A" : score >= 6 ? "B" : score >= 4 ? "C" : "D";
+  const gradeColor = grade === "A" ? "#0d6b45" : grade === "B" ? "#1a5a8a" : grade === "C" ? "#b58b00" : "#b42318";
+
+  // Working capital metrics
+  const wcMetrics: { label: string; value: string; sub: string }[] = [];
+  if (workingCapital != null)
+    wcMetrics.push({ label: "Working Capital", value: `$${(workingCapital / 1e9).toFixed(1)}B`, sub: workingCapital > 0 ? "positive" : "deficit" });
+  if (dso != null)
+    wcMetrics.push({ label: "Days Sales Outstanding", value: `${dso.toFixed(0)}d`, sub: dso < 30 ? "fast collection" : dso < 60 ? "normal" : "slow" });
+  if (dio != null)
+    wcMetrics.push({ label: "Days Inventory Outstanding", value: `${dio.toFixed(0)}d`, sub: "inventory turns" });
+  if (capexPct != null)
+    wcMetrics.push({ label: "CapEx Intensity", value: `${capexPct.toFixed(1)}%`, sub: "capex / revenue" });
+  if (sbcPct != null)
+    wcMetrics.push({ label: "SBC Intensity", value: `${sbcPct.toFixed(1)}%`, sub: "SBC / revenue" });
+  if (fcfConversion != null)
+    wcMetrics.push({ label: "FCF Conversion", value: `${(fcfConversion * 100).toFixed(0)}%`, sub: "FCF / net income" });
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between gap-4">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Quality Scorecard & Signal Flags</p>
+        <div className="flex items-center gap-3 text-right">
+          <span className="text-[8.5px] font-bold uppercase tracking-widest text-white/30">
+            {greens}✓ {yellows}⚠ {reds}✗
+          </span>
+          <div className="px-2 py-0.5 rounded text-[11px] font-bold" style={{ backgroundColor: gradeColor + "25", color: gradeColor }}>
+            Grade {grade}
+          </div>
+        </div>
+      </div>
+      {/* Signal flags */}
+      <div className="p-4 grid grid-cols-1 gap-2 sm:grid-cols-2">
+        {signals.map((s, i) => {
+          const c = colorMap[s.type];
+          return (
+            <div key={i} className="flex items-start gap-2.5 rounded-md px-3 py-2" style={{ background: c.bg, border: `1px solid ${c.border}` }}>
+              <div className="w-2 h-2 rounded-full mt-1 shrink-0" style={{ background: c.dot }} />
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-wider" style={{ color: c.dot }}>{s.label}</p>
+                <p className="text-[11px] text-[#333] mt-0.5">{s.detail}</p>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+      {/* Working capital efficiency */}
+      {wcMetrics.length > 0 && (
+        <div className="border-t border-[#ebebeb]">
+          <div className="px-4 py-2 bg-[#f8f8f8]">
+            <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#999]">Cash Cycle & Efficiency</p>
+          </div>
+          <div className="grid grid-cols-3 gap-0 sm:grid-cols-6 divide-x divide-[#ebebeb]">
+            {wcMetrics.map(m => (
+              <div key={m.label} className="px-3 py-3 text-center">
+                <p className="text-[8px] font-bold uppercase tracking-widest text-[#bbb] mb-1">{m.label}</p>
+                <p className="text-[14px] font-bold text-[#0a0a0a] tabular-nums">{m.value}</p>
+                <p className="text-[9px] text-[#aaa] mt-0.5">{m.sub}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── Quarterly vs Annual Snapshot ──────────────────────────────────────────────
 
 function QuarterlySnapshot({ annual, quarterly, period }: {
@@ -948,7 +1130,7 @@ export default function TenKPage() {
                 { label: "Net Debt", value: f.long_term_debt != null && f.cash != null ? fmtNum(f.long_term_debt - f.cash, "$") : "—", sub: f.long_term_debt != null && f.cash != null && f.long_term_debt < f.cash ? "net cash" : "" },
               ].filter(m => m.value !== "—");
               return (
-                <div className="grid border-t border-[#1e3560]" style={{ gridTemplateColumns: `repeat(${metrics.length}, 1fr)` }}>
+                <div className="grid border-t border-[#1e3560] bg-[#0c1b38]" style={{ gridTemplateColumns: `repeat(${metrics.length}, 1fr)` }}>
                   {metrics.map((m, i) => (
                     <div key={m.label} className={`px-4 py-3 text-center ${i < metrics.length - 1 ? "border-r border-[#1e3560]" : ""}`}>
                       <p className="text-[8.5px] font-bold uppercase tracking-widest text-white/30 mb-0.5">{m.label}</p>
@@ -970,6 +1152,15 @@ export default function TenKPage() {
           {/* Financial Ratios */}
           {Object.keys(data.xbrl_facts).length > 0 && (
             <FinancialRatios facts={data.xbrl_facts} />
+          )}
+
+          {/* Quality Scorecard */}
+          {Object.keys(data.xbrl_facts).length > 0 && (
+            <QualityScorecard
+              facts={data.xbrl_facts}
+              history={data.history ?? {}}
+              quarterly={data.quarterly_xbrl ?? {}}
+            />
           )}
 
           {/* Quarterly vs Annual Snapshot */}
