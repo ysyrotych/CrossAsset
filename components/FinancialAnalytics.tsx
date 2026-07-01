@@ -792,7 +792,7 @@ export default function FinancialAnalytics({
 
   // Peers merged with subject
   const allPeers: PeerComp = [
-    { symbol: ticker, pe: facts.pe_ratio??null, ev_ebitda: facts.ev_ebitda??null, p_fcf: facts.p_fcf??null, roic: facts.roic??0, net_margin: facts.net_margin_pct??0, market_cap: facts.market_cap??null },
+    { symbol: ticker, pe: facts.pe_ratio??null, ev_ebitda: facts.ev_ebitda??null, p_fcf: facts.p_fcf??null, roic: facts.roic??0, net_margin: facts.net_margin_pct??0, market_cap: facts.market_cap??null, rev_growth: facts.revenue_growth_yoy??null },
     ...peers,
   ];
 
