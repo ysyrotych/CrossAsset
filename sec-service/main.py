@@ -1942,6 +1942,11 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
             _nopat = _oi * (1 - _tax_rate)
             _ic = max(1, _eq + _ltd - _csh)
             merged_facts["roic"] = round(_nopat / _ic * 100, 2)
+    if not merged_facts.get("interest_coverage"):
+        _oi2  = merged_facts.get("operating_income")
+        _iexp = merged_facts.get("interest_expense")
+        if _oi2 and _iexp and _iexp > 0:
+            merged_facts["interest_coverage"] = round(_oi2 / _iexp, 1)
 
     return AnalysisPayload(
         company=info,

@@ -1087,7 +1087,7 @@ export default function FinancialAnalytics({
     const q_roic =roic!=null?clamp(roic/30*100):null;
     const q_gm   =gm!=null?clamp(gm):null;
     const q_piost=piotroski.maxScore>0?(piotroski.score/piotroski.maxScore)*100:null;
-    const q_acc  =accrualLast!=null?clamp(50-Math.abs(accrualLast)*8):null;
+    const q_acc  =accrualLast!=null?clamp(50-accrualLast*8):null;  // negative accruals (OCF>NI) = high quality
     const q_icov =icov!=null?clamp(icov/25*100):null;
     const qualityFactor=Math.round(avg_([q_roic,q_gm,q_piost,q_acc,q_icov])??0);
 
