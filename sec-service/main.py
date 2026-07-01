@@ -449,18 +449,28 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
 
     profile = fmp.get("profile", {})
     if profile:
-        for k, pk in [("ceo","ceo"),("sector","sector"),("fmp_industry","industry"),
-                      ("country","country"),("exchange","exchangeShortName"),
-                      ("website","website"),("ipo_date","ipoDate"),
-                      ("company_description","description")]:
-            v = profile.get(pk)
-            if v:
-                fmp_ext[k] = v
-        mc = safe_float(profile.get("mktCap"))
+        print(f"FMP profile keys: {list(profile.keys())[:20]}")
+        # Try both stable API and legacy v3 field names
+        for k, candidates in [
+            ("ceo",                ["ceo", "ceoName"]),
+            ("sector",             ["sector"]),
+            ("fmp_industry",       ["industry", "industryType"]),
+            ("country",            ["country", "countryCode"]),
+            ("exchange",           ["exchangeShortName", "exchange"]),
+            ("website",            ["website"]),
+            ("ipo_date",           ["ipoDate"]),
+            ("company_description",["description", "longDescription"]),
+        ]:
+            for pk in candidates:
+                v = profile.get(pk)
+                if v:
+                    fmp_ext[k] = v
+                    break
+        mc = safe_float(profile.get("mktCap") or profile.get("marketCap") or profile.get("marketCapitalization"))
         if mc: facts["market_cap"] = mc
         beta = safe_float(profile.get("beta"))
         if beta: facts["beta"] = beta
-        emp = profile.get("fullTimeEmployees")
+        emp = profile.get("fullTimeEmployees") or profile.get("employees")
         if emp:
             try:
                 facts["employees"] = float(str(emp).replace(",", ""))
@@ -470,20 +480,36 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     km_list = fmp.get("key_metrics", [])
     if km_list:
         km = km_list[0]
-        for k, fk in [("pe_ratio","peRatio"),("p_sales","priceToSalesRatio"),
-                      ("p_fcf","pfcfRatio"),("p_book","pbRatio"),
-                      ("enterprise_value","enterpriseValue"),
-                      ("ev_ebitda","enterpriseValueOverEBITDA"),
-                      ("ev_revenue","evToSales"),
-                      ("current_ratio","currentRatio"),
-                      ("debt_to_equity","debtToEquity"),
-                      ("interest_coverage","interestCoverage"),
-                      ("income_quality","incomeQuality")]:
-            v = safe_float(km.get(fk))
+        print(f"FMP km keys: {list(km.keys())[:20]}")
+        # Try both camelCase variants (stable API may differ from v3/v4)
+        def _km(candidates):
+            for fk in candidates:
+                v = safe_float(km.get(fk))
+                if v is not None:
+                    return v
+            return None
+        for k, candidates in [
+            ("pe_ratio",        ["peRatio", "priceEarningsRatio", "pe"]),
+            ("p_sales",         ["priceToSalesRatio", "priceSalesRatio", "ps"]),
+            ("p_fcf",           ["pfcfRatio", "priceToFreeCashFlowsRatio", "pfcf"]),
+            ("p_book",          ["pbRatio", "priceToBookRatio", "pb"]),
+            ("enterprise_value",["enterpriseValue", "ev"]),
+            ("ev_ebitda",       ["enterpriseValueOverEBITDA", "evEbitda", "evToEbitda"]),
+            ("ev_revenue",      ["evToSales", "evToRevenue", "evSales"]),
+            ("current_ratio",   ["currentRatio"]),
+            ("debt_to_equity",  ["debtToEquity", "debtEquityRatio"]),
+            ("interest_coverage",["interestCoverage"]),
+            ("income_quality",  ["incomeQuality"]),
+        ]:
+            v = _km(candidates)
             if v is not None: facts[k] = round(v, 2)
-        for k, fk in [("roic","roic"),("roe_km","roe"),("dividend_yield","dividendYield"),
-                      ("fcf_yield","freeCashFlowYield")]:
-            v = safe_float(km.get(fk))
+        for k, candidates in [
+            ("roic",         ["roic", "returnOnInvestedCapital"]),
+            ("roe_km",       ["roe", "returnOnEquity"]),
+            ("dividend_yield",["dividendYield"]),
+            ("fcf_yield",    ["freeCashFlowYield", "fcfYield"]),
+        ]:
+            v = _km(candidates)
             if v is not None: facts[k] = round(v * 100, 2)
         # history of key ratios
         km_hist = []
@@ -1514,6 +1540,44 @@ def test_fmp():
             "first_revenue": data[0].get("revenue") if isinstance(data, list) and data else None,
             "error_body": body if r.status_code != 200 else None,
         }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/test-fmp-profile")
+def test_fmp_profile(symbol: str = "META"):
+    """Test FMP profile endpoint — returns raw keys for debugging field name issues."""
+    if not FMP_API_KEY:
+        return {"error": "FMP_API_KEY not set"}
+    try:
+        url = f"{FMP_BASE}/profile?symbol={symbol}&apikey={FMP_API_KEY}"
+        r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
+        if r.status_code != 200:
+            return {"error": f"HTTP {r.status_code}", "body": r.text[:300]}
+        data = r.json()
+        item = data[0] if isinstance(data, list) and data else (data if isinstance(data, dict) else {})
+        return {
+            "keys": list(item.keys()),
+            "mktCap": item.get("mktCap"),
+            "marketCap": item.get("marketCap"),
+            "beta": item.get("beta"),
+            "sector": item.get("sector"),
+            "peRatio": item.get("peRatio"),
+            "sample": {k: item[k] for k in list(item.keys())[:15]},
+        }
+    except Exception as e:
+        return {"error": str(e)}
+
+@app.get("/test-fmp-peers")
+def test_fmp_peers(symbol: str = "META"):
+    """Test FMP stock-peers endpoint — returns raw response for debugging."""
+    if not FMP_API_KEY:
+        return {"error": "FMP_API_KEY not set"}
+    try:
+        url = f"{FMP_BASE}/stock-peers?symbol={symbol}&apikey={FMP_API_KEY}"
+        r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
+        if r.status_code != 200:
+            return {"error": f"HTTP {r.status_code}", "body": r.text[:300]}
+        return {"status": r.status_code, "data": r.json()}
     except Exception as e:
         return {"error": str(e)}
 
