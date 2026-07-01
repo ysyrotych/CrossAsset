@@ -110,45 +110,6 @@ def get_fmp_financials(ticker: str) -> dict:
                 return data[0] if data else {}
             return data if isinstance(data, dict) else {}
 
-        # Helper: try stable endpoint first, fall back to v3 path-based
-        def fetch_km(limit=8):
-            # Try stable key-metrics first
-            r = fetch("key-metrics", {"period": "annual"}, limit)
-            if r:
-                return r
-            return fetch_v3("key-metrics", limit)
-
-        def fetch_growth(limit=6):
-            r = fetch("financial-growth", {"period": "annual"}, limit)
-            if r:
-                return r
-            r2 = fetch("financial-growth", None, limit)
-            if r2:
-                return r2
-            return fetch_v3("financial-growth", limit)
-
-        def fetch_ratios(limit=6):
-            r = fetch("ratios", {"period": "annual"}, limit)
-            if r:
-                return r
-            return fetch_v3("ratios", limit)
-
-        def fetch_earnings(limit=8):
-            r = fetch("earnings-surprises", None, limit)
-            if r:
-                return r
-            return fetch_v3("earnings-surprises", limit)
-
-        def fetch_news(limit=12):
-            r = fetch("news/stock", {"symbols": ticker}, limit)
-            if r:
-                return r
-            # Try legacy stable endpoint
-            r2 = fetch("stock-news", None, limit)
-            if r2:
-                return r2
-            return []
-
         with _cf.ThreadPoolExecutor(max_workers=18) as ex:
             fs = {
                 "inc_a":     ex.submit(fetch, "income-statement"),
@@ -158,17 +119,18 @@ def get_fmp_financials(ticker: str) -> dict:
                 "bal_q":     ex.submit(fetch, "balance-sheet-statement",  {"period": "quarterly"}),
                 "cf_q":      ex.submit(fetch, "cash-flow-statement",      {"period": "quarterly"}),
                 "profile":   ex.submit(fetch_one, "profile"),
-                "km":        ex.submit(fetch_km, 8),
-                "km_ttm":    ex.submit(fetch, "key-metrics-ttm"),
-                "growth":    ex.submit(fetch_growth, 6),
-                "ratios":    ex.submit(fetch_ratios, 6),
+                # Try stable key-metrics; v3 as fallback is skipped (rate limit conservation)
+                "km":        ex.submit(fetch, "key-metrics", {"period": "annual"}, 8),
+                "km_ttm":    ex.submit(fetch, "key-metrics-ttm", None, 1),
+                "growth":    ex.submit(fetch, "financial-growth", {"period": "annual"}, 6),
+                "ratios":    ex.submit(fetch, "ratios", {"period": "annual"}, 6),
                 "estimates": ex.submit(fetch, "analyst-estimates", None, 4),
                 "rating":    ex.submit(fetch_one, "ratings"),
                 "pt":        ex.submit(fetch_one, "price-target-summary"),
-                "earnings":  ex.submit(fetch_earnings, 8),
+                "earnings":  ex.submit(fetch, "earnings-surprises", None, 8),
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
-                "news":      ex.submit(fetch_news, 12),
+                "news":      ex.submit(fetch, "stock-news", None, 12),
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
             }
             res = {k: v.result() for k, v in fs.items()}
@@ -187,36 +149,22 @@ def get_fmp_financials(ticker: str) -> dict:
         if peer_symbols:
             def fetch_peer_data(sym: str) -> dict:
                 try:
-                    # Try stable key-metrics first, fall back to v3
-                    url_km_stable = f"{FMP_BASE}/key-metrics?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
-                    url_km_v3 = f"{FMP_V3}/key-metrics/{sym}?limit=1&apikey={FMP_API_KEY}"
+                    url_km = f"{FMP_BASE}/key-metrics?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
                     url_pr = f"{FMP_BASE}/profile?symbol={sym}&apikey={FMP_API_KEY}"
-                    url_inc = f"{FMP_BASE}/income-statement?symbol={sym}&limit=2&apikey={FMP_API_KEY}"
-                    rk = httpx.get(url_km_stable, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    rk = httpx.get(url_km, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     rp = httpx.get(url_pr, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
-                    ri = httpx.get(url_inc, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     km_item = {}
                     pr_item = {}
-                    inc_items = []
                     if rk.status_code == 200:
-                        d = rk.json()
-                        km_item = d[0] if isinstance(d, list) and d else {}
-                    # Fall back to v3 if stable returned empty
-                    if not km_item:
-                        rk2 = httpx.get(url_km_v3, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
-                        if rk2.status_code == 200:
-                            d2 = rk2.json()
-                            km_item = d2[0] if isinstance(d2, list) and d2 else {}
+                        dk = rk.json()
+                        km_item = dk[0] if isinstance(dk, list) and dk else {}
                     if rp.status_code == 200:
-                        d = rp.json()
-                        pr_item = d[0] if isinstance(d, list) and d else (d if isinstance(d, dict) else {})
-                    if ri.status_code == 200:
-                        d = ri.json()
-                        inc_items = d if isinstance(d, list) else []
-                    return {"km": km_item, "pr": pr_item, "inc": inc_items}
+                        dp = rp.json()
+                        pr_item = dp[0] if isinstance(dp, list) and dp else (dp if isinstance(dp, dict) else {})
+                    return {"km": km_item, "pr": pr_item}
                 except Exception as e:
                     print(f"Peer fetch error for {sym}: {e}")
-                    return {"km": {}, "pr": {}, "inc": []}
+                    return {"km": {}, "pr": {}}
 
             with _cf.ThreadPoolExecutor(max_workers=6) as ex2:
                 peer_data_fs = {sym: ex2.submit(fetch_peer_data, sym) for sym in peer_symbols}
@@ -233,7 +181,6 @@ def get_fmp_financials(ticker: str) -> dict:
                 pd = peer_data_map.get(sym, {})
                 km = pd.get("km", {})
                 pr = pd.get("pr", {})
-                inc = pd.get("inc", [])
                 if km or pr:
                     pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio")
                     ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "enterpriseValueMultiple")
@@ -242,23 +189,13 @@ def get_fmp_financials(ticker: str) -> dict:
                     npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage")
                     rev_g = _peer_val(km, "revenueGrowth", "revenuePerShareGrowth")
                     mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
-                    pr_price = safe_float(pr.get("price"))
-
-                    # Compute from income statement if km missing
-                    if inc and len(inc) >= 1:
-                        ia0 = inc[0]; ia1 = inc[1] if len(inc) > 1 else {}
-                        ni0 = safe_float(ia0.get("netIncome"))
-                        ni1 = safe_float(ia1.get("netIncome"))
-                        rev0 = safe_float(ia0.get("revenue"))
-                        rev1 = safe_float(ia1.get("revenue"))
-                        oi0 = safe_float(ia0.get("operatingIncome"))
-                        if mc and ni0 and ni0 > 0 and not pe:
-                            pe = round(mc / ni0, 1)
-                        if rev0 and ni0 and rev0 > 0 and not npm:
-                            npm = ni0 / rev0
-                        if rev0 and rev1 and rev1 > 0 and not rev_g:
-                            rev_g = (rev0 - rev1) / abs(rev1)
-
+                    # Fallback: compute PE from marketCap / netIncome if km doesn't have it
+                    if not pe and mc and km:
+                        ni_km = safe_float(km.get("netIncome") or km.get("netIncomePerShare"))
+                        shares = safe_float(km.get("sharesOutstanding") or km.get("weightedAverageSharesDiluted"))
+                        pr_price = safe_float(pr.get("price"))
+                        if ni_km and shares and shares > 0:
+                            pe = round(mc / (ni_km * shares), 1) if ni_km < 1000 else round(mc / ni_km, 1)
                     peer_comparison.append({
                         "symbol":     sym,
                         "name":       pr.get("companyName", sym),
