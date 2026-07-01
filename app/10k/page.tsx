@@ -797,6 +797,209 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
   );
 }
 
+// ── Company Overview Panel ────────────────────────────────────────────────────
+
+function CompanyOverview({ ext, ticker }: { ext: FmpExtended; ticker: string }) {
+  const hasMeta = ext.ceo || ext.sector || ext.fmp_industry || ext.country || ext.exchange || ext.ipo_date || ext.website || ext.fmp_rating || ext.company_description;
+  if (!hasMeta) return null;
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Company Overview</p>
+        {ext.fmp_rating && (
+          <span className="ml-auto text-[9px] font-bold text-[#60a5fa] border border-[#60a5fa]/30 rounded px-1.5 py-0.5">{ext.fmp_rating}</span>
+        )}
+      </div>
+      <div className="p-4 space-y-3">
+        {ext.company_description && (
+          <p className="text-[12px] text-[#333] leading-[1.75] border-l-2 border-[#d0d7e8] pl-3">{ext.company_description}</p>
+        )}
+        <div className="grid grid-cols-2 gap-x-8 gap-y-1.5 sm:grid-cols-3 lg:grid-cols-4 pt-1">
+          {ext.ceo && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">CEO</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.ceo}</p>
+            </div>
+          )}
+          {ext.sector && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">Sector</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.sector}</p>
+            </div>
+          )}
+          {ext.fmp_industry && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">Industry</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.fmp_industry}</p>
+            </div>
+          )}
+          {ext.country && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">Country</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.country}</p>
+            </div>
+          )}
+          {ext.exchange && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">Exchange</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.exchange}</p>
+            </div>
+          )}
+          {ext.ipo_date && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">IPO Date</p>
+              <p className="text-[11.5px] font-semibold text-[#0a0a0a] mt-0.5">{ext.ipo_date}</p>
+            </div>
+          )}
+          {ext.website && (
+            <div>
+              <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb]">Website</p>
+              <a href={ext.website.startsWith("http") ? ext.website : `https://${ext.website}`} target="_blank" rel="noopener noreferrer"
+                className="text-[11.5px] font-semibold text-[#1a5a8a] hover:underline mt-0.5 block truncate">
+                {ext.website.replace(/^https?:\/\//, "").replace(/\/$/, "")}
+              </a>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── Peer Comparison ───────────────────────────────────────────────────────────
+
+function PeerComparison({ peers, ticker }: { peers: PeerComp; ticker: string }) {
+  if (!peers.length) return null;
+  const fmt1x = (v: number|null) => v == null ? <span className="text-[#ddd]">—</span> : <span>{v.toFixed(1)}x</span>;
+  const fmtPct = (v: number|null) => v == null ? <span className="text-[#ddd]">—</span> : <span style={{ color: pctColor(v) }}>{v.toFixed(1)}%</span>;
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Peer Comparison</p>
+        <span className="ml-auto text-[9px] text-white/30">{peers.length} peers · FMP data</span>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[580px]">
+          <thead>
+            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+              <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-28">Ticker</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">P/E</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">EV/EBITDA</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">P/FCF</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">ROIC</th>
+              <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">Net Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {peers.map((p, i) => (
+              <tr key={p.symbol} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"} ${p.symbol === ticker ? "ring-1 ring-inset ring-[#0c1b38]/20" : ""}`}>
+                <td className="px-4 py-2.5">
+                  <span className={`text-[12px] font-bold tabular-nums ${p.symbol === ticker ? "text-[#0c1b38]" : "text-[#1a1a1a]"}`}>{p.symbol}</span>
+                  {p.symbol === ticker && <span className="ml-1 text-[8px] font-bold text-[#0c1b38] bg-[#eef1f8] px-1 rounded">SUBJECT</span>}
+                </td>
+                <td className="px-3 py-2.5 text-right text-[12px] tabular-nums font-medium text-[#0a0a0a]">{fmt1x(p.pe)}</td>
+                <td className="px-3 py-2.5 text-right text-[12px] tabular-nums font-medium text-[#0a0a0a]">{fmt1x(p.ev_ebitda)}</td>
+                <td className="px-3 py-2.5 text-right text-[12px] tabular-nums font-medium text-[#0a0a0a]">{fmt1x(p.p_fcf)}</td>
+                <td className="px-3 py-2.5 text-right text-[12px] tabular-nums font-medium">{fmtPct(p.roic)}</td>
+                <td className="px-3 py-2.5 text-right text-[12px] tabular-nums font-medium">{fmtPct(p.net_margin)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
+// ── News Feed ─────────────────────────────────────────────────────────────────
+
+function NewsFeed({ news }: { news: RecentNews }) {
+  if (!news.length) return null;
+  const fmtDate = (d: string) => {
+    try { return new Date(d).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" }); }
+    catch { return d?.slice(0, 10) ?? ""; }
+  };
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Recent News</p>
+        <span className="ml-auto text-[9px] text-white/30">{news.length} articles</span>
+      </div>
+      <div className="divide-y divide-[#f0f0f0]">
+        {news.map((item, i) => (
+          <div key={i} className="px-4 py-3 hover:bg-[#fafafa] transition-colors">
+            <div className="flex items-start justify-between gap-3">
+              <p className="text-[12px] font-semibold text-[#0a0a0a] leading-[1.4] flex-1">{item.title}</p>
+              <span className="text-[9.5px] text-[#bbb] whitespace-nowrap shrink-0">{fmtDate(item.date)}</span>
+            </div>
+            {item.summary && (
+              <p className="text-[11px] text-[#777] mt-1 leading-[1.55]">{item.summary}</p>
+            )}
+            {item.source && (
+              <p className="text-[9px] text-[#bbb] mt-1 font-medium uppercase tracking-wider">{item.source}</p>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Multiples History ─────────────────────────────────────────────────────────
+
+function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
+  if (!kmHistory.length) return null;
+  const recent = kmHistory.slice(-6).reverse();
+  const cols: { key: keyof KmHistory[number]; label: string; suffix: string }[] = [
+    { key: "pe",            label: "P/E",           suffix: "x" },
+    { key: "ev_ebitda",     label: "EV/EBITDA",     suffix: "x" },
+    { key: "p_fcf",         label: "P/FCF",          suffix: "x" },
+    { key: "roic",          label: "ROIC",           suffix: "%" },
+    { key: "current_ratio", label: "Current Ratio",  suffix: "x" },
+    { key: "debt_equity",   label: "D/E",            suffix: "x" },
+  ].filter(c => recent.some(r => r[c.key] != null));
+
+  if (!cols.length) return null;
+
+  return (
+    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 bg-[#0c1b38]">
+        <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Historical Multiples</p>
+      </div>
+      <div className="overflow-x-auto">
+        <table className="w-full min-w-[520px]">
+          <thead>
+            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+              <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-28">Period</th>
+              {cols.map(c => (
+                <th key={c.key as string} className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{c.label}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {recent.map((row, i) => (
+              <tr key={row.date} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"} ${i === 0 ? "font-semibold" : ""}`}>
+                <td className="px-4 py-2 text-[11px] text-[#333]">{row.date?.slice(0, 7) ?? "—"}</td>
+                {cols.map(c => {
+                  const v = row[c.key] as number|null;
+                  return (
+                    <td key={c.key as string} className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#0a0a0a]">
+                      {v != null ? `${v.toFixed(1)}${c.suffix}` : <span className="text-[#ddd]">—</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── Quality Scorecard ─────────────────────────────────────────────────────────
 
 type SignalType = "green" | "yellow" | "red";
@@ -1768,6 +1971,11 @@ export default function TenKPage() {
             })()}
           </div>
 
+          {/* Company Overview */}
+          {data.fmp_extended && (
+            <CompanyOverview ext={data.fmp_extended} ticker={data.company.ticker} />
+          )}
+
           {/* Key Financials — tabbed statements */}
           <div>
             <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Statements — Most Recent Annual (10-K XBRL)</p>
@@ -1849,6 +2057,22 @@ export default function TenKPage() {
               </div>
             );
           })()}
+
+          {/* Peer Comparison */}
+          {data.fmp_extended?.peer_comparison && data.fmp_extended.peer_comparison.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Peer Comparison</p>
+              <PeerComparison peers={data.fmp_extended.peer_comparison} ticker={data.company.ticker} />
+            </div>
+          )}
+
+          {/* Historical Multiples */}
+          {data.fmp_extended?.km_history && data.fmp_extended.km_history.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Historical Multiples</p>
+              <MultiplesHistory kmHistory={data.fmp_extended.km_history} />
+            </div>
+          )}
 
           {/* Analyst Consensus & Estimates */}
           {(() => {
@@ -1999,6 +2223,14 @@ export default function TenKPage() {
               </div>
             );
           })()}
+
+          {/* Recent News */}
+          {data.fmp_extended?.recent_news && data.fmp_extended.recent_news.length > 0 && (
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Recent News</p>
+              <NewsFeed news={data.fmp_extended.recent_news} />
+            </div>
+          )}
 
           {/* Filing Sections */}
           <div>
