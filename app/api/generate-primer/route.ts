@@ -1,14 +1,12 @@
 import { NextRequest } from "next/server";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 120;
-
-type Msg = { role: "user" | "assistant"; content: string };
+export const maxDuration = 180;
 
 export async function POST(req: NextRequest) {
   const {
     ticker, companyName, industry, facts, history,
-    quarterlyFacts, quarterlyPeriod, sections, fmpExtended,
+    quarterlyFacts, quarterlyPeriod, sections, fmpExtended, earningsTranscript,
   } = await req.json() as {
     ticker: string;
     companyName: string;
@@ -19,6 +17,7 @@ export async function POST(req: NextRequest) {
     quarterlyPeriod: string;
     sections: { item: string; title: string; text: string }[];
     fmpExtended?: Record<string, any>;
+    earningsTranscript?: string;
   };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -36,28 +35,45 @@ export async function POST(req: NextRequest) {
     : Math.abs(v) >= 1e9  ? `$${(v / 1e9).toFixed(1)}B`
     : Math.abs(v) >= 1e6  ? `$${(v / 1e6).toFixed(0)}M`
     : `$${v.toFixed(2)}`;
-  const pct = (v?: number) => v == null ? "N/A" : `${v.toFixed(1)}%`;
-  const x = (v?: number) => v == null ? "N/A" : `${v.toFixed(1)}x`;
+  const pct  = (v?: number) => v == null ? "N/A" : `${v.toFixed(1)}%`;
+  const x    = (v?: number) => v == null ? "N/A" : `${v.toFixed(1)}x`;
+  const num  = (v?: number) => v == null ? "N/A" : v.toLocaleString();
 
-  // Build 5-year revenue table
+  // Build 5-year tables
   const revYears = Object.keys(history.revenue ?? {}).sort().slice(-5);
-  const revTable = revYears.map(y => `${y.slice(0,4)}: ${fmt(history.revenue?.[y])}`).join(" | ");
+  const revTable = revYears.map(y => `FY${y.slice(0,4)}: ${fmt(history.revenue?.[y])}`).join(" | ");
+  const niTable  = Object.keys(history.net_income ?? {}).sort().slice(-5).map(y => `FY${y.slice(0,4)}: ${fmt(history.net_income?.[y])}`).join(" | ");
+  const cfTable  = Object.keys(history.operating_cf ?? {}).sort().slice(-5).map(y => `FY${y.slice(0,4)}: ${fmt(history.operating_cf?.[y])}`).join(" | ");
+  const fcfTable = Object.keys(history.free_cash_flow ?? {}).sort().slice(-5).map(y => `FY${y.slice(0,4)}: ${fmt(history.free_cash_flow?.[y])}`).join(" | ");
+  const epsTable = Object.keys(history.eps_diluted ?? {}).sort().slice(-5).map(y => `FY${y.slice(0,4)}: $${(history.eps_diluted?.[y] ?? 0).toFixed(2)}`).join(" | ");
 
-  // Build key section text
+  // Margin history
+  const marginHistory = revYears.map(y => {
+    const rev = history.revenue?.[y];
+    const gp  = history.gross_profit?.[y];
+    const oi  = history.operating_income?.[y];
+    const ni  = history.net_income?.[y];
+    if (!rev) return null;
+    return `FY${y.slice(0,4)}: Gross ${gp && rev ? pct(gp/rev*100) : "—"} / Op ${oi && rev ? pct(oi/rev*100) : "—"} / Net ${ni && rev ? pct(ni/rev*100) : "—"}`;
+  }).filter(Boolean).join(" | ");
+
   const getText = (item: string) =>
     sections.find(s => s.item === item)?.text?.slice(0, 6000) ?? "Not available";
 
-  const businessText  = getText("business");
-  const risksText     = getText("risks");
-  const mdaText       = getText("mda");
-  const mdaQ          = getText("mda");
+  const businessText = getText("business");
+  const risksText    = getText("risks");
+  const mdaText      = getText("mda");
 
-  const roe  = f.net_income && f.equity ? (f.net_income / f.equity * 100) : null;
-  const roa  = f.net_income && f.total_assets ? (f.net_income / f.total_assets * 100) : null;
+  const roe    = f.net_income && f.equity ? (f.net_income / f.equity * 100) : null;
+  const roa    = f.net_income && f.total_assets ? (f.net_income / f.total_assets * 100) : null;
   const netDebt = f.long_term_debt != null && f.cash != null ? f.long_term_debt - f.cash : null;
+  const ocfNiRatio = f.operating_cf && f.net_income ? (f.operating_cf / f.net_income) : null;
+  const sbcPct = f.sbc_expense && f.revenue ? (f.sbc_expense / f.revenue * 100) : null;
+  const capexPct = f.capex && f.revenue ? (Math.abs(f.capex) / f.revenue * 100) : null;
+  const intCov = f.operating_income && f.interest_expense ? (f.operating_income / f.interest_expense) : null;
 
-  // Build extended context from fmp_extended
   const ext = fmpExtended ?? {};
+
   const buildSegStr = (segObj: any) => {
     if (!segObj?.data) return "N/A";
     const total = Object.values(segObj.data as Record<string,number>).reduce((s:number, v:any) => s + Math.abs(v), 0);
@@ -66,148 +82,295 @@ export async function POST(req: NextRequest) {
       .map(([k, v]) => `${k}: ${fmt(v as number)} (${total > 0 ? ((Math.abs(v as number)/total)*100).toFixed(0) : 0}%)`)
       .join(", ");
   };
+
   const segStr = buildSegStr(ext.segments);
   const geoStr = buildSegStr(ext.geo_segments);
+
   const estStr = (ext.analyst_estimates as any[])?.slice(0,3)
-    .map((e:any) => `${e.date?.slice(0,4)}: Rev ${fmt(e.rev_avg)}, EPS $${e.eps_avg?.toFixed(2) ?? "N/A"}`)
+    .map((e:any) => `${e.date?.slice(0,7)}: Rev ${fmt(e.rev_avg)}, EPS $${e.eps_avg?.toFixed(2) ?? "N/A"}, EBITDA ${fmt(e.ebitda_avg)}`)
     .join(" | ") ?? "N/A";
-  const surpriseStr = (ext.earnings_surprises as any[])?.slice(0,4)
+
+  const surpriseStr = (ext.earnings_surprises as any[])?.slice(0,6)
     .map((e:any) => `${e.date?.slice(0,7)}: actual $${e.eps_actual?.toFixed(2) ?? "?"} vs est $${e.eps_est?.toFixed(2) ?? "?"} (${e.surprise_pct != null ? (e.surprise_pct > 0 ? "+" : "") + e.surprise_pct.toFixed(1) + "%" : "?"})`)
     .join("; ") ?? "N/A";
 
-  const prompt = `You are a senior equity research analyst at Edgewood Management, an institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}).
+  // Key metrics history (P/E, ROIC over time)
+  const kmHistStr = (ext.km_history as any[])?.slice(0,4)
+    .map((k:any) => `${k.date?.slice(0,4)}: P/E ${k.pe?.toFixed(1) ?? "—"}x, EV/EBITDA ${k.ev_ebitda?.toFixed(1) ?? "—"}x, ROIC ${k.roic?.toFixed(1) ?? "—"}%`)
+    .join(" | ") ?? "N/A";
 
-COMPANY PROFILE:
-CEO: ${ext.ceo ?? "N/A"} | Sector: ${ext.sector ?? "N/A"} | Industry: ${ext.fmp_industry ?? industry} | Country: ${ext.country ?? "N/A"}
-Employees: ${f.employees != null ? f.employees.toLocaleString() : "N/A"} | Exchange: ${ext.exchange ?? "N/A"} | IPO: ${ext.ipo_date ?? "N/A"}
+  // Growth history
+  const growthHistStr = (ext.growth_history as any[])?.slice(0,4)
+    .map((g:any) => `${g.date?.slice(0,4)}: Rev ${g.rev_growth > 0 ? "+" : ""}${g.rev_growth?.toFixed(1)}%, EPS ${g.eps_growth > 0 ? "+" : ""}${g.eps_growth?.toFixed(1)}%, FCF ${g.fcf_growth > 0 ? "+" : ""}${g.fcf_growth?.toFixed(1)}%`)
+    .join(" | ") ?? "N/A";
+
+  // Peer comparison table
+  const peerRows = (ext.peer_comparison as any[]) ?? [];
+  const peerTable = peerRows.length > 0
+    ? "| Ticker | P/E | EV/EBITDA | P/FCF | ROIC | Net Margin |\n|--------|-----|-----------|-------|------|------------|\n" +
+      [{ symbol: ticker, pe: f.pe_ratio, ev_ebitda: f.ev_ebitda, p_fcf: f.p_fcf, roic: f.roic, net_margin: f.net_margin_pct }, ...peerRows]
+        .map((p:any) => `| ${p.symbol === ticker ? `**${ticker}**` : p.symbol} | ${p.pe ? p.pe+"x" : "—"} | ${p.ev_ebitda ? p.ev_ebitda+"x" : "—"} | ${p.p_fcf ? p.p_fcf+"x" : "—"} | ${p.roic ? p.roic+"%" : "—"} | ${p.net_margin ? p.net_margin+"%" : "—"} |`)
+        .join("\n")
+    : "Peer data not available.";
+
+  // Recent news
+  const newsStr = (ext.recent_news as any[])?.slice(0,8)
+    .map((n:any) => `• [${n.date}] ${n.title}${n.summary ? ` — ${n.summary}` : ""}`)
+    .join("\n") ?? "N/A";
+
+  // Earnings transcript (truncated)
+  const transcriptStr = earningsTranscript ? earningsTranscript.slice(0, 5000) : "Not available";
+
+  const prompt = `You are a senior equity research analyst at Edgewood Management, an elite institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}). This document will be read by portfolio managers, CIOs, and institutional investors. It must match Goldman Sachs / Morgan Stanley research quality.
+
+═══════════════════════════════════════════════════════════════
+COMPANY PROFILE
+═══════════════════════════════════════════════════════════════
+CEO: ${ext.ceo ?? "N/A"} | Sector: ${ext.sector ?? "N/A"} | Industry: ${ext.fmp_industry ?? industry}
+Country: ${ext.country ?? "N/A"} | Exchange: ${ext.exchange ?? "N/A"} | IPO: ${ext.ipo_date ?? "N/A"}
+Employees: ${f.employees != null ? num(f.employees) : "N/A"} | Website: ${ext.website ?? "N/A"}
 Market Cap: ${fmt(f.market_cap)} | Enterprise Value: ${fmt(f.enterprise_value)} | Beta: ${f.beta != null ? f.beta.toFixed(2) : "N/A"}
 
-FINANCIAL DATA:
-Revenue: ${fmt(f.revenue)} | Gross Margin: ${pct(f.gross_margin_pct)} | Op Margin: ${pct(f.operating_margin_pct)} | Net Margin: ${pct(f.net_margin_pct)}
-EBITDA: ${fmt(f.ebitda)} | FCF: ${fmt(f.free_cash_flow)} | Operating CF: ${fmt(f.operating_cf)}
-Net Income: ${fmt(f.net_income)} | EPS Diluted: ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"}
-Cash: ${fmt(f.cash)} | LT Debt: ${fmt(f.long_term_debt)} | Net Debt: ${netDebt != null ? fmt(netDebt) : "N/A"} | Total Assets: ${fmt(f.total_assets)} | Equity: ${fmt(f.equity)}
+${ext.company_description ? `COMPANY DESCRIPTION: ${ext.company_description.slice(0, 500)}` : ""}
+
+═══════════════════════════════════════════════════════════════
+INCOME STATEMENT (MOST RECENT ANNUAL)
+═══════════════════════════════════════════════════════════════
+Revenue: ${fmt(f.revenue)} | Gross Profit: ${fmt(f.gross_profit)} | Gross Margin: ${pct(f.gross_margin_pct)}
+R&D: ${fmt(f.rd_expense)} (${f.rd_expense && f.revenue ? pct(f.rd_expense/f.revenue*100) : "N/A"} of Rev) | SG&A: ${fmt(f.sga_expense)}
+Operating Income: ${fmt(f.operating_income)} | Op Margin: ${pct(f.operating_margin_pct)}
+EBITDA: ${fmt(f.ebitda)} | D&A: ${fmt(f.da_expense)}
+Interest Expense: ${fmt(f.interest_expense)} | Interest Coverage: ${intCov ? intCov.toFixed(1)+"x" : "N/A"}
+Pretax Income: ${fmt(f.pretax_income)} | Tax Rate: ${pct(f.effective_tax_rate)}
+Net Income: ${fmt(f.net_income)} | Net Margin: ${pct(f.net_margin_pct)}
+EPS Diluted: ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"} | EPS Basic: ${f.eps_basic != null ? `$${f.eps_basic.toFixed(2)}` : "N/A"}
+Diluted Shares: ${f.shares_diluted_wtd != null ? fmt(f.shares_diluted_wtd) : "N/A"}
+
+═══════════════════════════════════════════════════════════════
+BALANCE SHEET
+═══════════════════════════════════════════════════════════════
+Cash & Equivalents: ${fmt(f.cash)} | Short-Term Investments: ${fmt(f.short_term_investments)}
+Accounts Receivable: ${fmt(f.accounts_receivable)} | Inventory: ${fmt(f.inventory)}
+Current Assets: ${fmt(f.current_assets)} | PPE (net): ${fmt(f.ppe_net)}
+Goodwill: ${fmt(f.goodwill)} | Intangibles: ${fmt(f.intangibles)}
+Total Assets: ${fmt(f.total_assets)}
+Accounts Payable: ${fmt(f.accounts_payable)} | Current Liabilities: ${fmt(f.current_liabilities)}
+Long-Term Debt: ${fmt(f.long_term_debt)} | Net Debt: ${netDebt != null ? fmt(netDebt) : "N/A"}
+Total Liabilities: ${fmt(f.total_liabilities)} | Equity: ${fmt(f.equity)}
+Retained Earnings: ${fmt(f.retained_earnings)}
+
+═══════════════════════════════════════════════════════════════
+CASH FLOW STATEMENT
+═══════════════════════════════════════════════════════════════
+Operating CF: ${fmt(f.operating_cf)} | CapEx: ${fmt(f.capex)} (${capexPct ? pct(capexPct) : "N/A"} of Rev)
+Free Cash Flow: ${fmt(f.free_cash_flow)} | FCF Margin: ${f.free_cash_flow && f.revenue ? pct(f.free_cash_flow/f.revenue*100) : "N/A"}
+SBC: ${fmt(f.sbc_expense)} (${sbcPct ? pct(sbcPct) : "N/A"} of Rev) | D&A: ${fmt(f.da_expense)}
+Buybacks: ${fmt(f.buybacks)} | Dividends Paid: ${fmt(f.dividends_paid)}
+Cash Quality (OCF/NI): ${ocfNiRatio ? ocfNiRatio.toFixed(2)+"x" : "N/A"}
+
+═══════════════════════════════════════════════════════════════
+RETURNS & EFFICIENCY
+═══════════════════════════════════════════════════════════════
 ROE: ${roe != null ? pct(roe) : "N/A"} | ROA: ${roa != null ? pct(roa) : "N/A"} | ROIC: ${f.roic != null ? pct(f.roic) : "N/A"}
-R&D: ${fmt(f.rd_expense)} | CapEx: ${fmt(f.capex)} | SBC: ${fmt(f.sbc_expense)} | D&A: ${fmt(f.da_expense)}
-Interest Expense: ${fmt(f.interest_expense)} | Pretax Income: ${fmt(f.pretax_income)} | Tax Rate: ${pct(f.effective_tax_rate)}
-EPS Basic: ${f.eps_basic != null ? `$${f.eps_basic.toFixed(2)}` : "N/A"} | Shares (diluted): ${f.shares_diluted_wtd != null ? fmt(f.shares_diluted_wtd) : "N/A"}
+Current Ratio: ${x(f.current_ratio)} | Debt/Equity: ${x(f.debt_to_equity)}
+Dividend Yield: ${pct(f.dividend_yield)} | FCF Yield: ${pct(f.fcf_yield)}
 
-VALUATION MULTIPLES:
-P/E: ${f.pe_ratio != null ? x(f.pe_ratio) : "N/A"} | EV/EBITDA: ${f.ev_ebitda != null ? x(f.ev_ebitda) : "N/A"} | P/FCF: ${f.p_fcf != null ? x(f.p_fcf) : "N/A"} | P/Sales: ${f.p_sales != null ? x(f.p_sales) : "N/A"} | P/Book: ${f.p_book != null ? x(f.p_book) : "N/A"}
-Debt/Equity: ${f.debt_to_equity != null ? x(f.debt_to_equity) : "N/A"} | Current Ratio: ${f.current_ratio != null ? x(f.current_ratio) : "N/A"} | Div Yield: ${f.dividend_yield != null ? pct(f.dividend_yield) : "N/A"} | FCF Yield: ${f.fcf_yield != null ? pct(f.fcf_yield) : "N/A"}
+═══════════════════════════════════════════════════════════════
+VALUATION MULTIPLES
+═══════════════════════════════════════════════════════════════
+P/E: ${x(f.pe_ratio)} | EV/EBITDA: ${x(f.ev_ebitda)} | P/FCF: ${x(f.p_fcf)}
+P/Sales: ${x(f.p_sales)} | P/Book: ${x(f.p_book)} | EV/Revenue: ${x(f.ev_revenue)}
 
-GROWTH RATES (YoY):
-Revenue: ${f.revenue_growth_yoy != null ? pct(f.revenue_growth_yoy) : "N/A"} | EPS: ${f.eps_growth_yoy != null ? pct(f.eps_growth_yoy) : "N/A"} | FCF: ${f.fcf_growth_yoy != null ? pct(f.fcf_growth_yoy) : "N/A"} | Net Income: ${f.ni_growth_yoy != null ? pct(f.ni_growth_yoy) : "N/A"}
+HISTORICAL VALUATION TREND:
+${kmHistStr}
+
+═══════════════════════════════════════════════════════════════
+GROWTH PROFILE
+═══════════════════════════════════════════════════════════════
+YoY Growth (most recent): Revenue ${f.revenue_growth_yoy != null ? pct(f.revenue_growth_yoy) : "N/A"} | EPS ${f.eps_growth_yoy != null ? pct(f.eps_growth_yoy) : "N/A"} | FCF ${f.fcf_growth_yoy != null ? pct(f.fcf_growth_yoy) : "N/A"} | Net Income ${f.ni_growth_yoy != null ? pct(f.ni_growth_yoy) : "N/A"}
+
+HISTORICAL GROWTH RATES:
+${growthHistStr}
 
 5-YEAR REVENUE TREND: ${revTable || "N/A"}
-5-YEAR NET INCOME: ${Object.keys(history.net_income ?? {}).sort().slice(-5).map(y => `${y.slice(0,4)}: ${fmt(history.net_income?.[y])}`).join(" | ") || "N/A"}
-5-YEAR OPERATING CF: ${Object.keys(history.operating_cf ?? {}).sort().slice(-5).map(y => `${y.slice(0,4)}: ${fmt(history.operating_cf?.[y])}`).join(" | ") || "N/A"}
-5-YEAR FCF: ${Object.keys(history.free_cash_flow ?? {}).sort().slice(-5).map(y => `${y.slice(0,4)}: ${fmt(history.free_cash_flow?.[y])}`).join(" | ") || "N/A"}
+5-YEAR NET INCOME:    ${niTable || "N/A"}
+5-YEAR OPERATING CF:  ${cfTable || "N/A"}
+5-YEAR FREE CASH FLOW:${fcfTable || "N/A"}
+5-YEAR EPS DILUTED:   ${epsTable || "N/A"}
 
-MOST RECENT QUARTER (${quarterlyPeriod}):
+5-YEAR MARGIN EVOLUTION:
+${marginHistory || "N/A"}
+
+═══════════════════════════════════════════════════════════════
+MOST RECENT QUARTER (${quarterlyPeriod})
+═══════════════════════════════════════════════════════════════
 Revenue: ${fmt(quarterlyFacts.revenue)} | Gross Margin: ${pct(quarterlyFacts.gross_margin_pct)} | Op Margin: ${pct(quarterlyFacts.operating_margin_pct)} | Net Margin: ${pct(quarterlyFacts.net_margin_pct)}
 Net Income: ${fmt(quarterlyFacts.net_income)} | EPS: ${quarterlyFacts.eps_diluted != null ? `$${quarterlyFacts.eps_diluted.toFixed(2)}` : "N/A"} | FCF: ${fmt(quarterlyFacts.free_cash_flow)}
 
-ANALYST CONSENSUS:
-FMP Rating: ${ext.fmp_rating ?? "N/A"} | Price Target (consensus): ${f.pt_consensus != null ? fmt(f.pt_consensus) : "N/A"} | # Analysts: ${f.num_analysts != null ? f.num_analysts.toFixed(0) : "N/A"}
+═══════════════════════════════════════════════════════════════
+ANALYST CONSENSUS
+═══════════════════════════════════════════════════════════════
+FMP Rating: ${ext.fmp_rating ?? "N/A"} | Price Target: ${f.pt_consensus != null ? fmt(f.pt_consensus) : "N/A"} | # Analysts: ${f.num_analysts != null ? f.num_analysts.toFixed(0) : "N/A"}
 Forward Estimates: ${estStr}
-EPS Surprise History: ${surpriseStr}
+EPS Surprise History (last 6Q): ${surpriseStr}
 
-REVENUE SEGMENTS (latest annual):
+═══════════════════════════════════════════════════════════════
+REVENUE SEGMENTS (latest annual)
+═══════════════════════════════════════════════════════════════
 Business Segments: ${segStr}
 Geographic Breakdown: ${geoStr}
 
-INDUSTRY: ${industry}
+═══════════════════════════════════════════════════════════════
+PEER COMPARISON
+═══════════════════════════════════════════════════════════════
+${peerTable}
 
-10-K BUSINESS SECTION:
+═══════════════════════════════════════════════════════════════
+RECENT NEWS & CATALYSTS (last 30 days)
+═══════════════════════════════════════════════════════════════
+${newsStr}
+
+═══════════════════════════════════════════════════════════════
+EARNINGS CALL / MOST RECENT 8-K FILING
+═══════════════════════════════════════════════════════════════
+${transcriptStr}
+
+═══════════════════════════════════════════════════════════════
+10-K BUSINESS SECTION (Item 1)
+═══════════════════════════════════════════════════════════════
 ${businessText}
 
-10-K RISK FACTORS:
+═══════════════════════════════════════════════════════════════
+10-K RISK FACTORS (Item 1A)
+═══════════════════════════════════════════════════════════════
 ${risksText}
 
-10-K MD&A:
+═══════════════════════════════════════════════════════════════
+10-K MD&A (Item 7)
+═══════════════════════════════════════════════════════════════
 ${mdaText}
 
----
+═══════════════════════════════════════════════════════════════
+OUTPUT FORMAT
+═══════════════════════════════════════════════════════════════
 
-Write a complete institutional equity research primer. Use EXACTLY this format with these EXACT section headers (use markdown ## for headers and ### for subheaders):
+Write a complete institutional equity research primer using EXACTLY these section headers (## for main sections, ### for subsections). DO NOT add any text before "## EXECUTIVE SUMMARY".
 
 ## EXECUTIVE SUMMARY
-Write 4-6 bullet points (using • prefix). Each bullet is 2-3 sentences covering: what the company does, why it matters now, the core investment question, key financial characteristics, the dominant risk, and the bottom line for investors. Be specific — use exact numbers.
+Write 6-8 bullet points (• prefix). Cover: (1) what the company does and why it matters, (2) the core investment question right now, (3) the most compelling financial characteristic with exact numbers, (4) the growth trajectory in concrete numbers, (5) key valuation context vs peers, (6) the single biggest risk that could derail the thesis, (7) the bottom line verdict for a long-term institutional investor.
 
 ## COMPANY SNAPSHOT
-Write a concise table in this format (pipe-delimited):
+Pipe-delimited table:
 Ticker | ${ticker}
-Exchange | [exchange name]
+Exchange | [exchange]
 Sector | [sector]
 Industry | ${industry}
+Market Cap | ${fmt(f.market_cap)}
+Enterprise Value | ${fmt(f.enterprise_value)}
 Revenue (FY) | ${fmt(f.revenue)}
-Operating Margin | ${pct(f.operating_margin_pct)}
-Net Margin | ${pct(f.net_margin_pct)}
 EBITDA | ${fmt(f.ebitda)}
 FCF | ${fmt(f.free_cash_flow)}
+Operating Margin | ${pct(f.operating_margin_pct)}
+Net Margin | ${pct(f.net_margin_pct)}
+FCF Margin | ${f.free_cash_flow && f.revenue ? pct(f.free_cash_flow/f.revenue*100) : "N/A"}
 EPS Diluted | ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"}
-Net Debt / Cash | ${netDebt != null ? fmt(netDebt) : "N/A"}
-Total Assets | ${fmt(f.total_assets)}
-Equity | ${fmt(f.equity)}
+Net Debt | ${netDebt != null ? fmt(netDebt) : "N/A"}
 ROE | ${roe != null ? pct(roe) : "N/A"}
-ROA | ${roa != null ? pct(roa) : "N/A"}
+ROIC | ${f.roic != null ? pct(f.roic) : "N/A"}
+P/E | ${x(f.pe_ratio)}
+EV/EBITDA | ${x(f.ev_ebitda)}
+Beta | ${f.beta != null ? f.beta.toFixed(2) : "N/A"}
 
 ## BUSINESS OVERVIEW
 
 ### Company Background
-Write 2 paragraphs (4-6 sentences each): founding and history, what the company does today, its competitive positioning.
+2 paragraphs (5-6 sentences each). Founding, history, what the company does today, how it makes money, and its structural position. Be specific about the business model, not generic.
 
 ### Product Portfolio & Revenue Mix
-Write 2-3 paragraphs describing the main revenue segments or product lines. Include specific revenue contribution percentages where inferable. Reference segment-level data from the filing.
+2-3 paragraphs. Each major segment: what it is, how it works, revenue contribution %, growth rate, margin profile if available. Reference the segment data provided. Explain the economic logic of the product/service.
 
 ### Customers, End Markets & Geographic Exposure
-Write 1-2 paragraphs on customer concentration, end markets served, and geographic revenue breakdown where available.
+1-2 paragraphs. Who buys, why they buy, switching costs, customer concentration, geographic revenue split. Use the geographic segment data. Identify any meaningful dependency or customer concentration risk.
 
 ## INDUSTRY ANALYSIS
 
 ### Market Structure & Competitive Dynamics
-Write 2-3 paragraphs on the competitive landscape: how many players, who the key competitors are, barriers to entry, pricing dynamics. Be specific about the industry structure.
+2-3 paragraphs. Name the key competitors. What's the industry structure (oligopoly, fragmented, winner-take-most)? What are the barriers to entry? How does pricing work? Is this a market share game or a market growth game? Be specific — name companies.
 
 ### Key Industry Drivers & Cycle
-Write 2 paragraphs on the main demand drivers, supply dynamics, and any cyclicality or structural secular growth trends.
+2 paragraphs. What are the 3-4 macro/structural drivers of demand? Is there cyclicality (and where are we in the cycle)? What secular trends are accelerating or threatening the industry? Be forward-looking.
 
 ### Competitive Position
-Write 2 paragraphs assessing ${companyName}'s specific competitive advantages, moat, market share, and any structural advantages or vulnerabilities.
+2 paragraphs. What specifically makes ${companyName} better (or worse) than competitors? Quantify the moat where possible — pricing power evidence, market share, cost structure advantages, network effects, switching costs. Reference actual data from the filing.
 
 ## FINANCIAL ANALYSIS
 
 ### Revenue & Profitability Trends
-Write 2-3 paragraphs analyzing the revenue trajectory, margin structure, and profitability trend. Reference specific numbers from the 5-year history. Comment on drivers of margin expansion or compression.
+3 paragraphs. Start with the 5-year revenue CAGR from the data provided. Analyze what's driving growth (volume vs. price vs. mix). Explain margin dynamics — why margins expanded or compressed. Reference specific numbers from the 5-year history and margin evolution. Address quality of growth (organic vs. acquired).
 
 ### Balance Sheet & Capital Allocation
-Write 2 paragraphs on balance sheet strength, liquidity, debt profile, and how management deploys capital (buybacks, dividends, M&A, R&D).
+2 paragraphs. Assess the balance sheet health: net debt/cash position, leverage ratio, interest coverage. How does management deploy capital — M&A, buybacks, dividends, R&D? Is capital allocation disciplined or value-destructive? Reference buyback and dividend data.
 
 ### Free Cash Flow & CapEx
-Write 2 paragraphs on FCF generation, CapEx intensity, FCF conversion, and what this means for future capital returns or growth investment.
+2 paragraphs. Analyze FCF generation quality: FCF margin, OCF-to-NI ratio (cash quality score), CapEx intensity as % of revenue. Is the business asset-light or capital-intensive? What does FCF conversion look like over 5 years? How sustainable is the FCF?
+
+### Quality of Earnings & Cash Conversion
+1-2 paragraphs. Assess earnings quality: OCF/NI ratio ${ocfNiRatio ? ocfNiRatio.toFixed(2)+"x" : "N/A"} — what does this say about accrual risk? Comment on SBC as % of revenue (${sbcPct ? pct(sbcPct) : "N/A"}) and its impact on true FCF. Any red flags in working capital trends?
+
+## VALUATION FRAMEWORK
+
+### Current Valuation vs. Historical Range
+2 paragraphs. Context: the company trades at ${x(f.pe_ratio)} P/E, ${x(f.ev_ebitda)} EV/EBITDA. How does this compare to its historical multiple range (use the historical valuation data)? Is the current multiple premium or discount to history, and why? What does the market appear to be pricing in?
+
+### Peer Valuation Context
+1-2 paragraphs. Compare the subject company's multiples directly to the peers listed. Is it at a premium or discount? Is the premium/discount justified by growth, returns, or quality differentials? Reference specific peer multiples from the comparison table.
+
+### Implied Scenarios
+Write a compact 3-scenario analysis:
+**Bull Case ($[calculate implied price]):** [2-3 sentences on what multiple expansion + earnings upside drives price]
+**Base Case ($[calculate implied price]):** [2 sentences on consensus + current multiple]
+**Bear Case ($[calculate implied price]):** [2-3 sentences on multiple compression + downside risk]
+Use the FCF yield or EV/EBITDA as the anchor for the price targets. Show your math briefly.
+
+## MANAGEMENT COMMENTARY & GUIDANCE
+
+### Earnings Call Highlights
+2-3 paragraphs synthesizing what management said in the most recent earnings call/8-K. Pull specific quotes or paraphrases if available. What tone did management strike? What did they emphasize? What surprised analysts? If transcript data is limited, note it and focus on what is available.
+
+### Forward Guidance & Outlook
+1-2 paragraphs. Synthesize the forward estimates and any guidance provided. How does management guidance compare to consensus? What are the key KPIs management is focusing on going forward? What catalysts could cause guidance to be raised or lowered?
+
+## MANAGEMENT & GOVERNANCE
+
+### Leadership & Track Record
+2 paragraphs. Assess the CEO and leadership team quality: tenure, background, prior track record. Have they executed on stated goals? How credible is management guidance based on historical EPS surprise track record? Reference the EPS surprise history to assess execution reliability.
+
+### Capital Allocation Discipline
+2 paragraphs. Evaluate capital allocation quality over the past 5 years: when and at what prices did they buy back stock? M&A history — did acquisitions create or destroy value? How do they balance growth investment (R&D CapEx at ${capexPct ? pct(capexPct) : "N/A"} of revenue) vs. shareholder returns? Assess ROIC trajectory as evidence of capital discipline.
 
 ## KEY RISKS
-Write 5 specific, material risks as bullet points (• prefix). For each: name the risk in bold, explain the mechanism, and rate probability/impact. Reference specific filing language or financial metrics. No generic boilerplate.
+Write 7 specific, material risks (• prefix). For each: **[Risk Name in Bold]** — explain the mechanism, quantify the exposure where possible, and rate Probability (Low/Medium/High) and Impact (Low/Medium/High). No generic boilerplate. Only risks specific to ${companyName}'s actual business model and financial structure.
 
 ## INVESTMENT THESIS
 
 ### Bull Case
-Write 4-5 bullet points (• prefix) on the bull case. Specific catalysts, time horizon considerations, what needs to go right.
+6 bullet points (• prefix). Specific catalysts, time horizons, exact metrics that need to improve, and implied upside. Each bullet must have a number in it.
 
 ### Bear Case
-Write 4-5 bullet points (• prefix) on the bear case. Specific risks, what could go wrong, under what scenarios.
+6 bullet points (• prefix). Specific risks materializing, what metrics would signal deterioration, and implied downside. Each bullet must have a number in it.
 
 ### Analyst Note
-Write 2-3 sentences synthesizing: the single most important thing to monitor, the key debate on the stock, and what an investor needs to believe to own it.
+2-3 sentences: The single most important variable to monitor. The key debate on the stock right now. What an institutional investor must believe to own this stock at the current valuation.
 
 ---
 
 RULES:
-- Use exact numbers from the financial data throughout. Never say "strong" without quantifying it.
-- Be institutional: direct, no hedging, no preamble, no "it is worth noting"
-- Total length: 1,400-2,000 words
-- Reference specific filing language or disclosures where relevant
-- Do NOT add any text before "## EXECUTIVE SUMMARY"`;
+- Every claim must be grounded in the data provided. Never fabricate numbers.
+- Be institutional: direct, no hedging, no "it is worth noting," no preamble
+- Use exact figures throughout — no vague language like "significant" without a number
+- Target 3,000-3,500 words
+- Do NOT add any text before "## EXECUTIVE SUMMARY"
+- When transcript data is "Not available", synthesize from the MD&A and financial trends instead`;
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -218,7 +381,7 @@ RULES:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 6000,
+      max_tokens: 8000,
       stream: true,
       messages: [{ role: "user", content: prompt }],
     }),

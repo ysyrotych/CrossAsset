@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
-import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown } from "lucide-react";
+import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown, Paperclip, X } from "lucide-react";
 
 const PrimerDownloadButton = dynamic(
   () => import("@/components/PrimerDownloadButton").then(m => m.PrimerDownloadButton),
@@ -19,12 +19,15 @@ type KmHistory     = { date: string; pe: number|null; ev_ebitda: number|null; ro
 type GrowthHistory = { date: string; rev_growth: number; eps_growth: number; fcf_growth: number }[];
 type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number|null; surprise_pct: number|null }[];
 type AnalystEstimate = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
+type PeerComp      = { symbol: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number }[];
+type RecentNews    = { title: string; date: string; summary: string; source: string }[];
 type FmpExtended   = {
   ceo?: string; sector?: string; fmp_industry?: string; country?: string; exchange?: string;
   website?: string; ipo_date?: string; company_description?: string; fmp_rating?: string;
   segments?: SegmentData; geo_segments?: SegmentData;
   km_history?: KmHistory; growth_history?: GrowthHistory;
   earnings_surprises?: EarningsSurprise; analyst_estimates?: AnalystEstimate;
+  peer_comparison?: PeerComp; recent_news?: RecentNews;
 };
 type Payload       = {
   company: CompanyInfo;
@@ -37,6 +40,7 @@ type Payload       = {
   prior_quarter_xbrl: Record<string, number>;
   prior_quarter_period: string;
   fmp_extended?: FmpExtended;
+  earnings_transcript?: string;
 };
 
 // ── Quick-picks ───────────────────────────────────────────────────────────────
@@ -1467,6 +1471,8 @@ export default function TenKPage() {
   const [primerDone, setPrimerDone]   = useState(false);
   const [showPrimer, setShowPrimer]   = useState(false);
   const primerRef = useRef<HTMLDivElement>(null);
+  const [uploadedDoc, setUploadedDoc] = useState<{name: string; base64: string; mimeType: string} | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   async function fetchFiling(sym?: string) {
     const t = (sym ?? ticker).toUpperCase().trim();
@@ -1480,6 +1486,7 @@ export default function TenKPage() {
     setPrimerText("");
     setPrimerDone(false);
     setShowPrimer(false);
+    setUploadedDoc(null);
     try {
       const r = await fetch(`/api/sec?ticker=${encodeURIComponent(t)}`);
       const j = await r.json();
@@ -1548,6 +1555,7 @@ export default function TenKPage() {
           quarterlyPeriod: data.quarterly_period ?? "",
           sections: allSections,
           fmpExtended: data.fmp_extended ?? {},
+          earningsTranscript: data.earnings_transcript ?? "",
         }),
       });
       if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
@@ -1598,6 +1606,7 @@ export default function TenKPage() {
           facts: data.xbrl_facts,
           history: data.history ?? {},
           quarterlyPeriod: data.quarterly_period ?? "",
+          documentContext: uploadedDoc ?? null,
         }),
       });
       if (!r.ok || !r.body) throw new Error(`HTTP ${r.status}`);
@@ -2048,7 +2057,10 @@ export default function TenKPage() {
                     {primerText.length < 200 ? "Starting analysis…"
                       : primerText.includes("## BUSINESS OVERVIEW") ? "Writing business overview…"
                       : primerText.includes("## INDUSTRY ANALYSIS") ? "Analyzing industry dynamics…"
-                      : primerText.includes("## FINANCIAL ANALYSIS") ? "Building financial analysis…"
+                      : primerText.includes("## FINANCIAL ANALYSIS") ? "Building financial deep-dive…"
+                      : primerText.includes("## VALUATION FRAMEWORK") ? "Building valuation framework…"
+                      : primerText.includes("## MANAGEMENT COMMENTARY") ? "Synthesizing management commentary…"
+                      : primerText.includes("## MANAGEMENT & GOVERNANCE") ? "Assessing management & governance…"
                       : primerText.includes("## KEY RISKS") ? "Identifying key risks…"
                       : primerText.includes("## INVESTMENT THESIS") ? "Forming investment thesis…"
                       : "Writing executive summary…"}
@@ -2057,7 +2069,7 @@ export default function TenKPage() {
                 </div>
                 <div className="h-1.5 bg-[#ebebeb] rounded-full overflow-hidden">
                   <div className="h-full bg-[#0c1b38] rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, (primerText.length / 8000) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (primerText.length / 16000) * 100)}%` }} />
                 </div>
               </div>
             )}
@@ -2140,11 +2152,49 @@ export default function TenKPage() {
                   <p className="text-[9.5px] text-white/40">Chat with {data.company.name}'s 10-K & 10-Q — grounded in real XBRL data</p>
                 </div>
               </div>
-              {chatMsgs.length > 0 && (
-                <button onClick={() => setChatMsgs([])} className="text-[9.5px] text-white/30 hover:text-white/60 transition-colors">
-                  Clear
-                </button>
-              )}
+              <div className="flex items-center gap-3">
+                {/* Document upload */}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept=".pdf,.txt"
+                  className="hidden"
+                  onChange={e => {
+                    const file = e.target.files?.[0];
+                    if (!file) return;
+                    const reader = new FileReader();
+                    reader.onload = ev => {
+                      const result = ev.target?.result as string;
+                      // result is "data:application/pdf;base64,xxxx"
+                      const base64 = result.split(",")[1];
+                      setUploadedDoc({ name: file.name, base64, mimeType: file.type || "application/pdf" });
+                    };
+                    reader.readAsDataURL(file);
+                    e.target.value = "";
+                  }}
+                />
+                {uploadedDoc ? (
+                  <div className="flex items-center gap-1.5 bg-white/10 rounded px-2 py-1">
+                    <Paperclip size={10} className="text-white/60" />
+                    <span className="text-[9.5px] text-white/70 max-w-[120px] truncate">{uploadedDoc.name}</span>
+                    <button onClick={() => setUploadedDoc(null)} className="text-white/30 hover:text-white/70 ml-0.5">
+                      <X size={10} />
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => fileInputRef.current?.click()}
+                    title="Upload PDF or TXT to chat about"
+                    className="flex items-center gap-1 text-[9.5px] text-white/40 hover:text-white/70 transition-colors border border-white/20 rounded px-2 py-1">
+                    <Paperclip size={10} /> Upload Doc
+                  </button>
+                )}
+                {chatMsgs.length > 0 && (
+                  <button onClick={() => setChatMsgs([])} className="text-[9.5px] text-white/30 hover:text-white/60 transition-colors">
+                    Clear
+                  </button>
+                )}
+              </div>
             </div>
 
             {/* Quick starter questions */}

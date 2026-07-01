@@ -85,7 +85,7 @@ def get_fmp_financials(ticker: str) -> dict:
                 return data[0] if data else {}
             return data if isinstance(data, dict) else {}
 
-        with _cf.ThreadPoolExecutor(max_workers=15) as ex:
+        with _cf.ThreadPoolExecutor(max_workers=17) as ex:
             fs = {
                 "inc_a":     ex.submit(fetch, "income-statement"),
                 "bal_a":     ex.submit(fetch, "balance-sheet-statement"),
@@ -102,11 +102,56 @@ def get_fmp_financials(ticker: str) -> dict:
                 "earnings":  ex.submit(fetch, "earnings-surprises", None, 8),
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
+                "news":      ex.submit(fetch, "stock-news", None, 10),
+                "peers":     ex.submit(fetch_one, "stock-peers"),
             }
             res = {k: v.result() for k, v in fs.items()}
 
+        # Fetch peer key-metrics (up to 4 peers) in a second executor
+        peer_comparison: list = []
+        peers_raw = res.get("peers", {})
+        if isinstance(peers_raw, dict):
+            peer_symbols = peers_raw.get("peersList", [])[:4]
+        elif isinstance(peers_raw, list) and peers_raw:
+            peer_symbols = peers_raw[0].get("peersList", [])[:4] if isinstance(peers_raw[0], dict) else []
+        else:
+            peer_symbols = []
+
+        if peer_symbols:
+            def fetch_peer_km(sym: str) -> dict:
+                try:
+                    url = f"{FMP_BASE}/key-metrics?symbol={sym}&limit=1&apikey={FMP_API_KEY}"
+                    rp = httpx.get(url, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    if rp.status_code == 200:
+                        d = rp.json()
+                        return d[0] if isinstance(d, list) and d else {}
+                    return {}
+                except Exception:
+                    return {}
+
+            with _cf.ThreadPoolExecutor(max_workers=4) as ex2:
+                peer_km_fs = {sym: ex2.submit(fetch_peer_km, sym) for sym in peer_symbols}
+                peer_km_map = {sym: f.result() for sym, f in peer_km_fs.items()}
+
+            for sym in peer_symbols:
+                km = peer_km_map.get(sym, {})
+                if km:
+                    pe    = safe_float(km.get("peRatio"))
+                    ev_e  = safe_float(km.get("enterpriseValueOverEBITDA"))
+                    p_fcf = safe_float(km.get("pfcfRatio"))
+                    roic  = safe_float(km.get("roic"))
+                    npm   = safe_float(km.get("netProfitMargin"))
+                    peer_comparison.append({
+                        "symbol":    sym,
+                        "pe":        round(pe, 1) if pe else None,
+                        "ev_ebitda": round(ev_e, 1) if ev_e else None,
+                        "p_fcf":     round(p_fcf, 1) if p_fcf else None,
+                        "roic":      round((roic or 0) * 100, 1),
+                        "net_margin":round((npm or 0) * 100, 1),
+                    })
+
         has_statements = bool(res["inc_a"])
-        print(f"FMP {ticker}: statements={'yes' if has_statements else 'NO'} | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'} | segments={'yes' if res['segments'] else 'no'}")
+        print(f"FMP {ticker}: statements={'yes' if has_statements else 'NO'} | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'} | peers={len(peer_comparison)}")
         return {
             "income_annual":     res["inc_a"],
             "balance_annual":    res["bal_a"],
@@ -123,6 +168,8 @@ def get_fmp_financials(ticker: str) -> dict:
             "earnings":          res["earnings"],
             "segments":          res["segments"],
             "geo_segments":      res["geo_segs"],
+            "news":              res["news"],
+            "peer_comparison":   peer_comparison,
         }
     except Exception as e:
         print(f"FMP error for {ticker}: {e}")
@@ -538,6 +585,24 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         geo_data = {k: v for k, v in latest_geo.items() if k != "date" and isinstance(v, (int, float)) and v}
         if geo_data:
             fmp_ext["geo_segments"] = {"date": latest_geo.get("date",""), "data": geo_data}
+
+    # Recent news
+    raw_news = fmp.get("news", [])
+    if raw_news:
+        fmp_ext["recent_news"] = [
+            {
+                "title":   p.get("title", ""),
+                "date":    (p.get("publishedDate") or p.get("date", ""))[:10],
+                "summary": (p.get("text") or p.get("summary") or "")[:200],
+                "source":  p.get("site", ""),
+            }
+            for p in raw_news[:10] if p.get("title")
+        ]
+
+    # Peer comparison (pre-fetched in get_fmp_financials)
+    peer_comp = fmp.get("peer_comparison", [])
+    if peer_comp:
+        fmp_ext["peer_comparison"] = peer_comp
 
     return facts, history, qfacts, pqfacts, q_period, fmp_ext, prior_q_period
 
@@ -1357,6 +1422,51 @@ class FilingData(BaseModel):
     sections: list[FilingSection]
     raw_financials: dict
 
+def _get_earnings_transcript(company) -> str:
+    """Try to extract earnings call content from recent 8-K filings via edgartools."""
+    try:
+        filings_8k = company.get_filings(form="8-K")
+        if not filings_8k:
+            return ""
+        transcript_signals = [
+            "earnings call", "conference call", "operator:",
+            "ladies and gentlemen", "q&a", "prepared remarks",
+            "results of operations", "analyst questions", "question-and-answer",
+        ]
+        checked = 0
+        for filing in filings_8k:
+            if checked >= 8:
+                break
+            checked += 1
+            try:
+                doc = filing.obj()
+                if doc is None:
+                    continue
+                text = ""
+                for attr in ["text", "content"]:
+                    val = getattr(doc, attr, None)
+                    if isinstance(val, str) and len(val) > 500:
+                        text = val
+                        break
+                if not text:
+                    text = str(doc)
+                if len(text) < 500:
+                    continue
+                text_lower = text.lower()
+                signal_count = sum(1 for sig in transcript_signals if sig in text_lower)
+                if signal_count >= 2:
+                    print(f"Earnings content found in 8-K #{checked}: {len(text)} chars, signals={signal_count}")
+                    return truncate(text, 12000)
+            except Exception as e:
+                print(f"8-K parse error #{checked}: {e}")
+                continue
+        print("No earnings transcript found in recent 8-Ks")
+        return ""
+    except Exception as e:
+        print(f"Earnings transcript fetch error: {e}")
+        return ""
+
+
 class AnalysisPayload(BaseModel):
     company: CompanyInfo
     annual: Optional[FilingData] = None
@@ -1368,6 +1478,7 @@ class AnalysisPayload(BaseModel):
     prior_quarter_xbrl: dict = {}
     prior_quarter_period: str = ""
     fmp_extended: dict = {}
+    earnings_transcript: str = ""
 
 # ── Routes ────────────────────────────────────────────────────────────────────
 
@@ -1427,14 +1538,15 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         sic_description=str(getattr(company, 'sic_description', '') or ''),
     )
 
-    annual_task    = asyncio.to_thread(_get_filing, company, "10-K", want)
-    quarterly_task = asyncio.to_thread(_get_filing, company, "10-Q", want)
-    xbrl_task      = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
-    fmp_task       = asyncio.to_thread(get_fmp_financials, ticker)
-    yf_task        = asyncio.to_thread(get_yfinance_financials, ticker)
+    annual_task     = asyncio.to_thread(_get_filing, company, "10-K", want)
+    quarterly_task  = asyncio.to_thread(_get_filing, company, "10-Q", want)
+    xbrl_task       = asyncio.to_thread(fetch_xbrl_from_sec_api, str(getattr(company, 'cik', '')))
+    fmp_task        = asyncio.to_thread(get_fmp_financials, ticker)
+    yf_task         = asyncio.to_thread(get_yfinance_financials, ticker)
+    transcript_task = asyncio.to_thread(_get_earnings_transcript, company)
 
-    annual, quarterly, xbrl_result, fmp_data, yf_data = await asyncio.gather(
-        annual_task, quarterly_task, xbrl_task, fmp_task, yf_task
+    annual, quarterly, xbrl_result, fmp_data, yf_data, earnings_transcript = await asyncio.gather(
+        annual_task, quarterly_task, xbrl_task, fmp_task, yf_task, transcript_task
     )
 
     # ── Financial data priority: FMP statements > yfinance > XBRL ───────────
@@ -1479,6 +1591,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         prior_quarter_xbrl=pqxbrl,
         prior_quarter_period=prior_q_period,
         fmp_extended=fmp_ext,
+        earnings_transcript=earnings_transcript,
     )
 
 def _get_company(ticker: str):

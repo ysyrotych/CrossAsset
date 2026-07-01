@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 type Msg = { role: "user" | "assistant"; content: string };
 
 export async function POST(req: NextRequest) {
-  const { ticker, companyName, industry, messages, facts, history, quarterlyPeriod } = await req.json() as {
+  const { ticker, companyName, industry, messages, facts, history, quarterlyPeriod, documentContext } = await req.json() as {
     ticker: string;
     companyName: string;
     industry: string;
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     facts: Record<string, number>;
     history: Record<string, Record<string, number>>;
     quarterlyPeriod: string;
+    documentContext?: { base64: string; mimeType: string; name: string } | null;
   };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -65,19 +66,42 @@ INSTRUCTIONS:
 - If asked to compare, do a crisp side-by-side
 - End with ONE key insight or implication for investors`;
 
+  // Build messages — prepend document block to first user message if a document was uploaded
+  const builtMessages = messages.map((m, i) => {
+    if (i === 0 && m.role === "user" && documentContext?.base64) {
+      return {
+        role: m.role,
+        content: [
+          {
+            type: "document",
+            source: {
+              type: "base64",
+              media_type: documentContext.mimeType,
+              data: documentContext.base64,
+            },
+            title: documentContext.name,
+          },
+          { type: "text", text: m.content },
+        ],
+      };
+    }
+    return { role: m.role, content: m.content };
+  });
+
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",
       "x-api-key": apiKey,
       "anthropic-version": "2023-06-01",
+      "anthropic-beta": "pdfs-2024-09-25",
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 600,
+      max_tokens: 800,
       stream: true,
       system,
-      messages: messages.map(m => ({ role: m.role, content: m.content })),
+      messages: builtMessages,
     }),
   });
 
