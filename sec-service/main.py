@@ -1220,21 +1220,49 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         if curr_a_h: history["current_assets"] = curr_a_h
 
         # ── Most recent single quarter (10-Q, ~80–100 days) ─────────────────
-        def get_latest_q_flow(concept: str) -> Optional[float]:
-            entries = get_entries(concept)
-            if not entries:
-                return None
-            q = [e for e in entries
-                 if e.get("form") == "10-Q" and e.get("val") is not None
-                 and 75 <= _duration_days(e) <= 105]
-            if not q:
+        # Companies sometimes change XBRL concept names (e.g. META stopped using
+        # "Revenues" in 10-Qs after 2018).  _get_best_q_flow tries ALL concepts and
+        # returns the value from whichever concept has the most recent end date —
+        # preventing silent cross-period mixing when concept A is stale.
+        def _get_best_q_flow(concepts: list) -> tuple:
+            best_end, best_val = "", None
+            for concept in concepts:
+                entries = get_entries(concept)
+                if not entries:
+                    continue
                 q = [e for e in entries
                      if e.get("form") == "10-Q" and e.get("val") is not None
-                     and _duration_days(e) < 200]
-            if not q:
-                return None
-            q.sort(key=lambda e: e.get("end", ""), reverse=True)
-            return safe_float(q[0]["val"])
+                     and 75 <= _duration_days(e) <= 105]
+                if not q:
+                    q = [e for e in entries
+                         if e.get("form") == "10-Q" and e.get("val") is not None
+                         and _duration_days(e) < 200]
+                if not q:
+                    continue
+                q.sort(key=lambda e: e.get("end", ""), reverse=True)
+                if q[0].get("end", "") > best_end:
+                    best_end = q[0].get("end", "")
+                    best_val = safe_float(q[0]["val"])
+            return best_val, best_end
+
+        def _get_best_q_flow_prior(concepts: list, after: str) -> tuple:
+            """Second-most-recent single-quarter value (strictly before `after` end date)."""
+            best_end, best_val = "", None
+            for concept in concepts:
+                entries = get_entries(concept)
+                if not entries:
+                    continue
+                q = [e for e in entries
+                     if e.get("form") == "10-Q" and e.get("val") is not None
+                     and 75 <= _duration_days(e) <= 105
+                     and e.get("end", "") < after]
+                if not q:
+                    continue
+                q.sort(key=lambda e: e.get("end", ""), reverse=True)
+                if q[0].get("end", "") > best_end:
+                    best_end = q[0].get("end", "")
+                    best_val = safe_float(q[0]["val"])
+            return best_val, best_end
 
         def get_latest_q_bs(concept: str) -> Optional[float]:
             entries = get_entries(concept)
@@ -1248,37 +1276,37 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
 
         qr: dict = {}
 
-        q_rev = (get_latest_q_flow("Revenues") or
-                 get_latest_q_flow("RevenueFromContractWithCustomerExcludingAssessedTax") or
-                 get_latest_q_flow("SalesRevenueNet"))
+        q_rev, _q_rev_end = _get_best_q_flow([
+            "RevenueFromContractWithCustomerExcludingAssessedTax",
+            "Revenues", "SalesRevenueNet",
+            "RevenueFromContractWithCustomerIncludingAssessedTax"])
         if q_rev is not None: qr["revenue"] = q_rev
 
-        q_cogs = (get_latest_q_flow("CostOfRevenue") or
-                  get_latest_q_flow("CostOfGoodsAndServicesSold"))
+        q_cogs, _ = _get_best_q_flow(["CostOfRevenue", "CostOfGoodsAndServicesSold"])
         if q_cogs is not None: qr["cost_of_revenue"] = q_cogs
 
-        q_gp = get_latest_q_flow("GrossProfit")
+        q_gp, _ = _get_best_q_flow(["GrossProfit"])
         if q_gp is not None: qr["gross_profit"] = q_gp
 
-        q_rd = get_latest_q_flow("ResearchAndDevelopmentExpense")
+        q_rd, _ = _get_best_q_flow(["ResearchAndDevelopmentExpense"])
         if q_rd is not None: qr["rd_expense"] = q_rd
 
-        q_sga = get_latest_q_flow("SellingGeneralAndAdministrativeExpense")
+        q_sga, _ = _get_best_q_flow(["SellingGeneralAndAdministrativeExpense"])
         if q_sga is not None: qr["sga_expense"] = q_sga
 
-        q_oi = get_latest_q_flow("OperatingIncomeLoss")
+        q_oi, _q_oi_end = _get_best_q_flow(["OperatingIncomeLoss"])
         if q_oi is not None: qr["operating_income"] = q_oi
 
-        q_ni = get_latest_q_flow("NetIncomeLoss")
+        q_ni, _q_ni_end = _get_best_q_flow(["NetIncomeLoss"])
         if q_ni is not None: qr["net_income"] = q_ni
 
-        q_eps = get_latest_q_flow("EarningsPerShareDiluted")
+        q_eps, _ = _get_best_q_flow(["EarningsPerShareDiluted"])
         if q_eps is not None: qr["eps_diluted"] = q_eps
 
-        q_ocf = get_latest_q_flow("NetCashProvidedByUsedInOperatingActivities")
+        q_ocf, _q_ocf_end = _get_best_q_flow(["NetCashProvidedByUsedInOperatingActivities"])
         if q_ocf is not None: qr["operating_cf"] = q_ocf
 
-        q_capex = get_latest_q_flow("PaymentsToAcquirePropertyPlantAndEquipment")
+        q_capex, _ = _get_best_q_flow(["PaymentsToAcquirePropertyPlantAndEquipment"])
         if q_capex is not None: qr["capex"] = q_capex
 
         q_cash = get_latest_q_bs("CashAndCashEquivalentsAtCarryingValue")
@@ -1290,63 +1318,45 @@ def fetch_xbrl_from_sec_api(cik: str) -> dict:
         q_eq = get_latest_q_bs("StockholdersEquity") or get_latest_q_bs("StockholdersEquityAttributableToParent")
         if q_eq is not None: qr["equity"] = q_eq
 
-        # Derived quarterly ratios
+        # Derive q_period from the concept that actually provided data (most recent wins)
+        q_period = max(filter(None, [_q_rev_end, _q_oi_end, _q_ni_end, _q_ocf_end]), default="")
+
+        # Derived quarterly ratios — only compute when all come from the same period
         if q_rev and q_gp:  qr["gross_margin_pct"]     = round(q_gp / q_rev * 100, 1)
         if q_rev and q_oi:  qr["operating_margin_pct"] = round(q_oi / q_rev * 100, 1)
         if q_rev and q_ni:  qr["net_margin_pct"]        = round(q_ni / q_rev * 100, 1)
         if q_ocf is not None and q_capex is not None:
             qr["free_cash_flow"] = q_ocf - abs(q_capex)
 
-        # Prior quarter flow (QoQ comparison) — second-most-recent 10-Q single period
-        def get_prior_q_flow(concept: str) -> Optional[float]:
-            entries = get_entries(concept)
-            if not entries:
-                return None
-            q = [e for e in entries
-                 if e.get("form") == "10-Q" and e.get("val") is not None
-                 and 75 <= _duration_days(e) <= 105]
-            if len(q) < 2:
-                return None
-            q.sort(key=lambda e: e.get("end", ""), reverse=True)
-            return safe_float(q[1]["val"])
-
-        pqr: dict = {}
-        pq_rev = (get_prior_q_flow("Revenues") or
-                  get_prior_q_flow("RevenueFromContractWithCustomerExcludingAssessedTax"))
-        if pq_rev is not None: pqr["revenue"] = pq_rev
-
-        pq_gp = get_prior_q_flow("GrossProfit")
-        if pq_gp is not None: pqr["gross_profit"] = pq_gp
-
-        pq_oi = get_prior_q_flow("OperatingIncomeLoss")
-        if pq_oi is not None: pqr["operating_income"] = pq_oi
-
-        pq_ni = get_prior_q_flow("NetIncomeLoss")
-        if pq_ni is not None: pqr["net_income"] = pq_ni
-
-        pq_ocf = get_prior_q_flow("NetCashProvidedByUsedInOperatingActivities")
-        if pq_ocf is not None: pqr["operating_cf"] = pq_ocf
-
-        pq_eps = get_prior_q_flow("EarningsPerShareDiluted")
-        if pq_eps is not None: pqr["eps_diluted"] = pq_eps
-
-        if pq_rev and pq_gp:  pqr["gross_margin_pct"]     = round(pq_gp / pq_rev * 100, 1)
-        if pq_rev and pq_oi:  pqr["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
-        if pq_rev and pq_ni:  pqr["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
-
-        # Period labels
-        q_period = ""
+        # Prior quarter (QoQ) — strictly before q_period to guarantee alignment
         prior_q_period = ""
-        rev_entries_all = get_entries("Revenues") or get_entries("RevenueFromContractWithCustomerExcludingAssessedTax")
-        if rev_entries_all:
-            qpe = [e for e in rev_entries_all
-                   if e.get("form") == "10-Q" and e.get("val") is not None
-                   and 75 <= _duration_days(e) <= 105]
-            if qpe:
-                qpe.sort(key=lambda e: e.get("end", ""), reverse=True)
-                q_period = qpe[0].get("end", "")
-                if len(qpe) >= 2:
-                    prior_q_period = qpe[1].get("end", "")
+        pqr: dict = {}
+        if q_period:
+            pq_rev, _pq_rev_end = _get_best_q_flow_prior([
+                "RevenueFromContractWithCustomerExcludingAssessedTax",
+                "Revenues", "SalesRevenueNet"], q_period)
+            if pq_rev is not None: pqr["revenue"] = pq_rev
+
+            pq_gp, _ = _get_best_q_flow_prior(["GrossProfit"], q_period)
+            if pq_gp is not None: pqr["gross_profit"] = pq_gp
+
+            pq_oi, _pq_oi_end = _get_best_q_flow_prior(["OperatingIncomeLoss"], q_period)
+            if pq_oi is not None: pqr["operating_income"] = pq_oi
+
+            pq_ni, _ = _get_best_q_flow_prior(["NetIncomeLoss"], q_period)
+            if pq_ni is not None: pqr["net_income"] = pq_ni
+
+            pq_ocf, _ = _get_best_q_flow_prior(["NetCashProvidedByUsedInOperatingActivities"], q_period)
+            if pq_ocf is not None: pqr["operating_cf"] = pq_ocf
+
+            pq_eps, _ = _get_best_q_flow_prior(["EarningsPerShareDiluted"], q_period)
+            if pq_eps is not None: pqr["eps_diluted"] = pq_eps
+
+            prior_q_period = max(filter(None, [_pq_rev_end, _pq_oi_end]), default="")
+
+            if pq_rev and pq_gp:  pqr["gross_margin_pct"]     = round(pq_gp / pq_rev * 100, 1)
+            if pq_rev and pq_oi:  pqr["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
+            if pq_rev and pq_ni:  pqr["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
 
         print(f"XBRL SEC API: {len(r)} annual + {len(qr)} quarterly facts for CIK {cik}")
         return {
