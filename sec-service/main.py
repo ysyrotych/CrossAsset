@@ -647,6 +647,27 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     if peer_comp:
         fmp_ext["peer_comparison"] = peer_comp
 
+    # Derived valuation ratios from price (fallback when key-metrics doesn't populate them)
+    price = facts.get("stock_price")
+    eps_d = facts.get("eps_diluted")
+    mc_val = facts.get("market_cap")
+    ni_val = facts.get("net_income")
+    ebitda_val = facts.get("ebitda")
+    fcf_val = facts.get("free_cash_flow")
+    net_debt_val = (facts.get("long_term_debt") or 0) - (facts.get("cash") or 0)
+    if price and eps_d and eps_d > 0 and not facts.get("pe_ratio"):
+        facts["pe_ratio"] = round(price / eps_d, 1)
+    if mc_val and ni_val and ni_val > 0 and not facts.get("pe_ratio"):
+        facts["pe_ratio"] = round(mc_val / ni_val, 1)
+    if mc_val and ebitda_val and ebitda_val > 0 and not facts.get("ev_ebitda"):
+        ev = mc_val + net_debt_val
+        facts["enterprise_value"] = facts.get("enterprise_value") or ev
+        facts["ev_ebitda"] = round(ev / ebitda_val, 1)
+    if mc_val and fcf_val and fcf_val > 0 and not facts.get("p_fcf"):
+        facts["p_fcf"] = round(mc_val / fcf_val, 1)
+    if mc_val and facts.get("revenue") and not facts.get("p_sales"):
+        facts["p_sales"] = round(mc_val / facts["revenue"], 1)
+
     return facts, history, qfacts, pqfacts, q_period, fmp_ext, prior_q_period
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
