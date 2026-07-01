@@ -46,17 +46,19 @@ import os as _os
 import concurrent.futures as _cf
 FMP_API_KEY  = _os.environ.get("FMP_API_KEY", "").strip()
 FMP_BASE     = "https://financialmodelingprep.com/stable"
+FMP_V3       = "https://financialmodelingprep.com/api/v3"
 
 def get_fmp_financials(ticker: str) -> dict:
     """
-    Fetch comprehensive data from Financial Modeling Prep (stable API, post-Aug 2025).
-    New base: financialmodelingprep.com/stable  — params use ?symbol= not path segments.
-    Returns {} if FMP_API_KEY not set or request fails.
+    Fetch comprehensive data from FMP.
+    Statements/profile/news use the stable API (symbol param).
+    Key-metrics, financial-growth, earnings-surprises use v3 (path-based).
     """
     if not FMP_API_KEY:
         print(f"FMP_API_KEY not set — skipping FMP for {ticker}")
         return {}
     try:
+        # ── Stable API helpers (symbol= query param) ──────────────────────────
         def _qs(extra: dict = None, limit: int = None) -> str:
             p = {"symbol": ticker, "apikey": FMP_API_KEY}
             if limit is not None:
@@ -69,7 +71,7 @@ def get_fmp_financials(ticker: str) -> dict:
             url = f"{FMP_BASE}/{endpoint}?{_qs(extra, limit)}"
             r = httpx.get(url, timeout=25, headers={"User-Agent": "CrossAsset/1.0"})
             if r.status_code != 200:
-                print(f"FMP {endpoint}: HTTP {r.status_code} — {r.text[:300]}")
+                print(f"FMP {endpoint}: HTTP {r.status_code} — {r.text[:200]}")
                 return []
             data = r.json()
             return data if isinstance(data, list) else []
@@ -85,7 +87,30 @@ def get_fmp_financials(ticker: str) -> dict:
                 return data[0] if data else {}
             return data if isinstance(data, dict) else {}
 
-        with _cf.ThreadPoolExecutor(max_workers=17) as ex:
+        # ── v3 API helpers (/{ticker}/ path-based) ────────────────────────────
+        def fetch_v3(endpoint: str, limit: int = 6, extra: dict = None) -> list:
+            params = f"apikey={FMP_API_KEY}&limit={limit}"
+            if extra:
+                params += "&" + "&".join(f"{k}={v}" for k, v in extra.items())
+            url = f"{FMP_V3}/{endpoint}/{ticker}?{params}"
+            r = httpx.get(url, timeout=25, headers={"User-Agent": "CrossAsset/1.0"})
+            if r.status_code != 200:
+                print(f"FMP v3 {endpoint}: HTTP {r.status_code} — {r.text[:200]}")
+                return []
+            data = r.json()
+            return data if isinstance(data, list) else []
+
+        def fetch_v3_one(endpoint: str) -> dict:
+            url = f"{FMP_V3}/{endpoint}/{ticker}?apikey={FMP_API_KEY}"
+            r = httpx.get(url, timeout=15, headers={"User-Agent": "CrossAsset/1.0"})
+            if r.status_code != 200:
+                return {}
+            data = r.json()
+            if isinstance(data, list):
+                return data[0] if data else {}
+            return data if isinstance(data, dict) else {}
+
+        with _cf.ThreadPoolExecutor(max_workers=18) as ex:
             fs = {
                 "inc_a":     ex.submit(fetch, "income-statement"),
                 "bal_a":     ex.submit(fetch, "balance-sheet-statement"),
@@ -94,52 +119,58 @@ def get_fmp_financials(ticker: str) -> dict:
                 "bal_q":     ex.submit(fetch, "balance-sheet-statement",  {"period": "quarterly"}),
                 "cf_q":      ex.submit(fetch, "cash-flow-statement",      {"period": "quarterly"}),
                 "profile":   ex.submit(fetch_one, "profile"),
-                "km":        ex.submit(fetch, "key-metrics"),
-                "growth":    ex.submit(fetch, "financial-growth"),
+                # v3 for historical multiples (stable doesn't expose these)
+                "km":        ex.submit(fetch_v3, "key-metrics", 8),
+                "km_ttm":    ex.submit(fetch_v3, "key-metrics-ttm", 1),
+                "growth":    ex.submit(fetch_v3, "financial-growth", 6),
+                "ratios":    ex.submit(fetch_v3, "ratios", 6),
                 "estimates": ex.submit(fetch, "analyst-estimates", None, 4),
                 "rating":    ex.submit(fetch_one, "ratings"),
                 "pt":        ex.submit(fetch_one, "price-target-summary"),
-                "earnings":  ex.submit(fetch, "earnings-surprises", None, 8),
+                # v3 for earnings surprises (path-based)
+                "earnings":  ex.submit(fetch_v3, "earnings-surprises", 8),
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
-                "news":      ex.submit(fetch, "stock-news", None, 10),
-                # stable API returns a list of peer objects (not {peersList:[...]} dict)
+                "news":      ex.submit(fetch, "stock-news", None, 12),
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
             }
             res = {k: v.result() for k, v in fs.items()}
 
-        # Fetch peer key-metrics (up to 4 peers) in a second executor
-        # FMP stable /stock-peers returns: [{symbol, companyName, price, mktCap}, ...]
+        # ── Peer key-metrics via v3 ───────────────────────────────────────────
         peer_comparison: list = []
         peers_raw = res.get("peers", [])
         if isinstance(peers_raw, list):
-            # New stable API: each item is a peer company object
-            peer_symbols = [p["symbol"] for p in peers_raw if isinstance(p, dict) and p.get("symbol")][:5]
+            peer_symbols = [p["symbol"] for p in peers_raw if isinstance(p, dict) and p.get("symbol")][:6]
         elif isinstance(peers_raw, dict):
-            # Legacy format: {peersList: ["GOOGL", ...]}
-            peer_symbols = peers_raw.get("peersList", [])[:5]
+            peer_symbols = peers_raw.get("peersList", [])[:6]
         else:
             peer_symbols = []
         print(f"FMP peers for {ticker}: {peer_symbols}")
 
         if peer_symbols:
-            def fetch_peer_km(sym: str) -> dict:
+            def fetch_peer_data(sym: str) -> dict:
                 try:
-                    url = f"{FMP_BASE}/key-metrics?symbol={sym}&limit=1&apikey={FMP_API_KEY}"
-                    rp = httpx.get(url, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    # Use v3 key-metrics for peers
+                    url_km = f"{FMP_V3}/key-metrics/{sym}?limit=1&apikey={FMP_API_KEY}"
+                    url_pr = f"{FMP_BASE}/profile?symbol={sym}&apikey={FMP_API_KEY}"
+                    rk = httpx.get(url_km, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    rp = httpx.get(url_pr, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    km_item = {}
+                    pr_item = {}
+                    if rk.status_code == 200:
+                        d = rk.json()
+                        km_item = d[0] if isinstance(d, list) and d else {}
                     if rp.status_code == 200:
                         d = rp.json()
-                        km_item = d[0] if isinstance(d, list) and d else {}
-                        print(f"Peer {sym} km keys: {list(km_item.keys())[:15]}")
-                        return km_item
-                    return {}
+                        pr_item = d[0] if isinstance(d, list) and d else (d if isinstance(d, dict) else {})
+                    return {"km": km_item, "pr": pr_item}
                 except Exception as e:
-                    print(f"Peer km fetch error for {sym}: {e}")
-                    return {}
+                    print(f"Peer fetch error for {sym}: {e}")
+                    return {"km": {}, "pr": {}}
 
-            with _cf.ThreadPoolExecutor(max_workers=5) as ex2:
-                peer_km_fs = {sym: ex2.submit(fetch_peer_km, sym) for sym in peer_symbols}
-                peer_km_map = {sym: f.result() for sym, f in peer_km_fs.items()}
+            with _cf.ThreadPoolExecutor(max_workers=6) as ex2:
+                peer_data_fs = {sym: ex2.submit(fetch_peer_data, sym) for sym in peer_symbols}
+                peer_data_map = {sym: f.result() for sym, f in peer_data_fs.items()}
 
             def _peer_val(km, *keys):
                 for k in keys:
@@ -149,24 +180,31 @@ def get_fmp_financials(ticker: str) -> dict:
                 return None
 
             for sym in peer_symbols:
-                km = peer_km_map.get(sym, {})
-                if km:
+                pd = peer_data_map.get(sym, {})
+                km = pd.get("km", {})
+                pr = pd.get("pr", {})
+                if km or pr:
                     pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe")
                     ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda")
                     p_fcf = _peer_val(km, "pfcfRatio", "priceToFreeCashFlowsRatio")
                     roic  = _peer_val(km, "roic", "returnOnInvestedCapital")
                     npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT")
+                    rev_g = _peer_val(km, "revenueGrowth")
+                    mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
                     peer_comparison.append({
-                        "symbol":    sym,
-                        "pe":        round(pe, 1) if pe else None,
-                        "ev_ebitda": round(ev_e, 1) if ev_e else None,
-                        "p_fcf":     round(p_fcf, 1) if p_fcf else None,
-                        "roic":      round((roic or 0) * 100, 1),
-                        "net_margin":round((npm or 0) * 100, 1),
+                        "symbol":     sym,
+                        "name":       pr.get("companyName", sym),
+                        "pe":         round(pe, 1) if pe else None,
+                        "ev_ebitda":  round(ev_e, 1) if ev_e else None,
+                        "p_fcf":      round(p_fcf, 1) if p_fcf else None,
+                        "roic":       round((roic or 0) * 100, 1),
+                        "net_margin": round((npm or 0) * 100, 1),
+                        "market_cap": mc,
+                        "rev_growth": round((rev_g or 0) * 100, 1) if rev_g else None,
                     })
 
         has_statements = bool(res["inc_a"])
-        print(f"FMP {ticker}: statements={'yes' if has_statements else 'NO'} | km={len(res['km'])} | profile={'yes' if res['profile'] else 'no'} | peers={len(peer_comparison)}")
+        print(f"FMP {ticker}: stmts={'yes' if has_statements else 'NO'} | km={len(res['km'])} | ratios={len(res['ratios'])} | growth={len(res['growth'])} | earnings={len(res['earnings'])} | peers={len(peer_comparison)}")
         return {
             "income_annual":     res["inc_a"],
             "balance_annual":    res["bal_a"],
@@ -176,6 +214,8 @@ def get_fmp_financials(ticker: str) -> dict:
             "cashflow_quarterly":res["cf_q"],
             "profile":           res["profile"],
             "key_metrics":       res["km"],
+            "km_ttm":            res["km_ttm"],
+            "ratios":            res["ratios"],
             "financial_growth":  res["growth"],
             "analyst_estimates": res["estimates"],
             "rating":            res["rating"],
@@ -495,10 +535,21 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
                 pass
 
     km_list = fmp.get("key_metrics", [])
+    ratios_list = fmp.get("ratios", [])
+    km_ttm_list = fmp.get("km_ttm", [])
+
+    # Merge TTM into km_list[0] if km_list is empty
+    if not km_list and km_ttm_list:
+        km_list = km_ttm_list
+
     if km_list:
         km = km_list[0]
-        print(f"FMP km keys: {list(km.keys())[:20]}")
-        # Try both camelCase variants (stable API may differ from v3/v4)
+        # Also merge ratios[0] into km for broader field coverage
+        if ratios_list:
+            for k2, v2 in ratios_list[0].items():
+                if k2 not in km or km[k2] is None:
+                    km[k2] = v2
+        print(f"FMP km keys: {list(km.keys())[:25]}")
         def _km(candidates):
             for fk in candidates:
                 v = safe_float(km.get(fk))
@@ -506,7 +557,7 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
                     return v
             return None
         for k, candidates in [
-            ("pe_ratio",        ["peRatio", "priceEarningsRatio", "pe"]),
+            ("pe_ratio",        ["peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio"]),
             ("p_sales",         ["priceToSalesRatio", "priceSalesRatio", "ps"]),
             ("p_fcf",           ["pfcfRatio", "priceToFreeCashFlowsRatio", "pfcf"]),
             ("p_book",          ["pbRatio", "priceToBookRatio", "pb"]),
@@ -528,17 +579,32 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         ]:
             v = _km(candidates)
             if v is not None: facts[k] = round(v * 100, 2)
-        # history of key ratios
+        # Build historical multiples — merge km_list and ratios_list by date
+        ratios_by_date = {p.get("date","")[:10]: p for p in (ratios_list or [])}
         km_hist = []
-        for p in km_list[:6]:
+        for p in km_list[:8]:
+            dt = p.get("date","")[:10]
+            r = ratios_by_date.get(dt, {})
+            def _kv(*keys):
+                for k3 in keys:
+                    v3 = safe_float(p.get(k3)) or safe_float(r.get(k3))
+                    if v3 is not None:
+                        return v3
+                return None
+            pe_v   = _kv("peRatio","priceEarningsRatio","pe","priceToEarningsRatio")
+            ev_v   = _kv("enterpriseValueOverEBITDA","evEbitda","evToEbitda")
+            roic_v = _kv("roic","returnOnInvestedCapital")
+            pfcf_v = _kv("pfcfRatio","priceToFreeCashFlowsRatio","priceToFreeCashFlow")
+            cr_v   = _kv("currentRatio")
+            de_v   = _kv("debtToEquity","debtEquityRatio")
             km_hist.append({
-                "date": p.get("date","")[:10],
-                "pe": safe_float(p.get("peRatio")),
-                "ev_ebitda": safe_float(p.get("enterpriseValueOverEBITDA")),
-                "roic": round(safe_float(p.get("roic") or 0) * 100, 1),
-                "p_fcf": safe_float(p.get("pfcfRatio")),
-                "current_ratio": safe_float(p.get("currentRatio")),
-                "debt_equity": safe_float(p.get("debtToEquity")),
+                "date":          dt,
+                "pe":            round(pe_v, 1) if pe_v else None,
+                "ev_ebitda":     round(ev_v, 1) if ev_v else None,
+                "roic":          round(roic_v * 100, 1) if roic_v else None,
+                "p_fcf":         round(pfcf_v, 1) if pfcf_v else None,
+                "current_ratio": round(cr_v, 2) if cr_v else None,
+                "debt_equity":   round(de_v, 2) if de_v else None,
             })
         if km_hist:
             fmp_ext["km_history"] = km_hist
@@ -604,15 +670,21 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
 
     raw_earnings = fmp.get("earnings", [])
     if raw_earnings:
-        fmp_ext["earnings_surprises"] = [
-            {
-                "date": p.get("date","")[:10],
-                "eps_actual": safe_float(p.get("actualEarningResult")),
-                "eps_est": safe_float(p.get("estimatedEarning")),
-                "surprise_pct": round((safe_float(p.get("actualEarningResult") or 0) - (safe_float(p.get("estimatedEarning")) or 0)) / abs(safe_float(p.get("estimatedEarning")) or 1) * 100, 1) if p.get("estimatedEarning") else None,
-            }
-            for p in raw_earnings[:8]
-        ]
+        surprises = []
+        for p in raw_earnings[:8]:
+            # v3 field names: actualEarningResult / estimatedEarning
+            # v3 alt: actual / estimate / date
+            actual = safe_float(p.get("actualEarningResult") or p.get("actual") or p.get("actualEps"))
+            est    = safe_float(p.get("estimatedEarning") or p.get("estimate") or p.get("estimatedEps"))
+            dt     = (p.get("date") or p.get("fiscalDateEnding") or "")[:10]
+            if not dt:
+                continue
+            surp = None
+            if actual is not None and est is not None and est != 0:
+                surp = round((actual - est) / abs(est) * 100, 1)
+            surprises.append({"date": dt, "eps_actual": actual, "eps_est": est, "surprise_pct": surp})
+        if surprises:
+            fmp_ext["earnings_surprises"] = surprises
 
     # Revenue segments — each period is {date, seg1: val, seg2: val, ...}
     raw_segs = fmp.get("segments", [])
