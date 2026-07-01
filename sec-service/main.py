@@ -499,6 +499,39 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         if pq_rev and pq_oi:  pqfacts["operating_margin_pct"] = round(pq_oi / pq_rev * 100, 1)
         if pq_rev and pq_ni:  pqfacts["net_margin_pct"]        = round(pq_ni / pq_rev * 100, 1)
 
+    # ── Quarterly trend (last 8 quarters for seasonality analysis) ───────────
+    q_trend = []
+    for qi, qp in enumerate(inc_q[:8]):
+        dt = (qp.get("date","") or "")[:10]
+        if not dt:
+            continue
+        cqp = cf_q[qi] if qi < len(cf_q) else {}
+        rv = safe_float(qp.get("revenue"))
+        gp = safe_float(qp.get("grossProfit"))
+        oi = safe_float(qp.get("operatingIncome"))
+        ni = safe_float(qp.get("netIncome"))
+        ep = safe_float(qp.get("epsDiluted"))
+        fc = safe_float(cqp.get("freeCashFlow"))
+        sbc_q = safe_float(cqp.get("stockBasedCompensation"))
+        entry: dict = {"date": dt}
+        if rv is not None: entry["revenue"] = rv
+        if gp is not None: entry["gross_profit"] = gp
+        if oi is not None: entry["operating_income"] = oi
+        if ni is not None: entry["net_income"] = ni
+        if ep is not None: entry["eps_diluted"] = ep
+        if fc is not None: entry["free_cash_flow"] = fc
+        if sbc_q is not None and fc is not None: entry["sbc_adjusted_fcf"] = fc - sbc_q
+        if rv and rv > 0:
+            if gp: entry["gross_margin_pct"] = round(gp/rv*100, 1)
+            if oi: entry["operating_margin_pct"] = round(oi/rv*100, 1)
+            if ni: entry["net_margin_pct"] = round(ni/rv*100, 1)
+        q_trend.append(entry)
+    if q_trend:
+        q_trend.reverse()  # oldest first
+        q_trend_obj: dict = {"quarters": q_trend}
+        # Add key export for frontend
+        pass
+
     # ── Extended data (profile, valuation, analyst) ───────────────────────────
     fmp_ext: dict = {}
 
@@ -718,6 +751,10 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     peer_comp = fmp.get("peer_comparison", [])
     if peer_comp:
         fmp_ext["peer_comparison"] = peer_comp
+
+    # Quarterly trends
+    if q_trend:
+        fmp_ext["quarterly_trends"] = q_trend
 
     # Derived valuation ratios from price (fallback when key-metrics doesn't populate them)
     price = facts.get("stock_price")

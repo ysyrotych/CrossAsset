@@ -11,6 +11,7 @@ type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number
 type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number; market_cap?: number|null; rev_growth?: number|null }[];
 type SegmentData = { date: string; data: Record<string, number> };
 type AnalystEstimates = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
+type QuarterlyTrend = { date: string; revenue?: number; gross_margin_pct?: number; operating_margin_pct?: number; net_margin_pct?: number; eps_diluted?: number; free_cash_flow?: number }[];
 
 export type FinancialAnalyticsProps = {
   ticker: string;
@@ -28,6 +29,7 @@ export type FinancialAnalyticsProps = {
   geoSegments?: SegmentData;
   analystEstimates?: AnalystEstimates;
   fmpRating?: string;
+  quarterlyTrends?: QuarterlyTrend;
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -599,7 +601,7 @@ type CatId = typeof CATS[number]["id"];
 export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
-  segments, geoSegments, analystEstimates=[], fmpRating,
+  segments, geoSegments, analystEstimates=[], fmpRating, quarterlyTrends=[],
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -1229,6 +1231,35 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 color={BLUE}
               />
             </Card>
+            {quarterlyTrends.length>=4&&(
+              <Card title="8-Quarter Revenue Trend" sub="Sequential quarterly revenue | seasonal pattern" badge="QoQ">
+                <BarChart
+                  data={quarterlyTrends.map(q=>({label:q.date?.slice(0,7)??"",value:q.revenue??0}))}
+                  color={BLUE} showGrowth
+                />
+              </Card>
+            )}
+            {quarterlyTrends.length>=4&&(
+              <Card title="Quarterly Margin Trend" sub="Gross / Op / Net margins per quarter">
+                <LineChart
+                  labels={quarterlyTrends.map(q=>q.date?.slice(0,7)??"" )}
+                  series={[
+                    {name:"Gross %",values:quarterlyTrends.map(q=>q.gross_margin_pct??null),color:TEAL},
+                    {name:"Op %",values:quarterlyTrends.map(q=>q.operating_margin_pct??null),color:BLUE},
+                    {name:"Net %",values:quarterlyTrends.map(q=>q.net_margin_pct??null),color:GREEN},
+                  ]}
+                  pct
+                />
+              </Card>
+            )}
+            {quarterlyTrends.length>=4&&(
+              <Card title="Quarterly EPS Diluted" sub="Per-share earnings cadence">
+                <BarChart
+                  data={quarterlyTrends.map(q=>({label:q.date?.slice(0,7)??"",value:q.eps_diluted??0}))}
+                  color={AMBER} showGrowth
+                />
+              </Card>
+            )}
           </div>
         )}
 

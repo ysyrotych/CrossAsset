@@ -26,6 +26,7 @@ type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number
 type AnalystEstimate = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
 type PeerComp      = { symbol: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number }[];
 type RecentNews    = { title: string; date: string; summary: string; source: string }[];
+type QuarterlyTrendItem = { date: string; revenue?: number; gross_margin_pct?: number; operating_margin_pct?: number; net_margin_pct?: number; eps_diluted?: number; free_cash_flow?: number };
 type FmpExtended   = {
   ceo?: string; sector?: string; fmp_industry?: string; country?: string; exchange?: string;
   website?: string; ipo_date?: string; company_description?: string; fmp_rating?: string;
@@ -33,6 +34,7 @@ type FmpExtended   = {
   km_history?: KmHistory; growth_history?: GrowthHistory;
   earnings_surprises?: EarningsSurprise; analyst_estimates?: AnalystEstimate;
   peer_comparison?: PeerComp; recent_news?: RecentNews;
+  quarterly_trends?: QuarterlyTrendItem[];
 };
 type Payload       = {
   company: CompanyInfo;
@@ -2039,6 +2041,7 @@ export default function TenKPage() {
               geoSegments={data.fmp_extended?.geo_segments}
               analystEstimates={data.fmp_extended?.analyst_estimates}
               fmpRating={data.fmp_extended?.fmp_rating}
+              quarterlyTrends={data.fmp_extended?.quarterly_trends}
             />
           </div>
 
