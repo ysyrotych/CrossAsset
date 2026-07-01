@@ -122,6 +122,9 @@ def get_fmp_financials(ticker: str) -> dict:
             r = fetch("financial-growth", {"period": "annual"}, limit)
             if r:
                 return r
+            r2 = fetch("financial-growth", None, limit)
+            if r2:
+                return r2
             return fetch_v3("financial-growth", limit)
 
         def fetch_ratios(limit=6):
@@ -135,6 +138,16 @@ def get_fmp_financials(ticker: str) -> dict:
             if r:
                 return r
             return fetch_v3("earnings-surprises", limit)
+
+        def fetch_news(limit=12):
+            r = fetch("news/stock", {"symbols": ticker}, limit)
+            if r:
+                return r
+            # Try legacy stable endpoint
+            r2 = fetch("stock-news", None, limit)
+            if r2:
+                return r2
+            return []
 
         with _cf.ThreadPoolExecutor(max_workers=18) as ex:
             fs = {
@@ -155,7 +168,7 @@ def get_fmp_financials(ticker: str) -> dict:
                 "earnings":  ex.submit(fetch_earnings, 8),
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
-                "news":      ex.submit(fetch, "stock-news", None, 12),
+                "news":      ex.submit(fetch_news, 12),
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
             }
             res = {k: v.result() for k, v in fs.items()}
@@ -719,6 +732,40 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         if gh:
             fmp_ext["growth_history"] = gh
 
+    # Fallback: compute growth_history from income_annual when financial-growth is empty
+    if not fmp_ext.get("growth_history") and len(inc_a) >= 2:
+        gh_computed = []
+        for i in range(len(inc_a) - 1):
+            curr, prev = inc_a[i], inc_a[i + 1]
+            dt = (curr.get("date", "") or "")[:10]
+            if not dt:
+                continue
+            rev_c  = safe_float(curr.get("revenue"))
+            rev_p  = safe_float(prev.get("revenue"))
+            eps_c  = safe_float(curr.get("epsDiluted"))
+            eps_p  = safe_float(prev.get("epsDiluted"))
+            fcf_c  = safe_float(curr.get("freeCashFlow"))
+            fcf_p  = safe_float(prev.get("freeCashFlow"))
+            def _g(c, p):
+                if c and p and p != 0:
+                    return round((c - p) / abs(p) * 100, 1)
+                return 0.0
+            gh_computed.append({
+                "date": dt,
+                "rev_growth": _g(rev_c, rev_p),
+                "eps_growth": _g(eps_c, eps_p),
+                "fcf_growth": _g(fcf_c, fcf_p),
+            })
+            # Also fill YoY growth facts from most recent
+            if i == 0:
+                if not facts.get("revenue_growth_yoy") and rev_c and rev_p and rev_p != 0:
+                    facts["revenue_growth_yoy"] = _g(rev_c, rev_p)
+                if not facts.get("eps_growth_yoy") and eps_c and eps_p and eps_p != 0:
+                    facts["eps_growth_yoy"] = _g(eps_c, eps_p)
+        if gh_computed:
+            gh_computed.reverse()  # oldest first
+            fmp_ext["growth_history"] = gh_computed
+
     estimates = fmp.get("analyst_estimates", [])
     if estimates:
         ne = estimates[0]
@@ -760,11 +807,15 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     if raw_earnings:
         surprises = []
         for p in raw_earnings[:8]:
-            # v3 field names: actualEarningResult / estimatedEarning
-            # v3 alt: actual / estimate / date
-            actual = safe_float(p.get("actualEarningResult") or p.get("actual") or p.get("actualEps"))
-            est    = safe_float(p.get("estimatedEarning") or p.get("estimate") or p.get("estimatedEps"))
-            dt     = (p.get("date") or p.get("fiscalDateEnding") or "")[:10]
+            actual = safe_float(
+                p.get("actualEarningResult") or p.get("actual") or p.get("actualEps") or
+                p.get("reportedEPS") or p.get("eps")
+            )
+            est = safe_float(
+                p.get("estimatedEarning") or p.get("estimate") or p.get("estimatedEps") or
+                p.get("estimatedEPS") or p.get("consensusEPS")
+            )
+            dt = (p.get("date") or p.get("fiscalDateEnding") or p.get("reportedDate") or "")[:10]
             if not dt:
                 continue
             surp = None
@@ -776,7 +827,7 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
 
     # Revenue segments — FMP returns {date, segName: value} or {date, segName: {value: ...}}
     # Exclude metadata keys: date, fiscalYear, symbol, period, reportedCurrency
-    _META_KEYS = {"date", "fiscalYear", "fiscal_year", "symbol", "period", "reportedCurrency", "cik", "acceptedDate", "link", "finalLink"}
+    _META_KEYS = {"date", "fiscalYear", "fiscal_year", "symbol", "period", "reportedCurrency", "cik", "acceptedDate", "link", "finalLink", "data", "total"}
 
     def _parse_seg(raw_list: list) -> dict:
         if not raw_list:
@@ -816,9 +867,9 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         fmp_ext["recent_news"] = [
             {
                 "title":   p.get("title", ""),
-                "date":    (p.get("publishedDate") or p.get("date", ""))[:10],
-                "summary": (p.get("text") or p.get("summary") or "")[:200],
-                "source":  p.get("site", ""),
+                "date":    (p.get("publishedDate") or p.get("date") or p.get("publishDate") or "")[:10],
+                "summary": (p.get("text") or p.get("summary") or p.get("description") or "")[:200],
+                "source":  p.get("site") or p.get("source") or "",
             }
             for p in raw_news[:10] if p.get("title")
         ]
