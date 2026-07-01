@@ -1448,7 +1448,7 @@ def _yf_get(yf_stmt: dict, *keys: str, col_idx: int = 0) -> Optional[float]:
     return None
 
 def _yf_series(yf_stmt: dict, *keys: str) -> dict:
-    """Build {date: value} series from yfinance statement, newest-first cols → sorted asc result."""
+    """Build {date: value} series from yfinance statement, sorted oldest-first (ascending)."""
     cols = yf_stmt.get("columns", [])
     if not cols:
         return {}
@@ -1457,7 +1457,8 @@ def _yf_series(yf_stmt: dict, *keys: str) -> dict:
         if vals:
             result = {cols[i]: v for i, v in enumerate(vals) if v is not None and i < len(cols)}
             if result:
-                return result
+                # Sort by date string ascending so oldest comes first — critical for CAGR formulas
+                return dict(sorted(result.items()))
     return {}
 
 def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
@@ -1891,6 +1892,27 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
             for k, v in supp_facts.items():
                 if k in FMP_SUPPLEMENTAL:
                     merged_facts[k] = v
+
+    # ── Compute YoY growth rates from history when FMP didn't provide them ───────
+    def _yoy(series: dict) -> Optional[float]:
+        """Return (latest/prior - 1)*100 from a chronologically-sorted history dict."""
+        vals = list(series.values()) if series else []
+        if len(vals) >= 2 and vals[-2] and vals[-2] != 0:
+            return round((vals[-1] - vals[-2]) / abs(vals[-2]) * 100, 1)
+        return None
+
+    if not merged_facts.get("revenue_growth_yoy") and merged_history.get("revenue"):
+        v = _yoy(merged_history["revenue"])
+        if v is not None: merged_facts["revenue_growth_yoy"] = v
+    if not merged_facts.get("eps_growth_yoy") and merged_history.get("eps_diluted"):
+        v = _yoy(merged_history["eps_diluted"])
+        if v is not None: merged_facts["eps_growth_yoy"] = v
+    if not merged_facts.get("fcf_growth_yoy") and merged_history.get("free_cash_flow"):
+        v = _yoy(merged_history["free_cash_flow"])
+        if v is not None: merged_facts["fcf_growth_yoy"] = v
+    if not merged_facts.get("ni_growth_yoy") and merged_history.get("net_income"):
+        v = _yoy(merged_history["net_income"])
+        if v is not None: merged_facts["ni_growth_yoy"] = v
 
     # ── Post-merge: compute missing valuation multiples from available data ──────
     _mc  = merged_facts.get("market_cap")
