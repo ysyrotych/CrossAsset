@@ -103,19 +103,24 @@ def get_fmp_financials(ticker: str) -> dict:
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
                 "news":      ex.submit(fetch, "stock-news", None, 10),
-                "peers":     ex.submit(fetch_one, "stock-peers"),
+                # stable API returns a list of peer objects (not {peersList:[...]} dict)
+                "peers":     ex.submit(fetch, "stock-peers", None, 15),
             }
             res = {k: v.result() for k, v in fs.items()}
 
         # Fetch peer key-metrics (up to 4 peers) in a second executor
+        # FMP stable /stock-peers returns: [{symbol, companyName, price, mktCap}, ...]
         peer_comparison: list = []
-        peers_raw = res.get("peers", {})
-        if isinstance(peers_raw, dict):
-            peer_symbols = peers_raw.get("peersList", [])[:4]
-        elif isinstance(peers_raw, list) and peers_raw:
-            peer_symbols = peers_raw[0].get("peersList", [])[:4] if isinstance(peers_raw[0], dict) else []
+        peers_raw = res.get("peers", [])
+        if isinstance(peers_raw, list):
+            # New stable API: each item is a peer company object
+            peer_symbols = [p["symbol"] for p in peers_raw if isinstance(p, dict) and p.get("symbol")][:5]
+        elif isinstance(peers_raw, dict):
+            # Legacy format: {peersList: ["GOOGL", ...]}
+            peer_symbols = peers_raw.get("peersList", [])[:5]
         else:
             peer_symbols = []
+        print(f"FMP peers for {ticker}: {peer_symbols}")
 
         if peer_symbols:
             def fetch_peer_km(sym: str) -> dict:
@@ -124,23 +129,33 @@ def get_fmp_financials(ticker: str) -> dict:
                     rp = httpx.get(url, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     if rp.status_code == 200:
                         d = rp.json()
-                        return d[0] if isinstance(d, list) and d else {}
+                        km_item = d[0] if isinstance(d, list) and d else {}
+                        print(f"Peer {sym} km keys: {list(km_item.keys())[:15]}")
+                        return km_item
                     return {}
-                except Exception:
+                except Exception as e:
+                    print(f"Peer km fetch error for {sym}: {e}")
                     return {}
 
-            with _cf.ThreadPoolExecutor(max_workers=4) as ex2:
+            with _cf.ThreadPoolExecutor(max_workers=5) as ex2:
                 peer_km_fs = {sym: ex2.submit(fetch_peer_km, sym) for sym in peer_symbols}
                 peer_km_map = {sym: f.result() for sym, f in peer_km_fs.items()}
+
+            def _peer_val(km, *keys):
+                for k in keys:
+                    v = safe_float(km.get(k))
+                    if v is not None:
+                        return v
+                return None
 
             for sym in peer_symbols:
                 km = peer_km_map.get(sym, {})
                 if km:
-                    pe    = safe_float(km.get("peRatio"))
-                    ev_e  = safe_float(km.get("enterpriseValueOverEBITDA"))
-                    p_fcf = safe_float(km.get("pfcfRatio"))
-                    roic  = safe_float(km.get("roic"))
-                    npm   = safe_float(km.get("netProfitMargin"))
+                    pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe")
+                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda")
+                    p_fcf = _peer_val(km, "pfcfRatio", "priceToFreeCashFlowsRatio")
+                    roic  = _peer_val(km, "roic", "returnOnInvestedCapital")
+                    npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT")
                     peer_comparison.append({
                         "symbol":    sym,
                         "pe":        round(pe, 1) if pe else None,
@@ -466,10 +481,12 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
                 if v:
                     fmp_ext[k] = v
                     break
-        mc = safe_float(profile.get("mktCap") or profile.get("marketCap") or profile.get("marketCapitalization"))
+        mc = safe_float(profile.get("marketCap") or profile.get("mktCap") or profile.get("marketCapitalization"))
         if mc: facts["market_cap"] = mc
         beta = safe_float(profile.get("beta"))
         if beta: facts["beta"] = beta
+        price = safe_float(profile.get("price"))
+        if price: facts["stock_price"] = price
         emp = profile.get("fullTimeEmployees") or profile.get("employees")
         if emp:
             try:
