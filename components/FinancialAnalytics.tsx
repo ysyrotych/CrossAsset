@@ -9,6 +9,8 @@ type KmHistory = { date: string; pe: number|null; ev_ebitda: number|null; roic: 
 type GrowthHistory = { date: string; rev_growth: number; eps_growth: number; fcf_growth: number }[];
 type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number|null; surprise_pct: number|null }[];
 type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number; market_cap?: number|null; rev_growth?: number|null }[];
+type SegmentData = { date: string; data: Record<string, number> };
+type AnalystEstimates = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
 
 export type FinancialAnalyticsProps = {
   ticker: string;
@@ -22,6 +24,9 @@ export type FinancialAnalyticsProps = {
   earningsSurprises?: EarningsSurprise;
   peers?: PeerComp;
   sector?: string;
+  segments?: SegmentData;
+  geoSegments?: SegmentData;
+  analystEstimates?: AnalystEstimates;
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -474,6 +479,78 @@ function NoData({ W=320, H=140 }:{ W?:number; H?:number }) {
   );
 }
 
+// Donut / pie chart
+function DonutChart({ data, H=180 }:{ data:{label:string;value:number}[]; H?:number }) {
+  const W=320;
+  const sorted=[...data].sort((a,b)=>Math.abs(b.value)-Math.abs(a.value)).slice(0,8);
+  if (!sorted.length) return <NoData W={W} H={H}/>;
+  const total=sorted.reduce((s,d)=>s+Math.abs(d.value),0);
+  if (!total) return <NoData W={W} H={H}/>;
+  const cx=80, cy=H/2, outerR=58, innerR=30;
+  let ang=-Math.PI/2;
+  const slices=sorted.map((d,i)=>{
+    const pct=Math.abs(d.value)/total;
+    const end=ang+pct*2*Math.PI;
+    const x1=cx+outerR*Math.cos(ang), y1=cy+outerR*Math.sin(ang);
+    const x2=cx+outerR*Math.cos(end),  y2=cy+outerR*Math.sin(end);
+    const ix1=cx+innerR*Math.cos(end), iy1=cy+innerR*Math.sin(end);
+    const ix2=cx+innerR*Math.cos(ang), iy2=cy+innerR*Math.sin(ang);
+    const large=pct>0.5?1:0;
+    const path=`M${x1},${y1}A${outerR},${outerR},0,${large},1,${x2},${y2}L${ix1},${iy1}A${innerR},${innerR},0,${large},0,${ix2},${iy2}Z`;
+    const mid=(ang+end)/2;
+    ang=end;
+    return{path,color:PALETTE[i%PALETTE.length],pct,mid,label:d.label,value:d.value};
+  });
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+      {slices.map((s,i)=>(
+        <path key={i} d={s.path} fill={s.color} opacity="0.88" stroke={DARK_BG} strokeWidth="0.8"/>
+      ))}
+      {/* Centre label */}
+      <text x={cx} y={cy-3} textAnchor="middle" fontSize="8" fill="#ffffff40">TOP</text>
+      <text x={cx} y={cy+7} textAnchor="middle" fontSize="8" fill="#ffffff40">{sorted.length}</text>
+      {/* Legend */}
+      {slices.map((s,i)=>(
+        <g key={i} transform={`translate(150,${8+i*21})`}>
+          <rect x="0" y="-6" width="8" height="8" fill={s.color} rx="1" opacity="0.88"/>
+          <text x="11" y="0" fontSize="7" fill="#ffffff55">
+            {s.label.length>22?s.label.slice(0,22)+"…":s.label}
+          </text>
+          <text x="11" y="10" fontSize="6.5" fill="#ffffff30">{(s.pct*100).toFixed(1)}% · {abbr(s.value,"$")}</text>
+        </g>
+      ))}
+    </svg>
+  );
+}
+
+// Horizontal gauge bar (used for Altman Z)
+function GaugeBar({ value, min, max, zones, H=40 }:{
+  value:number; min:number; max:number;
+  zones:{from:number;to:number;color:string;label:string}[];
+  H?:number;
+}) {
+  const W=320;
+  const cw=W-PAD.l-PAD.r;
+  const toX=(v:number)=>PAD.l+Math.max(0,Math.min(1,(v-min)/(max-min||1)))*cw;
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+      {zones.map((z,i)=>{
+        const x1=toX(Math.max(z.from,min)), x2=toX(Math.min(z.to,max));
+        return(
+          <g key={i}>
+            <rect x={x1} y={10} width={Math.max(0,x2-x1)} height={12} fill={z.color} opacity="0.3" rx="1"/>
+            <text x={(x1+x2)/2} y={30} textAnchor="middle" fontSize="6.5" fill={z.color} fontWeight="600">{z.label}</text>
+          </g>
+        );
+      })}
+      {/* Needle */}
+      <line x1={toX(value)} x2={toX(value)} y1={6} y2={26} stroke={AMBER} strokeWidth="2" strokeLinecap="round"/>
+      <circle cx={toX(value)} cy={16} r="4" fill={AMBER}/>
+      <text x={toX(value)} y={4} textAnchor="middle" fontSize="7.5" fill={AMBER} fontWeight="700">{value.toFixed(2)}</text>
+    </svg>
+  );
+}
+
 // ── Chart Card ────────────────────────────────────────────────────────────────
 
 function Card({ title, sub, badge, children }:{ title:string; sub?:string; badge?:string; children:React.ReactNode }) {
@@ -512,6 +589,7 @@ const CATS = [
   { id:"multiples", label:"Valuation",            icon:Zap         },
   { id:"quality",   label:"Quality & Peers",      icon:Users       },
   { id:"quant",     label:"Quant & Scenarios",    icon:Calculator  },
+  { id:"signals",   label:"Signals & Scores",     icon:Sparkles    },
 ] as const;
 type CatId = typeof CATS[number]["id"];
 
@@ -520,6 +598,7 @@ type CatId = typeof CATS[number]["id"];
 export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
+  segments, geoSegments, analystEstimates=[],
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -728,6 +807,180 @@ export default function FinancialAnalytics({
     assetTO:   (()=>{const r=history.revenue?.[y];const a=history.total_assets?.[y];return r&&a&&a>0?r/a:0;})(),
     leverage:  (()=>{const a=history.total_assets?.[y];const e=history.equity?.[y];return a&&e&&e>0?a/e:0;})(),
   }));
+
+  // ── Piotroski F-Score ─────────────────────────────────────────────────────
+  const piotroski = useMemo(() => {
+    const years = Object.keys(history.revenue || {}).sort();
+    const cy = years[years.length - 1];
+    const py = years[years.length - 2];
+    const criteria: { label: string; pass: boolean; desc: string }[] = [];
+
+    const roa = facts.net_income && facts.total_assets && facts.total_assets > 0 ? facts.net_income / facts.total_assets : null;
+    const prevNI = py ? (history.net_income?.[py] ?? null) : null;
+    const prevTA = py ? (history.total_assets?.[py] ?? null) : null;
+    const prevROA = prevNI != null && prevTA && prevTA > 0 ? prevNI / prevTA : null;
+    const ocf = facts.operating_cf ?? null;
+    const ta = facts.total_assets ?? null;
+    const ni = facts.net_income ?? null;
+
+    // F1: ROA > 0
+    criteria.push({ label: "ROA > 0", pass: (roa ?? -1) > 0, desc: roa != null ? `${(roa*100).toFixed(1)}%` : "—" });
+    // F2: OCF > 0
+    criteria.push({ label: "OCF > 0", pass: (ocf ?? -1) > 0, desc: ocf != null ? abbr(ocf,"$") : "—" });
+    // F3: ΔROA > 0
+    if (roa != null && prevROA != null) {
+      const delta = roa - prevROA;
+      criteria.push({ label: "ΔROA > 0", pass: delta > 0, desc: `${delta >= 0 ? "+" : ""}${(delta*100).toFixed(1)}pp` });
+    }
+    // F4: Accruals quality (OCF/TA > ROA)
+    if (ocf != null && ta && ta > 0 && roa != null) {
+      const q = ocf / ta;
+      criteria.push({ label: "OCF Quality", pass: q > roa, desc: `OCF/TA ${(q*100).toFixed(1)}%` });
+    }
+    // F5: ΔLeverage < 0
+    const ltd = facts.long_term_debt ?? null;
+    const prevLTD = py ? (history.long_term_debt?.[py] ?? null) : null;
+    if (ltd != null && ta && prevLTD != null && prevTA) {
+      const curL = ltd / ta, prevL = prevLTD / prevTA;
+      criteria.push({ label: "ΔLeverage < 0", pass: curL < prevL, desc: `${(curL*100).toFixed(0)}% vs ${(prevL*100).toFixed(0)}%` });
+    }
+    // F6: ΔCurrent Ratio > 0
+    const ca = facts.current_assets ?? null;
+    const cl = facts.current_liabilities ?? null;
+    const prevCA = py ? (history.current_assets?.[py] ?? null) : null;
+    const prevCL = py ? (history.current_liabilities?.[py] ?? null) : null;
+    if (ca && cl && cl > 0 && prevCA && prevCL && prevCL > 0) {
+      const cr = ca / cl, prevCR = prevCA / prevCL;
+      criteria.push({ label: "ΔCurrent Ratio > 0", pass: cr > prevCR, desc: `${cr.toFixed(2)}x vs ${prevCR.toFixed(2)}x` });
+    }
+    // F7: No share dilution
+    const curSh = facts.shares_diluted_wtd ?? null;
+    const prevSh = py ? (history.shares_diluted_wtd?.[py] ?? null) : null;
+    if (curSh && prevSh) {
+      const chg = (curSh - prevSh) / prevSh;
+      criteria.push({ label: "No Dilution", pass: curSh <= prevSh * 1.005, desc: `${chg >= 0 ? "+" : ""}${(chg*100).toFixed(1)}%` });
+    }
+    // F8: ΔGross Margin > 0
+    const gm = facts.gross_margin_pct ?? null;
+    const prevGP = py ? (history.gross_profit?.[py] ?? null) : null;
+    const prevRev = py ? (history.revenue?.[py] ?? null) : null;
+    const prevGM = prevGP && prevRev && prevRev > 0 ? prevGP / prevRev * 100 : null;
+    if (gm != null && prevGM != null) {
+      criteria.push({ label: "ΔGross Margin > 0", pass: gm > prevGM, desc: `${gm.toFixed(1)}% vs ${prevGM.toFixed(1)}%` });
+    }
+    // F9: ΔAsset Turnover > 0
+    const rev = facts.revenue ?? null;
+    const prevRevAT = py ? (history.revenue?.[py] ?? null) : null;
+    if (rev && ta && prevRevAT && prevTA) {
+      const at = rev / ta, prevAT = prevRevAT / prevTA;
+      criteria.push({ label: "ΔAsset Turnover > 0", pass: at > prevAT, desc: `${at.toFixed(2)}x vs ${prevAT.toFixed(2)}x` });
+    }
+
+    const score = criteria.filter(c => c.pass).length;
+    return { score, criteria, maxScore: criteria.length };
+  }, [facts, history]);
+
+  // ── Altman Z-Score ────────────────────────────────────────────────────────
+  const altmanZ = useMemo(() => {
+    const wc = (facts.current_assets ?? 0) - (facts.current_liabilities ?? 0);
+    const ta = facts.total_assets;
+    const re = facts.retained_earnings ?? 0;
+    const ebit = facts.operating_income ?? 0;
+    const mc = facts.market_cap ?? 0;
+    const tl = Math.max(facts.total_liabilities ?? 1, 1);
+    const rev = facts.revenue ?? 0;
+    if (!ta || ta === 0) return null;
+    const x1 = wc / ta;
+    const x2 = re / ta;
+    const x3 = ebit / ta;
+    const x4 = mc / tl;
+    const x5 = rev / ta;
+    const z = 1.2*x1 + 1.4*x2 + 3.3*x3 + 0.6*x4 + 1.0*x5;
+    const zone = z > 2.99 ? "SAFE" : z > 1.81 ? "GRAY" : "DISTRESS";
+    const color = z > 2.99 ? GREEN : z > 1.81 ? AMBER : RED;
+    return { z: parseFloat(z.toFixed(2)), x1, x2, x3, x4, x5, zone, color };
+  }, [facts]);
+
+  // ── Reverse DCF (market-implied growth rate) ─────────────────────────────
+  const reverseDCF = useMemo(() => {
+    const mc = facts.market_cap;
+    const fcf = facts.free_cash_flow;
+    const rev = facts.revenue;
+    const wacc = 0.09;
+    if (!mc || !fcf || !rev || fcf <= 0 || mc <= 0) return null;
+    const fcfMargin = fcf / rev;
+    const ebitdaMarg = facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue : 0.25;
+    const termMult = facts.ev_ebitda || 15;
+    const netDebtV = (facts.long_term_debt ?? 0) - (facts.cash ?? 0);
+    const targetEV = mc + netDebtV;
+    let lo = -0.25, hi = 1.5, impliedG = 0.10;
+    for (let iter = 0; iter < 60; iter++) {
+      const g = (lo + hi) / 2;
+      let cumFcf = 0, curRev = rev;
+      for (let yr = 1; yr <= 5; yr++) {
+        curRev *= (1 + g);
+        cumFcf += curRev * fcfMargin / Math.pow(1 + wacc, yr);
+      }
+      const termEV = curRev * ebitdaMarg * termMult / Math.pow(1 + wacc, 5);
+      const totalEV = cumFcf + termEV;
+      if (Math.abs(totalEV - targetEV) < targetEV * 0.0005) { impliedG = g; break; }
+      if (totalEV < targetEV) lo = g; else hi = g;
+      impliedG = g;
+    }
+    const revVals = Object.values(history.revenue || {});
+    const histCAGR = revVals.length >= 2
+      ? Math.pow(revVals[revVals.length-1] / Math.max(revVals[0], 1), 1 / Math.max(revVals.length-1, 1)) - 1
+      : null;
+    return {
+      impliedGrowth: parseFloat((impliedG * 100).toFixed(1)),
+      fcfYield: parseFloat((fcf / mc * 100).toFixed(1)),
+      histCAGR: histCAGR != null ? parseFloat((histCAGR * 100).toFixed(1)) : null,
+      wacc: 9,
+    };
+  }, [facts, history]);
+
+  // ── Earnings streak ───────────────────────────────────────────────────────
+  const earningsStreak = useMemo(() => {
+    let beats = 0, misses = 0, streak = 0;
+    for (const e of earningsSurprises.slice(0, 8)) {
+      if (e.surprise_pct == null) continue;
+      if (e.surprise_pct > 0) { streak++; } else { streak = 0; }
+      if (e.surprise_pct > 0) beats++; else misses++;
+    }
+    return { streak, beats, misses, total: beats + misses };
+  }, [earningsSurprises]);
+
+  // ── Quality composite score (0–100) ──────────────────────────────────────
+  const qualityScore = useMemo(() => {
+    let score = 0;
+    // Piotroski contribution: max 45 pts
+    if (piotroski.maxScore > 0) score += (piotroski.score / piotroski.maxScore) * 45;
+    // Altman Z contribution: max 25 pts
+    if (altmanZ) {
+      if (altmanZ.zone === "SAFE") score += 25;
+      else if (altmanZ.zone === "GRAY") score += 12;
+    }
+    // FCF yield > 3%: 10 pts
+    if (facts.free_cash_flow && facts.market_cap && facts.free_cash_flow / facts.market_cap > 0.03) score += 10;
+    // Earnings streak: 5 pts each consecutive beat, cap 20
+    score += Math.min(earningsStreak.streak * 5, 20);
+    return Math.min(100, Math.round(score));
+  }, [piotroski, altmanZ, facts, earningsStreak]);
+
+  // ── Segment data ──────────────────────────────────────────────────────────
+  const segmentItems = useMemo(() => {
+    if (!segments?.data) return [];
+    return Object.entries(segments.data)
+      .map(([label, value]) => ({ label, value: value as number }))
+      .sort((a, b) => b.value - a.value);
+  }, [segments]);
+
+  const geoItems = useMemo(() => {
+    if (!geoSegments?.data) return [];
+    return Object.entries(geoSegments.data)
+      .map(([label, value]) => ({ label, value: value as number }))
+      .sort((a, b) => b.value - a.value);
+  }, [geoSegments]);
 
   // ── AI Analysis ──────────────────────────────────────────────────────────
 
@@ -1126,6 +1379,200 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   pct
                 />
               </Card>
+            </div>
+          </div>
+        )}
+
+        {/* ── Signals & Scores ──────────────────────────────────── */}
+        {tab==="signals"&&(
+          <div className="space-y-4">
+            {/* Quality composite banner */}
+            <div className="rounded-lg p-4 flex items-center gap-6 border" style={{background:"rgba(59,130,246,0.06)",borderColor:DARK_BORDER}}>
+              <div className="text-center shrink-0">
+                <p className="text-[7px] font-bold uppercase tracking-widest mb-1" style={{color:"#ffffff30"}}>Quality Score</p>
+                <p className="text-[40px] font-bold tabular-nums leading-none" style={{color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED}}>{qualityScore}</p>
+                <p className="text-[8px] mt-1" style={{color:"#ffffff30"}}>out of 100</p>
+              </div>
+              <div className="flex-1 grid grid-cols-4 gap-3">
+                <Pill label="Piotroski" value={`${piotroski.score}/${piotroski.maxScore}`} color={piotroski.score>=7?GREEN:piotroski.score>=4?AMBER:RED}/>
+                <Pill label="Altman Z" value={altmanZ?`${altmanZ.z}`:"—"} color={altmanZ?.color??AMBER}/>
+                <Pill label="Imp. Growth" value={reverseDCF?`${reverseDCF.impliedGrowth}%`:"—"} color={BLUE}/>
+                <Pill label="Beat Streak" value={`${earningsStreak.streak}×`} color={earningsStreak.streak>=3?GREEN:earningsStreak.streak>=1?AMBER:RED}/>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              {/* Piotroski F-Score detail */}
+              <Card title="Piotroski F-Score" sub="9-factor fundamental quality" badge={`${piotroski.score}/${piotroski.maxScore}`}>
+                <div className="space-y-1.5 py-1">
+                  {piotroski.criteria.map((c,i)=>(
+                    <div key={i} className="flex items-center justify-between gap-2">
+                      <div className="flex items-center gap-1.5">
+                        <span className="text-[9px] font-bold" style={{color:c.pass?GREEN:RED}}>{c.pass?"✓":"✗"}</span>
+                        <span className="text-[9px]" style={{color:"#ffffff55"}}>{c.label}</span>
+                      </div>
+                      <span className="text-[8px] font-mono" style={{color:"#ffffff30"}}>{c.desc}</span>
+                    </div>
+                  ))}
+                  {piotroski.criteria.length===0&&<p className="text-[10px] text-center py-4" style={{color:"#ffffff20"}}>Insufficient history for F-Score</p>}
+                </div>
+              </Card>
+
+              {/* Altman Z-Score */}
+              <Card title="Altman Z-Score" sub="Financial distress predictor" badge={altmanZ?.zone??"N/A"}>
+                {altmanZ?(
+                  <div>
+                    <GaugeBar
+                      value={altmanZ.z}
+                      min={-1} max={5}
+                      zones={[
+                        {from:-1,to:1.81,color:RED,label:"Distress"},
+                        {from:1.81,to:2.99,color:AMBER,label:"Gray Zone"},
+                        {from:2.99,to:5,color:GREEN,label:"Safe"},
+                      ]}
+                    />
+                    <div className="mt-2 space-y-1">
+                      {[
+                        {k:"X1 = WC/TA",v:altmanZ.x1,w:"1.2"},
+                        {k:"X2 = RE/TA",v:altmanZ.x2,w:"1.4"},
+                        {k:"X3 = EBIT/TA",v:altmanZ.x3,w:"3.3"},
+                        {k:"X4 = MC/TL",v:altmanZ.x4,w:"0.6"},
+                        {k:"X5 = Rev/TA",v:altmanZ.x5,w:"1.0"},
+                      ].map((r,i)=>(
+                        <div key={i} className="flex items-center justify-between">
+                          <span className="text-[8px]" style={{color:"#ffffff35"}}>{r.k} <span style={{color:"#ffffff20"}}>w={r.w}</span></span>
+                          <span className="text-[8px] font-mono" style={{color:"#ffffff55"}}>{r.v.toFixed(3)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ):(
+                  <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>Missing balance sheet data</p></div>
+                )}
+              </Card>
+
+              {/* Reverse DCF */}
+              <Card title="Reverse DCF" sub="Growth implied by current price" badge="WACC 9%">
+                {reverseDCF?(
+                  <div className="py-2 space-y-3">
+                    <div className="text-center">
+                      <p className="text-[9px] font-bold uppercase tracking-widest mb-1" style={{color:"#ffffff30"}}>Implied 5Y Rev CAGR</p>
+                      <p className="text-[32px] font-bold tabular-nums leading-none" style={{color:reverseDCF.impliedGrowth>20?GREEN:reverseDCF.impliedGrowth>5?BLUE:RED}}>
+                        {reverseDCF.impliedGrowth}%
+                      </p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-2">
+                      <Pill label="FCF Yield" value={`${reverseDCF.fcfYield}%`} color={reverseDCF.fcfYield>4?GREEN:reverseDCF.fcfYield>2?AMBER:RED}/>
+                      <Pill label="Hist CAGR" value={reverseDCF.histCAGR!=null?`${reverseDCF.histCAGR}%`:"—"} color={TEAL}/>
+                    </div>
+                    {reverseDCF.histCAGR!=null&&(
+                      <div className="rounded p-2 text-center" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                        <p className="text-[9px]" style={{color:"#ffffff40"}}>
+                          {reverseDCF.impliedGrowth > reverseDCF.histCAGR
+                            ? `Priced at ${(reverseDCF.impliedGrowth - reverseDCF.histCAGR).toFixed(1)}pp above historical trend`
+                            : `Priced ${(reverseDCF.histCAGR - reverseDCF.impliedGrowth).toFixed(1)}pp below historical trend`}
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                ):(
+                  <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>Need FCF and market cap</p></div>
+                )}
+              </Card>
+
+              {/* Revenue Segments */}
+              {segmentItems.length>0?(
+                <Card title="Revenue Segments" sub={segments?.date??"Product breakdown"} badge="BREAKDOWN">
+                  <DonutChart data={segmentItems}/>
+                </Card>
+              ):(
+                <Card title="Revenue Segments" sub="Not available from FMP">
+                  <NoData W={320} H={120}/>
+                </Card>
+              )}
+
+              {/* Geographic Revenue */}
+              {geoItems.length>0?(
+                <Card title="Geographic Revenue" sub={geoSegments?.date??"By region"} badge="GEO">
+                  <DonutChart data={geoItems}/>
+                </Card>
+              ):(
+                <Card title="Geographic Revenue" sub="Not available from FMP">
+                  <NoData W={320} H={120}/>
+                </Card>
+              )}
+
+              {/* Analyst Forward Estimates */}
+              <Card title="Analyst Forward Estimates" sub="Consensus revenue forecast">
+                {analystEstimates.length>0?(
+                  <div className="space-y-2">
+                    {analystEstimates.slice(0,4).map((e,i)=>{
+                      const curRev=facts.revenue??0;
+                      const fwdRev=e.rev_avg??0;
+                      const implG=curRev&&fwdRev?((fwdRev-curRev)/curRev*100):null;
+                      return(
+                        <div key={i} className="rounded p-2" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                          <div className="flex items-center justify-between mb-1">
+                            <span className="text-[8.5px] font-bold" style={{color:"#ffffff50"}}>{e.date?.slice(0,7)??""}</span>
+                            {e.num_analysts&&<span className="text-[7.5px]" style={{color:"#ffffff25"}}>{Math.round(e.num_analysts)} analysts</span>}
+                          </div>
+                          <div className="flex items-center gap-3">
+                            {e.rev_avg!=null&&(
+                              <div>
+                                <p className="text-[7px]" style={{color:"#ffffff25"}}>Revenue Est</p>
+                                <p className="text-[11px] font-bold" style={{color:BLUE}}>{abbr(e.rev_avg,"$")}</p>
+                                {implG!=null&&<p className="text-[8px]" style={{color:implG>=0?GREEN:RED}}>{implG>=0?"+":""}{implG.toFixed(1)}% YoY</p>}
+                              </div>
+                            )}
+                            {e.eps_avg!=null&&(
+                              <div>
+                                <p className="text-[7px]" style={{color:"#ffffff25"}}>EPS Est</p>
+                                <p className="text-[11px] font-bold" style={{color:TEAL}}>${e.eps_avg.toFixed(2)}</p>
+                              </div>
+                            )}
+                            {e.ebitda_avg!=null&&(
+                              <div>
+                                <p className="text-[7px]" style={{color:"#ffffff25"}}>EBITDA Est</p>
+                                <p className="text-[11px] font-bold" style={{color:AMBER}}>{abbr(e.ebitda_avg,"$")}</p>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                ):(
+                  <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>No analyst estimates available</p></div>
+                )}
+              </Card>
+
+              {/* Earnings beat/miss detail */}
+              <Card title="Earnings Quality" sub="Beat/miss streak + history" badge={earningsStreak.streak>0?`${earningsStreak.streak}-STREAK`:earningsStreak.total>0?"CHECK":""}>
+                <div className="space-y-2 py-1">
+                  <div className="flex items-center gap-4 mb-2">
+                    <Pill label="Beats" value={`${earningsStreak.beats}`} color={GREEN}/>
+                    <Pill label="Misses" value={`${earningsStreak.misses}`} color={RED}/>
+                    <Pill label="Beat Rate" value={earningsStreak.total>0?`${Math.round(earningsStreak.beats/earningsStreak.total*100)}%`:"—"} color={BLUE}/>
+                  </div>
+                  {earningsSurprises.slice(0,8).map((e,i)=>{
+                    const s=e.surprise_pct??0;
+                    const w=Math.min(Math.abs(s)*3,100);
+                    return(
+                      <div key={i} className="flex items-center gap-2">
+                        <span className="text-[7.5px] tabular-nums" style={{color:"#ffffff30",width:48}}>{e.date?.slice(0,7)??""}</span>
+                        <div className="flex-1 h-[6px] rounded overflow-hidden" style={{background:"#ffffff08"}}>
+                          <div style={{width:`${w}%`,height:"100%",background:s>=0?GREEN:RED,borderRadius:3}}/>
+                        </div>
+                        <span className="text-[8px] font-mono font-bold tabular-nums" style={{color:s>=0?GREEN:RED,width:36,textAlign:"right"}}>
+                          {s>=0?"+":""}{s.toFixed(1)}%
+                        </span>
+                      </div>
+                    );
+                  })}
+                  {earningsSurprises.length===0&&<p className="text-[10px] text-center py-2" style={{color:"#ffffff20"}}>No earnings surprise data</p>}
+                </div>
+              </Card>
+
             </div>
           </div>
         )}

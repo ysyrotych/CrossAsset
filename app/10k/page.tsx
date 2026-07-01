@@ -2035,6 +2035,9 @@ export default function TenKPage() {
               earningsSurprises={data.fmp_extended?.earnings_surprises}
               peers={data.fmp_extended?.peer_comparison}
               sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
+              segments={data.fmp_extended?.segments}
+              geoSegments={data.fmp_extended?.geo_segments}
+              analystEstimates={data.fmp_extended?.analyst_estimates}
             />
           </div>
 
