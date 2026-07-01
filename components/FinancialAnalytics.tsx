@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useMemo } from "react";
+import { useState, useMemo, useCallback } from "react";
 import { Sparkles, BarChart2, TrendingUp, Activity, Shield, Users, Zap, Calculator } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -554,6 +554,94 @@ function GaugeBar({ value, min, max, zones, H=40 }:{
   );
 }
 
+// 5-axis radar / spider chart — institutional quant factor viz
+function RadarChart({ scores, labels, H=200 }:{ scores:number[]; labels:{text:string;color:string}[]; H?:number }) {
+  const W=300;
+  const cx=W/2, cy=H/2-4;
+  const r=Math.min(cx-52,cy-22);
+  const n=scores.length;
+  const angles=Array.from({length:n},(_,i)=>-Math.PI/2+(2*Math.PI*i)/n);
+  const pt=(ang:number,frac:number):[number,number]=>[cx+r*frac*Math.cos(ang),cy+r*frac*Math.sin(ang)];
+  const levels=[0.2,0.4,0.6,0.8,1.0];
+  const dataPath=scores.map((s,i)=>{const[x,y]=pt(angles[i],Math.max(0.02,s/100));return`${i===0?"M":"L"}${x.toFixed(1)},${y.toFixed(1)}`;}).join(" ")+"Z";
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+      {levels.map(frac=>(
+        <polygon key={frac} points={angles.map(a=>pt(a,frac).join(",")).join(" ")}
+          fill="none" stroke={frac===1?"rgba(255,255,255,0.12)":DARK_BORDER} strokeWidth={frac===1?"0.8":"0.4"}/>
+      ))}
+      {levels.filter((_,i)=>i===1||i===3).map((frac,fi)=>(
+        <text key={fi} x={cx+2} y={pt(angles[0],frac)[1]-1} fontSize="5.5" fill="#ffffff15" textAnchor="start">{Math.round(frac*100)}</text>
+      ))}
+      {angles.map((a,i)=>{const[x,y]=pt(a,1);return<line key={i} x1={cx} y1={cy} x2={x} y2={y} stroke={DARK_BORDER} strokeWidth="0.5"/>;} )}
+      <path d={dataPath} fill="rgba(59,130,246,0.15)" stroke={BLUE} strokeWidth="1.5" strokeLinejoin="round"/>
+      {scores.map((s,i)=>{const[x,y]=pt(angles[i],Math.max(0.02,s/100));return<circle key={i} cx={x} cy={y} r="3" fill={labels[i]?.color??BLUE}/>;} )}
+      {labels.map((l,i)=>{
+        const[lx,ly]=pt(angles[i],1.27);
+        const sc=scores[i];
+        const off=i===0?-0.15:(sc<70?0.17:-0.13);
+        const[sx,sy]=pt(angles[i],Math.max(0.02,sc/100)+off);
+        return(
+          <g key={i}>
+            <text x={lx} y={ly+3} textAnchor="middle" fontSize="8.5" fill={l.color} fontWeight="700">{l.text}</text>
+            <text x={sx} y={sy+2} textAnchor="middle" fontSize="7.5" fill="#ffffff45" fontWeight="600">{sc}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// Football-field valuation chart — horizontal ranges for each method
+function FootballFieldChart({ methods, currentPrice, H=210 }:{
+  methods:{label:string;lo:number;hi:number;color:string}[];
+  currentPrice:number; H?:number;
+}) {
+  const W=480; const LPAD=128;
+  const cw=W-LPAD-14;
+  if(!methods.length)return<NoData W={W} H={H}/>;
+  const allVals=methods.flatMap(m=>[m.lo,m.hi]).filter(v=>v>0);
+  if(!allVals.length)return<NoData W={W} H={H}/>;
+  const raw0=Math.min(...allVals,currentPrice>0?currentPrice:Infinity)*0.78;
+  const raw1=Math.max(...allVals,currentPrice>0?currentPrice:0)*1.22;
+  const minV=Math.max(0,raw0), maxV=raw1;
+  const toX=(v:number)=>LPAD+((v-minV)/(maxV-minV||1))*cw;
+  const barH=13;
+  const spacing=(H-52)/Math.max(methods.length,1);
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+      {Array.from({length:6},(_,i)=>{const v=minV+(maxV-minV)*i/5;const x=toX(v);return(
+        <g key={i}>
+          <line x1={x} x2={x} y1={20} y2={H-18} stroke={DARK_BORDER} strokeWidth="0.4"/>
+          <text x={x} y={14} textAnchor="middle" fontSize="6.5" fill="#ffffff18">${v>=1e9?`${(v/1e9).toFixed(0)}B`:v>=1e6?`${(v/1e6).toFixed(0)}M`:v.toFixed(0)}</text>
+        </g>
+      );})}
+      {methods.map((m,i)=>{
+        const y=28+i*spacing;
+        const x1=toX(m.lo), x2=Math.max(toX(m.lo)+4,toX(m.hi));
+        return(
+          <g key={i}>
+            <text x={LPAD-5} y={y+barH/2+3} textAnchor="end" fontSize="7.5" fill="#ffffff45">{m.label}</text>
+            <rect x={x1} y={y} width={x2-x1} height={barH} fill={m.color} opacity="0.2" rx="2"/>
+            <rect x={x1} y={y} width={2.5} height={barH} fill={m.color} opacity="0.85" rx="1"/>
+            <rect x={Math.max(x1+2,x2-2)} y={y} width={2.5} height={barH} fill={m.color} opacity="0.85" rx="1"/>
+            <text x={x1-3} y={y+barH/2+3} textAnchor="end" fontSize="5.5" fill={m.color} opacity="0.65">${m.lo.toFixed(0)}</text>
+            <text x={x2+3} y={y+barH/2+3} textAnchor="start" fontSize="5.5" fill={m.color} opacity="0.65">${m.hi.toFixed(0)}</text>
+          </g>
+        );
+      })}
+      {currentPrice>0&&(
+        <g>
+          <line x1={toX(currentPrice)} x2={toX(currentPrice)} y1={17} y2={H-16} stroke={AMBER} strokeWidth="1.5" strokeDasharray="3,2"/>
+          <circle cx={toX(currentPrice)} cy={H-13} r="3.5" fill={AMBER}/>
+          <text x={toX(currentPrice)} y={H-4} textAnchor="middle" fontSize="7" fill={AMBER} fontWeight="700">${currentPrice.toFixed(0)}</text>
+          <text x={toX(currentPrice)} y={12} textAnchor="middle" fontSize="6" fill={AMBER}>NOW</text>
+        </g>
+      )}
+    </svg>
+  );
+}
+
 // ── Chart Card ────────────────────────────────────────────────────────────────
 
 function Card({ title, sub, badge, children }:{ title:string; sub?:string; badge?:string; children:React.ReactNode }) {
@@ -606,6 +694,11 @@ export default function FinancialAnalytics({
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
   const [aiRunning, setAiRunning] = useState(false);
+  const [scenarios, setScenarios] = useState({
+    bull: { revCAGR: 20, exitMargin: 30, exitMultiple: 22, wacc: 8 },
+    base: { revCAGR: 12, exitMargin: 22, exitMultiple: 16, wacc: 9 },
+    bear: { revCAGR:  4, exitMargin: 15, exitMultiple: 11, wacc: 11 },
+  });
 
   // ── Derived series ────────────────────────────────────────────────────────
 
@@ -970,6 +1063,194 @@ export default function FinancialAnalytics({
     return Math.min(100, Math.round(score));
   }, [piotroski, altmanZ, facts, earningsStreak]);
 
+  // ── Multi-Factor Score Engine (Loop 9) ───────────────────────────────────
+  const factorScores = useMemo(() => {
+    const avg_=(arr:(number|null)[])=>{const v=arr.filter((x):x is number=>x!=null);return v.length?v.reduce((a,b)=>a+b,0)/v.length:null;};
+    const clamp=(x:number|null)=>x!=null?Math.max(0,Math.min(100,x)):null;
+    const medArr=(arr:(number|null)[])=>{const v=arr.filter((x):x is number=>x!=null).sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null;};
+    const peerPE=medArr(peers.map(p=>p.pe));
+    const peerEV=medArr(peers.map(p=>p.ev_ebitda));
+
+    // VALUE (4 sub-signals)
+    const pe=facts.pe_ratio, ev=facts.ev_ebitda, pfcf=facts.p_fcf;
+    const fcfYield=facts.free_cash_flow&&facts.market_cap?facts.free_cash_flow/facts.market_cap*100:null;
+    const v_pe  =pe&&peerPE?clamp(50+(peerPE-pe)/(peerPE||1)*80):(pe?clamp((40-pe)/40*100+50):null);
+    const v_ev  =ev&&peerEV?clamp(50+(peerEV-ev)/(peerEV||1)*80):(ev?clamp((20-ev)/20*100+50):null);
+    const v_pfcf=pfcf?clamp((40-pfcf)/30*100):null;
+    const v_fcfY=fcfYield!=null?clamp(fcfYield*12):null;
+    const valueScore=Math.round(avg_([v_pe,v_ev,v_pfcf,v_fcfY])??0);
+
+    // QUALITY (5 sub-signals)
+    const roic=facts.roic, gm=facts.gross_margin_pct;
+    const accrualLast=accruals[accruals.length-1]??null;
+    const icov=facts.interest_coverage;
+    const q_roic =roic!=null?clamp(roic/30*100):null;
+    const q_gm   =gm!=null?clamp(gm):null;
+    const q_piost=piotroski.maxScore>0?(piotroski.score/piotroski.maxScore)*100:null;
+    const q_acc  =accrualLast!=null?clamp(50-Math.abs(accrualLast)*8):null;
+    const q_icov =icov!=null?clamp(icov/25*100):null;
+    const qualityFactor=Math.round(avg_([q_roic,q_gm,q_piost,q_acc,q_icov])??0);
+
+    // MOMENTUM (4 sub-signals)
+    const revG=facts.revenue_growth_yoy, epsG=facts.eps_growth_yoy, fcfG=facts.fcf_growth_yoy;
+    const beatRate=earningsStreak.total>0?earningsStreak.beats/earningsStreak.total*100:null;
+    const m_rev =revG!=null?clamp(revG/30*100+50):null;
+    const m_eps =epsG!=null?clamp(epsG/25*100+50):null;
+    const m_fcf =fcfG!=null?clamp(fcfG/30*100+50):null;
+    const m_beat=beatRate!=null?clamp(beatRate):null;
+    const momentumFactor=Math.round(avg_([m_rev,m_eps,m_fcf,m_beat])??0);
+
+    // SAFETY (3 sub-signals)
+    const s_altman=altmanZ?clamp(altmanZ.z/5*100):null;
+    const cr=facts.current_assets&&facts.current_liabilities&&facts.current_liabilities>0?facts.current_assets/facts.current_liabilities:null;
+    const s_cr=cr!=null?clamp((cr-0.5)/2.5*100):null;
+    const netDE=facts.ebitda&&facts.ebitda>0&&facts.long_term_debt!=null&&facts.cash!=null?(facts.long_term_debt-facts.cash)/facts.ebitda:null;
+    const s_nd=netDE!=null?clamp((4-netDE)/6*100+10):null;
+    const safetyFactor=Math.round(avg_([s_altman,s_cr,s_nd])??0);
+
+    // GROWTH (3 sub-signals)
+    const revVals=Object.values(history.revenue||{});
+    const revCAGR5=revVals.length>=2?(Math.pow(revVals[revVals.length-1]/Math.max(revVals[0],1),1/Math.max(revVals.length-1,1))-1)*100:null;
+    const epsVals=Object.values(history.eps_diluted||{}).filter(v=>v>0);
+    const epsCAGR5=epsVals.length>=2?(Math.pow(epsVals[epsVals.length-1]/Math.max(epsVals[0],0.001),1/Math.max(epsVals.length-1,1))-1)*100:null;
+    const fwdRevG=analystEstimates.length>0&&analystEstimates[0].rev_avg&&facts.revenue?((analystEstimates[0].rev_avg/facts.revenue)-1)*100:null;
+    const g_rev=revCAGR5!=null?clamp(revCAGR5/25*100):null;
+    const g_eps=epsCAGR5!=null?clamp(epsCAGR5/20*100):null;
+    const g_fwd=fwdRevG!=null?clamp(fwdRevG/20*100+50):null;
+    const growthFactor=Math.round(avg_([g_rev,g_eps,g_fwd])??0);
+
+    return {
+      value:valueScore, quality:qualityFactor, momentum:momentumFactor, safety:safetyFactor, growth:growthFactor,
+      overall:Math.round(avg_([valueScore,qualityFactor,momentumFactor,safetyFactor,growthFactor])??0),
+      subs:{
+        value:[
+          {name:"P/E vs Peers",score:Math.round(v_pe??0),detail:pe?`${pe.toFixed(1)}x`+(peerPE?` (peer ${peerPE.toFixed(1)}x)`:""): "—"},
+          {name:"EV/EBITDA vs Peers",score:Math.round(v_ev??0),detail:ev?`${ev.toFixed(1)}x`+(peerEV?` (peer ${peerEV.toFixed(1)}x)`:""): "—"},
+          {name:"P/FCF",score:Math.round(v_pfcf??0),detail:pfcf?`${pfcf.toFixed(1)}x`:"—"},
+          {name:"FCF Yield",score:Math.round(v_fcfY??0),detail:fcfYield!=null?`${fcfYield.toFixed(1)}%`:"—"},
+        ],
+        quality:[
+          {name:"ROIC",score:Math.round(q_roic??0),detail:roic!=null?`${roic.toFixed(1)}%`:"—"},
+          {name:"Gross Margin",score:Math.round(q_gm??0),detail:gm!=null?`${gm.toFixed(1)}%`:"—"},
+          {name:"Piotroski",score:Math.round(q_piost??0),detail:`${piotroski.score}/${piotroski.maxScore}`},
+          {name:"OCF Quality",score:Math.round(q_acc??0),detail:accrualLast!=null?`${accrualLast.toFixed(2)}%`:"—"},
+          {name:"Int Coverage",score:Math.round(q_icov??0),detail:icov!=null?`${icov.toFixed(1)}x`:"—"},
+        ],
+        momentum:[
+          {name:"Rev Growth YoY",score:Math.round(m_rev??0),detail:revG!=null?`${revG.toFixed(1)}%`:"—"},
+          {name:"EPS Growth YoY",score:Math.round(m_eps??0),detail:epsG!=null?`${epsG.toFixed(1)}%`:"—"},
+          {name:"FCF Growth YoY",score:Math.round(m_fcf??0),detail:fcfG!=null?`${fcfG.toFixed(1)}%`:"—"},
+          {name:"Beat Rate",score:Math.round(m_beat??0),detail:earningsStreak.total>0?`${earningsStreak.beats}/${earningsStreak.total}`:"—"},
+        ],
+        safety:[
+          {name:"Altman Z",score:Math.round(s_altman??0),detail:altmanZ?`${altmanZ.z}`:"—"},
+          {name:"Current Ratio",score:Math.round(s_cr??0),detail:cr!=null?`${cr.toFixed(2)}x`:"—"},
+          {name:"Net Debt/EBITDA",score:Math.round(s_nd??0),detail:netDE!=null?`${netDE.toFixed(1)}x`:"—"},
+        ],
+        growth:[
+          {name:"5Y Rev CAGR",score:Math.round(g_rev??0),detail:revCAGR5!=null?`${revCAGR5.toFixed(1)}%`:"—"},
+          {name:"5Y EPS CAGR",score:Math.round(g_eps??0),detail:epsCAGR5!=null?`${epsCAGR5.toFixed(1)}%`:"—"},
+          {name:"Fwd Rev Growth",score:Math.round(g_fwd??0),detail:fwdRevG!=null?`${fwdRevG.toFixed(1)}%`:"—"},
+        ],
+      },
+    };
+  }, [facts, history, peers, piotroski, altmanZ, accruals, earningsStreak, analystEstimates]);
+
+  // ── Beneish M-Score — forensic earnings manipulation detector (Loop 10) ──
+  const beneishMScore = useMemo(() => {
+    const years=Object.keys(history.revenue||{}).sort();
+    if(years.length<2)return null;
+    const cy=years[years.length-1], py=years[years.length-2];
+    const g=(key:string,y:string)=>history[key]?.[y]??null;
+    const rev_t=g("revenue",cy), rev_p=g("revenue",py);
+    const ar_t=g("accounts_receivable",cy), ar_p=g("accounts_receivable",py);
+    const gp_t=g("gross_profit",cy), gp_p=g("gross_profit",py);
+    const ppe_t=g("ppe_net",cy), ppe_p=g("ppe_net",py);
+    const ca_t=g("current_assets",cy), ca_p=g("current_assets",py);
+    const ta_t=g("total_assets",cy), ta_p=g("total_assets",py);
+    const da_t=g("da_expense",cy), da_p=g("da_expense",py);
+    const sga_t=g("sga_expense",cy), sga_p=g("sga_expense",py);
+    const ni_t=g("net_income",cy);
+    const ocf_t=g("operating_cf",cy);
+    const ltd_t=g("long_term_debt",cy), ltd_p=g("long_term_debt",py);
+    const cl_t=g("current_liabilities",cy), cl_p=g("current_liabilities",py);
+    if(!rev_t||!rev_p||!ta_t)return null;
+    const DSRI=ar_t&&rev_t&&ar_p&&rev_p&&rev_p>0?(ar_t/rev_t)/(ar_p/rev_p):null;
+    const GMI=gp_t&&rev_t&&gp_p&&rev_p&&gp_t>0?(gp_p/rev_p)/(gp_t/rev_t):null;
+    const AQI=ca_t&&ppe_t&&ta_t&&ca_p&&ppe_p&&ta_p?(1-(ca_t+ppe_t)/ta_t)/(1-(ca_p+ppe_p)/ta_p):null;
+    const SGI=rev_t&&rev_p&&rev_p>0?rev_t/rev_p:null;
+    const DEPI=da_t&&ppe_t&&da_p&&ppe_p&&da_t>0?(da_p/(da_p+ppe_p))/(da_t/(da_t+ppe_t)):null;
+    const SGAI=sga_t&&rev_t&&sga_p&&rev_p&&sga_p>0?(sga_t/rev_t)/(sga_p/rev_p):null;
+    const LVGI=ltd_t!=null&&cl_t!=null&&ta_t&&ltd_p!=null&&cl_p!=null&&ta_p?((ltd_t+cl_t)/ta_t)/((ltd_p+cl_p)/ta_p):null;
+    const TATA=ni_t!=null&&ocf_t!=null&&ta_t?(ni_t-ocf_t)/ta_t:null;
+    const parts:[string,string,number,number|null,number,boolean][]=[
+      ["DSRI","Days Sales Recv. Index", 0.920,DSRI, 1.10,true],
+      ["GMI", "Gross Margin Index",     0.528,GMI,  1.00,true],
+      ["AQI", "Asset Quality Index",    0.404,AQI,  1.00,true],
+      ["SGI", "Sales Growth Index",     0.892,SGI,  1.60,true],
+      ["DEPI","Depreciation Index",     0.115,DEPI, 1.00,true],
+      ["SGAI","SG&A Index",            -0.172,SGAI, 1.10,true],
+      ["TATA","Total Accruals/Assets",  4.679,TATA, 0.05,true],
+      ["LVGI","Leverage Index",        -0.327,LVGI, 1.10,true],
+    ];
+    const valid=parts.filter(p=>p[3]!=null);
+    if(valid.length<4)return null;
+    let m=-4.84;
+    for(const[,,w,v] of valid)m+=w*(v??0);
+    return{
+      score:parseFloat(m.toFixed(2)),
+      zone:m>-1.78?"HIGH RISK" as const:m>-2.22?"GRAY ZONE" as const:"LOW RISK" as const,
+      color:m>-1.78?RED:m>-2.22?AMBER:GREEN,
+      components:valid.map(p=>({
+        key:p[0],name:p[1],weight:p[2],value:p[3]??0,threshold:p[4],
+        contribution:p[2]*(p[3]??0),
+        isFlag:(p[3]??0)>p[4],
+      })),
+      flagCount:valid.filter(p=>(p[3]??0)>p[4]).length,
+    };
+  }, [history]);
+
+  // ── Scenario DCF pricing (Loop 11) ───────────────────────────────────────
+  const scenarioPrices = useMemo(() => {
+    const compute=(p:{revCAGR:number;exitMargin:number;exitMultiple:number;wacc:number})=>{
+      const rev=facts.revenue, sh=facts.shares_diluted_wtd;
+      if(!rev||!sh)return null;
+      const fcfM=facts.free_cash_flow&&facts.revenue&&facts.revenue>0?facts.free_cash_flow/facts.revenue:0.15;
+      const netD=(facts.long_term_debt??0)-(facts.cash??0);
+      let cum=0, cr=rev;
+      for(let yr=1;yr<=5;yr++){cr*=(1+p.revCAGR/100);cum+=cr*fcfM/Math.pow(1+p.wacc/100,yr);}
+      const tv=cr*(p.exitMargin/100)*p.exitMultiple/Math.pow(1+p.wacc/100,5);
+      return Math.max(0,cum+tv-netD)/sh;
+    };
+    const current=facts.stock_price||(facts.market_cap&&facts.shares_diluted_wtd?facts.market_cap/facts.shares_diluted_wtd:0);
+    return{bull:compute(scenarios.bull),base:compute(scenarios.base),bear:compute(scenarios.bear),current};
+  },[scenarios,facts]);
+
+  // ── Football Field methods (Loop 11) ─────────────────────────────────────
+  const footballFieldMethods = useMemo(()=>{
+    const sh=facts.shares_diluted_wtd??0;
+    const medArr=(arr:(number|null)[])=>{const v=arr.filter((x):x is number=>x!=null).sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null;};
+    const peerPE=medArr(peers.map(p=>p.pe));
+    const peerEV=medArr(peers.map(p=>p.ev_ebitda));
+    const netD=(facts.long_term_debt??0)-(facts.cash??0);
+    const ms:{label:string;lo:number;hi:number;color:string}[]=[];
+    const add=(label:string,lo:number,hi:number,color:string)=>{if(lo>0&&hi>=lo)ms.push({label,lo,hi,color});};
+    if(scenarioPrices.bear!=null&&scenarioPrices.bull!=null&&scenarioPrices.base!=null){
+      add("DCF Bear",scenarioPrices.bear*0.9,scenarioPrices.bear*1.1,RED);
+      add("DCF Base",scenarioPrices.base*0.95,scenarioPrices.base*1.05,BLUE);
+      add("DCF Bull",scenarioPrices.bull*0.9,scenarioPrices.bull*1.1,GREEN);
+    }
+    const eps=facts.eps_diluted??(facts.net_income&&sh?facts.net_income/sh:null);
+    if(eps&&eps>0&&peerPE)add("P/E Relative",eps*(peerPE*0.75),eps*(peerPE*1.25),PURPLE);
+    if(facts.ebitda&&peerEV&&sh){
+      const lo=facts.ebitda*(peerEV*0.75)-netD, hi=facts.ebitda*(peerEV*1.25)-netD;
+      if(lo>0)add("EV/EBITDA Rel.",lo/sh,hi/sh,TEAL);
+    }
+    if(monteCarloResults.p5!=null&&monteCarloResults.p95!=null)
+      add("Monte Carlo",monteCarloResults.p5,monteCarloResults.p95,AMBER);
+    return ms;
+  },[scenarioPrices,facts,peers,monteCarloResults]);
+
   // ── DCF Sensitivity grid (WACC × terminal growth) ────────────────────────
   const dcfSensitivity = useMemo(() => {
     const fcf = facts.free_cash_flow;
@@ -1089,7 +1370,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-1">Financial Analytics Suite</p>
           <h3 className="text-[16px] font-bold text-white leading-tight">{companyName}</h3>
-          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 40+ charts · Monte Carlo · DCF Sensitivity · Piotroski · Altman Z · AI analysis</p>
+          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 50+ charts · Monte Carlo · Football Field · 5-Factor Model · Beneish M-Score · Piotroski · AI analysis</p>
           {/* Quant scores row */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:`rgba(${qualityScore>=70?"16,185,129":qualityScore>=40?"245,158,11":"239,68,68"},0.15)`,color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED}}>
@@ -1584,6 +1865,95 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         {/* ── Quant & Scenarios ────────────────────────────────────── */}
         {tab==="quant"&&(
           <div className="space-y-4">
+
+            {/* ══ LOOP 11: Football Field + Interactive Scenario Builder ══ */}
+            <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Football Field Valuation</p>
+                  <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Range of value by method — bear / base / bull · P/E rel · EV/EBITDA · Monte Carlo</p>
+                </div>
+                <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(245,158,11,0.15)",color:AMBER,border:"1px solid rgba(245,158,11,0.25)"}}>IB STANDARD</span>
+              </div>
+              <div className="px-3 py-3">
+                <FootballFieldChart methods={footballFieldMethods} currentPrice={scenarioPrices.current} H={footballFieldMethods.length>3?200:150}/>
+              </div>
+            </div>
+
+            {/* Scenario Builder */}
+            <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-3 py-2 border-b" style={{borderColor:DARK_BORDER}}>
+                <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Interactive Scenario Builder</p>
+                <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Adjust assumptions — 5-year DCF per scenario, terminal EV/EBITDA exit</p>
+              </div>
+              <div className="px-3 py-4">
+                {/* Implied prices row */}
+                <div className="grid grid-cols-4 gap-2 mb-5">
+                  <Pill label="Current" value={scenarioPrices.current>0?`$${scenarioPrices.current.toFixed(0)}`:"—"} color={AMBER}/>
+                  <Pill label="Bear Case" value={scenarioPrices.bear!=null?`$${scenarioPrices.bear.toFixed(0)}`:"—"} color={RED}/>
+                  <Pill label="Base Case" value={scenarioPrices.base!=null?`$${scenarioPrices.base.toFixed(0)}`:"—"} color={BLUE}/>
+                  <Pill label="Bull Case" value={scenarioPrices.bull!=null?`$${scenarioPrices.bull.toFixed(0)}`:"—"} color={GREEN}/>
+                </div>
+                {/* Upside/downside row */}
+                {scenarioPrices.current>0&&(
+                  <div className="grid grid-cols-3 gap-2 mb-5">
+                    {(["bear","base","bull"] as const).map(k=>{
+                      const price=scenarioPrices[k];
+                      const upside=price!=null&&scenarioPrices.current>0?((price-scenarioPrices.current)/scenarioPrices.current*100):null;
+                      const col=k==="bull"?GREEN:k==="base"?BLUE:RED;
+                      return(
+                        <div key={k} className="rounded p-2 text-center" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                          <p className="text-[7px] uppercase font-bold" style={{color:col}}>{k} implied</p>
+                          <p className="text-[13px] font-bold tabular-nums" style={{color:upside!=null&&upside>=0?GREEN:RED}}>
+                            {upside!=null?(upside>=0?"+":"")+upside.toFixed(0)+"%":"—"}
+                          </p>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+                {/* Sliders */}
+                <div className="grid grid-cols-3 gap-4">
+                  {(["bear","base","bull"] as const).map((scenario,si)=>{
+                    const col=[RED,BLUE,GREEN][si];
+                    const params=scenarios[scenario];
+                    type ScenKey="revCAGR"|"exitMargin"|"exitMultiple"|"wacc";
+                    const sliders:[string,ScenKey,number,number,number,string][]=[
+                      ["Rev CAGR %","revCAGR",-5,50,1,"%"],
+                      ["Exit Margin %","exitMargin",5,50,1,"%"],
+                      ["Exit EV/EBITDA","exitMultiple",4,40,1,"×"],
+                      ["WACC %","wacc",6,18,0.5,"%"],
+                    ];
+                    return(
+                      <div key={scenario}>
+                        <p className="text-[8.5px] font-bold uppercase tracking-wider mb-3" style={{color:col}}>{scenario} case</p>
+                        <div className="space-y-3">
+                          {sliders.map(([label,field,min,max,step,unit])=>(
+                            <div key={field}>
+                              <div className="flex justify-between mb-1">
+                                <span className="text-[7.5px]" style={{color:"#ffffff35"}}>{label}</span>
+                                <span className="text-[8px] font-bold tabular-nums" style={{color:col}}>{params[field]}{unit}</span>
+                              </div>
+                              <input type="range" min={min} max={max} step={step}
+                                value={params[field]}
+                                onChange={e=>setScenarios(prev=>({...prev,[scenario]:{...prev[scenario],[field]:parseFloat(e.target.value)}}))}
+                                className="w-full h-1 rounded-full appearance-none cursor-pointer"
+                                style={{accentColor:col,background:`linear-gradient(to right, ${col} ${(params[field]-min)/(max-min)*100}%, rgba(255,255,255,0.08) 0%)`}}
+                              />
+                              <div className="flex justify-between mt-0.5">
+                                <span className="text-[6px]" style={{color:"#ffffff15"}}>{min}{unit}</span>
+                                <span className="text-[6px]" style={{color:"#ffffff15"}}>{max}{unit}</span>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            </div>
+
             {/* Monte Carlo summary pills */}
             {monteCarloResults.sims.length>0&&(
               <div className="grid grid-cols-5 gap-2">
@@ -1689,6 +2059,68 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         {/* ── Signals & Scores ──────────────────────────────────── */}
         {tab==="signals"&&(
           <div className="space-y-4">
+
+            {/* ══ LOOP 9: Multi-Factor Score Engine ══ */}
+            <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Multi-Factor Score Engine</p>
+                  <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Institutional quantitative factor model — Value · Quality · Momentum · Safety · Growth</p>
+                </div>
+                <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(167,139,250,0.15)",color:PURPLE,border:`1px solid rgba(167,139,250,0.25)`}}>
+                  FACTOR SCORE {factorScores.overall}
+                </span>
+              </div>
+              <div className="px-3 py-3">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
+                  {/* Radar chart */}
+                  <div>
+                    <RadarChart
+                      scores={[factorScores.value,factorScores.growth,factorScores.momentum,factorScores.safety,factorScores.quality]}
+                      labels={[
+                        {text:"VALUE",color:AMBER},
+                        {text:"GROWTH",color:PURPLE},
+                        {text:"MOMENTUM",color:BLUE},
+                        {text:"SAFETY",color:TEAL},
+                        {text:"QUALITY",color:GREEN},
+                      ]}
+                    />
+                  </div>
+                  {/* Sub-factor breakdown */}
+                  <div className="space-y-3">
+                    {([
+                      {key:"value",label:"Value",color:AMBER,subs:factorScores.subs.value,score:factorScores.value},
+                      {key:"quality",label:"Quality",color:GREEN,subs:factorScores.subs.quality,score:factorScores.quality},
+                      {key:"momentum",label:"Momentum",color:BLUE,subs:factorScores.subs.momentum,score:factorScores.momentum},
+                      {key:"safety",label:"Safety",color:TEAL,subs:factorScores.subs.safety,score:factorScores.safety},
+                      {key:"growth",label:"Growth",color:PURPLE,subs:factorScores.subs.growth,score:factorScores.growth},
+                    ] as const).map(f=>(
+                      <div key={f.key}>
+                        <div className="flex items-center justify-between mb-1">
+                          <span className="text-[8px] font-bold uppercase tracking-wider" style={{color:f.color}}>{f.label}</span>
+                          <div className="flex items-center gap-2">
+                            <div className="w-20 h-1.5 rounded-full overflow-hidden" style={{background:"rgba(255,255,255,0.07)"}}>
+                              <div style={{width:`${f.score}%`,height:"100%",background:f.color,borderRadius:999}}/>
+                            </div>
+                            <span className="text-[8px] font-bold tabular-nums" style={{color:f.color,width:20,textAlign:"right"}}>{f.score}</span>
+                          </div>
+                        </div>
+                        <div className="grid grid-cols-2 gap-x-3 gap-y-0.5">
+                          {(f.subs as {name:string;score:number;detail:string}[]).map((s,si)=>(
+                            <div key={si} className="flex items-center justify-between gap-1">
+                              <span className="text-[7px]" style={{color:"#ffffff30",flex:1,minWidth:0,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{s.name}</span>
+                              <span className="text-[7px] font-mono shrink-0" style={{color:"#ffffff20"}}>{s.detail}</span>
+                              <span className="text-[7px] font-bold tabular-nums shrink-0" style={{color:s.score>=70?GREEN:s.score>=40?AMBER:RED,width:18,textAlign:"right"}}>{s.score}</span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Quality composite banner */}
             <div className="rounded-lg p-4 flex items-center gap-6 border" style={{background:"rgba(59,130,246,0.06)",borderColor:DARK_BORDER}}>
               <div className="text-center shrink-0">
@@ -1846,6 +2278,45 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   </div>
                 ):(
                   <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>No analyst estimates available</p></div>
+                )}
+              </Card>
+
+              {/* ══ LOOP 10: Beneish M-Score ══ */}
+              <Card title="Beneish M-Score" sub="Forensic earnings manipulation detector (8-factor)" badge={beneishMScore?.zone??"N/A"}>
+                {beneishMScore?(
+                  <div className="space-y-2">
+                    <div className="flex items-center gap-3">
+                      <div className="text-center shrink-0">
+                        <p className="text-[28px] font-bold tabular-nums leading-none" style={{color:beneishMScore.color}}>{beneishMScore.score}</p>
+                        <p className="text-[7px] font-bold uppercase mt-0.5" style={{color:beneishMScore.color}}>{beneishMScore.zone}</p>
+                      </div>
+                      <div className="flex-1 space-y-1">
+                        <GaugeBar value={beneishMScore.score} min={-4} max={1}
+                          zones={[
+                            {from:-4,to:-2.22,color:GREEN,label:"Clean"},
+                            {from:-2.22,to:-1.78,color:AMBER,label:"Gray"},
+                            {from:-1.78,to:1,color:RED,label:"Risk"},
+                          ]}
+                          H={38}
+                        />
+                        <p className="text-[7px] text-center" style={{color:"#ffffff25"}}>
+                          {beneishMScore.flagCount} of {beneishMScore.components.length} flags raised · threshold −1.78
+                        </p>
+                      </div>
+                    </div>
+                    <div className="space-y-1 mt-1">
+                      {beneishMScore.components.map((c,i)=>(
+                        <div key={i} className="flex items-center justify-between gap-1">
+                          <span className="text-[7.5px] font-bold" style={{color:c.isFlag?RED:"#ffffff25",width:36}}>{c.key}</span>
+                          <span className="text-[7px] flex-1" style={{color:"#ffffff25",overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{c.name}</span>
+                          <span className="text-[7px] font-mono tabular-nums" style={{color:"#ffffff35",width:32,textAlign:"right"}}>{c.value.toFixed(2)}</span>
+                          <span className="text-[7px] font-bold" style={{color:c.isFlag?RED:GREEN,width:6}}>{c.isFlag?"⚑":""}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ):(
+                  <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>Need 2+ years of financial history</p></div>
                 )}
               </Card>
 
