@@ -1566,6 +1566,31 @@ def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
     if pretax2 and tax2 and pretax2 != 0:
         facts["effective_tax_rate"] = round(tax2 / pretax2 * 100, 1)
 
+    # Merge yfinance info (market data) — fills market_cap, price, beta when FMP is unavailable
+    info = yf_data.get("info", {})
+    if info:
+        mc_yf = safe_float(info.get("marketCap"))
+        if mc_yf and not facts.get("market_cap"):
+            facts["market_cap"] = mc_yf
+        price_yf = safe_float(info.get("currentPrice") or info.get("regularMarketPrice"))
+        if price_yf and not facts.get("stock_price"):
+            facts["stock_price"] = price_yf
+        beta_yf = safe_float(info.get("beta"))
+        if beta_yf and not facts.get("beta"):
+            facts["beta"] = beta_yf
+        ev_yf = safe_float(info.get("enterpriseValue"))
+        if ev_yf and not facts.get("enterprise_value"):
+            facts["enterprise_value"] = ev_yf
+        pe_yf = safe_float(info.get("trailingPE"))
+        if pe_yf and pe_yf > 0 and not facts.get("pe_ratio"):
+            facts["pe_ratio"] = round(pe_yf, 1)
+        ev_ebitda_yf = safe_float(info.get("enterpriseToEbitda"))
+        if ev_ebitda_yf and ev_ebitda_yf > 0 and not facts.get("ev_ebitda"):
+            facts["ev_ebitda"] = round(ev_ebitda_yf, 1)
+        div_yf = safe_float(info.get("dividendYield"))
+        if div_yf and not facts.get("dividend_yield"):
+            facts["dividend_yield"] = round(div_yf * 100, 2)
+
     return facts
 
 def build_history_from_yf(yf_data: dict) -> dict:
