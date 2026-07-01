@@ -1597,9 +1597,11 @@ def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
         ev_ebitda_yf = safe_float(info.get("enterpriseToEbitda"))
         if ev_ebitda_yf and ev_ebitda_yf > 0 and not facts.get("ev_ebitda"):
             facts["ev_ebitda"] = round(ev_ebitda_yf, 1)
-        div_yf = safe_float(info.get("dividendYield"))
-        if div_yf and not facts.get("dividend_yield"):
-            facts["dividend_yield"] = round(div_yf * 100, 2)
+        div_yf = safe_float(info.get("dividendYield") or info.get("trailingAnnualDividendYield"))
+        if div_yf and div_yf > 0 and not facts.get("dividend_yield"):
+            pct = round(div_yf * 100, 2)
+            if 0 < pct < 20:  # reject implausibly high yields (yfinance scale inconsistency)
+                facts["dividend_yield"] = pct
 
     return facts
 
