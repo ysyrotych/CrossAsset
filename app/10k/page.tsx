@@ -953,7 +953,7 @@ function NewsFeed({ news }: { news: RecentNews }) {
 function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
   if (!kmHistory.length) return null;
   const recent = kmHistory.slice(-6).reverse();
-  const cols: { key: keyof KmHistory[number]; label: string; suffix: string }[] = [
+  const cols: { key: string; label: string; suffix: string }[] = [
     { key: "pe",            label: "P/E",           suffix: "x" },
     { key: "ev_ebitda",     label: "EV/EBITDA",     suffix: "x" },
     { key: "p_fcf",         label: "P/FCF",          suffix: "x" },
@@ -984,7 +984,7 @@ function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
               <tr key={row.date} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"} ${i === 0 ? "font-semibold" : ""}`}>
                 <td className="px-4 py-2 text-[11px] text-[#333]">{row.date?.slice(0, 7) ?? "—"}</td>
                 {cols.map(c => {
-                  const v = row[c.key] as number|null;
+                  const v = row[c.key as keyof KmHistory[number]] as number|null;
                   return (
                     <td key={c.key as string} className="px-3 py-2 text-right text-[11.5px] tabular-nums text-[#0a0a0a]">
                       {v != null ? `${v.toFixed(1)}${c.suffix}` : <span className="text-[#ddd]">—</span>}
