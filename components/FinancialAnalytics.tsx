@@ -1251,6 +1251,106 @@ export default function FinancialAnalytics({
     return ms;
   },[scenarioPrices,facts,peers,monteCarloResults]);
 
+  // ── Economic Value Added (EVA) history — Loop 12 ────────────────────────
+  const evaHistory = useMemo(() => {
+    const WACC = 0.09;
+    return asYears.map(y => {
+      const oi  = history.operating_income?.[y];
+      const ta  = history.total_assets?.[y];
+      const cl  = history.current_liabilities?.[y];
+      const cash= history.cash?.[y];
+      const tax = history.income_tax?.[y];
+      const pt  = history.pretax_income?.[y];
+      const rev = history.revenue?.[y];
+      const cx  = history.capex?.[y];
+      if(!oi||!ta)return null;
+      const taxRate=pt&&tax?Math.min(0.45,Math.abs(tax/pt)):0.21;
+      const nopat=oi*(1-taxRate);
+      const ic=Math.max(1,ta-(cl??0)-(cash??0));
+      const capitalCharge=WACC*ic;
+      const reinvRate=cx&&nopat>0?Math.abs(cx)/nopat*100:null;
+      return{
+        year:y, eva:nopat-capitalCharge, nopat, capitalCharge, ic,
+        roic:nopat/ic*100,
+        nopatMargin:rev?nopat/rev*100:null,
+        icTurnover:rev?rev/ic:null,
+        reinvRate,
+      };
+    }).filter((x):x is NonNullable<typeof x>=>x!=null);
+  },[history,asYears]);
+
+  // ── Working Capital multi-year trend — Loop 12 ───────────────────────────
+  const wcTrend = useMemo(()=>asYears.map(y=>{
+    const rev=history.revenue?.[y], cogs=history.cost_of_revenue?.[y];
+    const ar=history.accounts_receivable?.[y], inv=history.inventory?.[y];
+    const ap=history.accounts_payable?.[y];
+    return{
+      year:y,
+      dso:ar&&rev&&rev>0?ar/rev*365:null,
+      dio:inv&&cogs&&cogs>0?inv/cogs*365:null,
+      dpo:ap&&cogs&&cogs>0?ap/cogs*365:null,
+      ccc:ar&&rev&&rev>0&&ap&&cogs&&cogs>0?ar/rev*365+(inv&&cogs>0?inv/cogs*365:0)-ap/cogs*365:null,
+    };
+  }),[history,asYears]);
+
+  // ── Capital Returns & Shareholder Yield — Loop 13 ───────────────────────
+  const capitalReturns = useMemo(()=>{
+    const mc=facts.market_cap, sh=facts.shares_diluted_wtd;
+    const div=Math.abs(facts.dividends_paid??0);
+    const bb=Math.abs(facts.buybacks??0);
+    const fcf=facts.free_cash_flow, eps=facts.eps_diluted;
+    const divY=mc&&div?div/mc*100:null;
+    const bbY=mc&&bb?bb/mc*100:null;
+    const totalYield=(divY??0)+(bbY??0);
+    const payout=eps&&eps>0&&div&&sh?(div/sh)/eps*100:null;
+    const fcfPayout=fcf&&fcf>0&&div?div/fcf*100:null;
+    const divVals=Object.entries(history.dividends_paid||{}).sort(([a],[b])=>a.localeCompare(b)).map(([,v])=>Math.abs(v)).filter(v=>v>0);
+    const divCAGR=divVals.length>=2?(Math.pow(divVals[divVals.length-1]/Math.max(divVals[0],1),1/Math.max(divVals.length-1,1))-1)*100:null;
+    // Per-year total shareholder yield
+    const yieldByYear=asYears.map(y=>{
+      const ymc=facts.market_cap; // approximate — use current mc as base
+      const ydiv=Math.abs(history.dividends_paid?.[y]??0);
+      const ybb=Math.abs(history.buybacks?.[y]??0);
+      return{year:y,divYield:ymc&&ydiv?ydiv/ymc*100:null,bbYield:ymc&&ybb?ybb/ymc*100:null};
+    });
+    // FCF allocation breakdown (most recent year)
+    const cy=asYears[asYears.length-1];
+    const alloc=fcf&&fcf>0?{
+      capex:Math.abs(history.capex?.[cy]??0),
+      dividends:div,
+      buybacks:bb,
+      debtRepay:Math.max(0,(history.long_term_debt?.[asYears[asYears.length-2]??cy]??0)-(history.long_term_debt?.[cy]??0)),
+    }:null;
+    return{divYield:divY,buybackYield:bbY,totalYield,payout,fcfPayout,divCAGR,yieldByYear,alloc};
+  },[facts,history,asYears]);
+
+  // ── Relative Value vs Peers + PEG + Magic Formula — Loop 13 ─────────────
+  const relativeValue = useMemo(()=>{
+    const medArr=(arr:(number|null)[])=>{const v=arr.filter((x):x is number=>x!=null).sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null;};
+    const peerPE=medArr(peers.map(p=>p.pe));
+    const peerEV=medArr(peers.map(p=>p.ev_ebitda));
+    const peerNM=medArr(peers.map(p=>p.net_margin??null));
+    const peerROIC=medArr(peers.map(p=>p.roic??null));
+    const pePrem=facts.pe_ratio&&peerPE?(facts.pe_ratio/peerPE-1)*100:null;
+    const evPrem=facts.ev_ebitda&&peerEV?(facts.ev_ebitda/peerEV-1)*100:null;
+    const nmDiff=facts.net_margin_pct!=null&&peerNM!=null?facts.net_margin_pct-peerNM:null;
+    const roicDiff=facts.roic!=null&&peerROIC!=null?facts.roic-peerROIC:null;
+    // PEG ratio: P/E / EPS growth (annualised)
+    const peg=facts.pe_ratio&&facts.eps_growth_yoy&&facts.eps_growth_yoy>0?facts.pe_ratio/facts.eps_growth_yoy:null;
+    // Magic Formula (Greenblatt): earnings yield (EBIT/EV) + ROIC
+    const ev_full=facts.market_cap!=null&&facts.long_term_debt!=null&&facts.cash!=null?facts.market_cap+facts.long_term_debt-facts.cash:null;
+    const earningsYield=facts.operating_income&&ev_full&&ev_full>0?facts.operating_income/ev_full*100:null;
+    const magicScore=earningsYield!=null&&facts.roic!=null?earningsYield+facts.roic:null;
+    // Sectors items for scorecard table
+    const rows=[
+      {label:"P/E",company:facts.pe_ratio,peer:peerPE,premium:pePrem,unit:"x",lowerBetter:true},
+      {label:"EV/EBITDA",company:facts.ev_ebitda,peer:peerEV,premium:evPrem,unit:"x",lowerBetter:true},
+      {label:"Net Margin",company:facts.net_margin_pct,peer:peerNM,premium:nmDiff,unit:"%",lowerBetter:false},
+      {label:"ROIC",company:facts.roic,peer:peerROIC,premium:roicDiff,unit:"%",lowerBetter:false},
+    ].filter(r=>r.company!=null&&r.peer!=null);
+    return{pePrem,evPrem,nmDiff,roicDiff,peg,earningsYield,magicScore,rows,peerPE,peerEV,peerNM,peerROIC};
+  },[facts,peers]);
+
   // ── DCF Sensitivity grid (WACC × terminal growth) ────────────────────────
   const dcfSensitivity = useMemo(() => {
     const fcf = facts.free_cash_flow;
@@ -1370,7 +1470,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-1">Financial Analytics Suite</p>
           <h3 className="text-[16px] font-bold text-white leading-tight">{companyName}</h3>
-          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 50+ charts · Monte Carlo · Football Field · 5-Factor Model · Beneish M-Score · Piotroski · AI analysis</p>
+          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 60+ charts · EVA Engine · Football Field · 5-Factor Model · Beneish · Magic Formula · PEG · Capital Returns · AI</p>
           {/* Quant scores row */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:`rgba(${qualityScore>=70?"16,185,129":qualityScore>=40?"245,158,11":"239,68,68"},0.15)`,color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED}}>
@@ -1619,6 +1719,64 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 pct
               />
             </Card>
+
+            {/* ══ LOOP 13: Capital Returns & Shareholder Yield ══ */}
+            <Card title="Total Shareholder Yield" sub="Dividend yield + buyback yield (vs current market cap)" badge="TSY">
+              {capitalReturns.yieldByYear.some(y=>y.divYield!=null||y.bbYield!=null)?(
+                <GroupedBar
+                  groups={capitalReturns.yieldByYear.map(y=>y.year)}
+                  series={[
+                    {name:"Div Yield %",values:capitalReturns.yieldByYear.map(y=>y.divYield??0),color:TEAL},
+                    {name:"Buyback Yield %",values:capitalReturns.yieldByYear.map(y=>y.bbYield??0),color:PURPLE},
+                  ]}
+                  pct
+                />
+              ):<NoData W={320} H={160}/>}
+            </Card>
+            <Card title="Capital Returns Summary" sub="Shareholder yield metrics (LTM)" badge="RETURNS">
+              <div className="space-y-2 py-1">
+                <div className="grid grid-cols-2 gap-2">
+                  <Pill label="Div Yield" value={capitalReturns.divYield!=null?`${capitalReturns.divYield.toFixed(1)}%`:"—"} color={TEAL}/>
+                  <Pill label="Buyback Yield" value={capitalReturns.buybackYield!=null?`${capitalReturns.buybackYield.toFixed(1)}%`:"—"} color={PURPLE}/>
+                  <Pill label="Total Yield" value={capitalReturns.totalYield>0?`${capitalReturns.totalYield.toFixed(1)}%`:"—"} color={capitalReturns.totalYield>4?GREEN:capitalReturns.totalYield>2?AMBER:RED}/>
+                  <Pill label="Div CAGR" value={capitalReturns.divCAGR!=null?`${capitalReturns.divCAGR.toFixed(1)}%`:"—"} color={GREEN}/>
+                </div>
+                <div className="grid grid-cols-2 gap-2 mt-1">
+                  <div className="rounded p-2" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                    <p className="text-[7px]" style={{color:"#ffffff25"}}>Payout Ratio (EPS)</p>
+                    <p className="text-[12px] font-bold" style={{color:capitalReturns.payout!=null&&capitalReturns.payout<60?GREEN:capitalReturns.payout!=null&&capitalReturns.payout<90?AMBER:RED}}>
+                      {capitalReturns.payout!=null?`${capitalReturns.payout.toFixed(0)}%`:"—"}
+                    </p>
+                    <p className="text-[6.5px] mt-0.5" style={{color:"#ffffff15"}}>Div/sh ÷ EPS</p>
+                  </div>
+                  <div className="rounded p-2" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                    <p className="text-[7px]" style={{color:"#ffffff25"}}>FCF Payout</p>
+                    <p className="text-[12px] font-bold" style={{color:capitalReturns.fcfPayout!=null&&capitalReturns.fcfPayout<60?GREEN:capitalReturns.fcfPayout!=null&&capitalReturns.fcfPayout<90?AMBER:RED}}>
+                      {capitalReturns.fcfPayout!=null?`${capitalReturns.fcfPayout.toFixed(0)}%`:"—"}
+                    </p>
+                    <p className="text-[6.5px] mt-0.5" style={{color:"#ffffff15"}}>Div ÷ Free Cash Flow</p>
+                  </div>
+                </div>
+                {capitalReturns.alloc&&(()=>{
+                  const total=Object.values(capitalReturns.alloc).reduce((s,v)=>s+v,0);
+                  if(total<=0)return null;
+                  return(
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-wider mt-2 mb-1" style={{color:"#ffffff25"}}>FCF Allocation (LTM)</p>
+                      {Object.entries(capitalReturns.alloc).map(([k,v],i)=>(
+                        <div key={k} className="flex items-center gap-2 mb-0.5">
+                          <span className="text-[7.5px] capitalize" style={{color:"#ffffff40",width:60}}>{k}</span>
+                          <div className="flex-1 h-1.5 rounded overflow-hidden" style={{background:"rgba(255,255,255,0.06)"}}>
+                            <div style={{width:`${Math.min(100,v/total*100)}%`,height:"100%",background:PALETTE[i],borderRadius:999}}/>
+                          </div>
+                          <span className="text-[7.5px] tabular-nums" style={{color:"#ffffff30",width:28,textAlign:"right"}}>{abbr(v,"$")}</span>
+                        </div>
+                      ))}
+                    </div>
+                  );
+                })()}
+              </div>
+            </Card>
           </div>
         )}
 
@@ -1663,6 +1821,19 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   {name:"Retained E",values:asYears.map(y=>history.retained_earnings?.[y]??0),color:PURPLE},
                 ]}
               />
+            </Card>
+            {/* ══ LOOP 12: WC multi-year trend ══ */}
+            <Card title="Cash Conversion Cycle Trend" sub="DSO · DIO · DPO over time — working capital velocity" badge="WC TREND">
+              {wcTrend.some(w=>w.ccc!=null)?(
+                <LineChart
+                  labels={wcTrend.map(w=>w.year)}
+                  series={[
+                    {name:"CCC",values:wcTrend.map(w=>w.ccc),color:BLUE},
+                    {name:"DSO",values:wcTrend.map(w=>w.dso),color:AMBER},
+                    {name:"DPO",values:wcTrend.map(w=>w.dpo),color:TEAL},
+                  ]}
+                />
+              ):<NoData W={320} H={160}/>}
             </Card>
             <Card title="Working Capital Efficiency" sub="DSO / DIO / DPO / Cash Conversion Cycle" badge="WC">
               <div className="py-2 space-y-3">
@@ -2007,6 +2178,63 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             </div>
 
             {/* DCF Sensitivity Table */}
+            {/* ══ LOOP 12: EVA + ROIC Decomposition ══ */}
+            {evaHistory.length>=2&&(
+              <div className="space-y-3">
+                <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                  <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Economic Value Added (EVA)</p>
+                      <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>NOPAT minus WACC × Invested Capital — positive = shareholder wealth creation</p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${evaHistory.filter(e=>e.eva>0).length>evaHistory.length/2?"16,185,129":"239,68,68"},0.15)`,color:evaHistory.filter(e=>e.eva>0).length>evaHistory.length/2?GREEN:RED}}>
+                        {evaHistory.filter(e=>e.eva>0).length}/{evaHistory.length} YRS +EVA
+                      </span>
+                    </div>
+                  </div>
+                  <div className="px-3 py-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-wider mb-2" style={{color:"#ffffff25"}}>Annual EVA (NOPAT − Capital Charge)</p>
+                      <BarChart data={evaHistory.map(e=>({label:e.year,value:e.eva,highlight:false}))} color={GREEN}/>
+                    </div>
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-wider mb-2" style={{color:"#ffffff25"}}>NOPAT vs Capital Charge (WACC × IC)</p>
+                      <GroupedBar
+                        groups={evaHistory.map(e=>e.year)}
+                        series={[
+                          {name:"NOPAT",values:evaHistory.map(e=>e.nopat),color:GREEN},
+                          {name:"Capital Charge",values:evaHistory.map(e=>e.capitalCharge),color:RED},
+                        ]}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+                  <Card title="NOPAT Margin Trend" sub="Operating profit after tax / Revenue" badge="ROIC">
+                    <LineChart
+                      labels={evaHistory.map(e=>e.year)}
+                      series={[{name:"NOPAT Margin %",values:evaHistory.map(e=>e.nopatMargin),color:TEAL}]}
+                      pct
+                    />
+                  </Card>
+                  <Card title="IC Turnover Trend" sub="Revenue ÷ Invested Capital — asset efficiency">
+                    <LineChart
+                      labels={evaHistory.map(e=>e.year)}
+                      series={[{name:"IC Turnover ×",values:evaHistory.map(e=>e.icTurnover),color:PURPLE}]}
+                    />
+                  </Card>
+                  <Card title="Reinvestment Rate" sub="CapEx / NOPAT — growth investment intensity">
+                    <BarChart
+                      data={evaHistory.filter(e=>e.reinvRate!=null).map(e=>({label:e.year,value:e.reinvRate!}))}
+                      color={AMBER}
+                      pct
+                    />
+                  </Card>
+                </div>
+              </div>
+            )}
+
             {dcfSensitivity&&(
               <Card title="DCF Sensitivity — Price per Share" sub="WACC (rows) × Terminal Growth Rate (cols) | current highlighted" badge="SENSITIVITY">
                 <div className="overflow-x-auto mt-1">
@@ -2318,6 +2546,90 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ):(
                   <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>Need 2+ years of financial history</p></div>
                 )}
+              </Card>
+
+              {/* ══ LOOP 13: Relative Value Scorecard ══ */}
+              <Card title="Relative Value Scorecard" sub="Premium / discount vs peer median — valuation context" badge="REL VAL">
+                {relativeValue.rows.length>0?(
+                  <div className="space-y-2 py-1">
+                    <div className="space-y-1">
+                      {relativeValue.rows.map((r,i)=>{
+                        const isGood=r.lowerBetter?(r.premium??0)<0:(r.premium??0)>0;
+                        const prem=r.premium;
+                        return(
+                          <div key={i} className="rounded p-2" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                            <div className="flex items-center justify-between mb-1">
+                              <span className="text-[8px] font-bold" style={{color:"#ffffff50"}}>{r.label}</span>
+                              <span className="text-[7px] font-bold" style={{color:isGood?GREEN:RED}}>
+                                {prem!=null?(prem>=0?"+":"")+prem.toFixed(1)+"% vs peers":"—"}
+                              </span>
+                            </div>
+                            <div className="flex items-center justify-between">
+                              <span className="text-[9px] font-bold" style={{color:isGood?GREEN:AMBER}}>{r.company?.toFixed(1)}{r.unit}</span>
+                              <span className="text-[7px]" style={{color:"#ffffff25"}}>vs peer {r.peer?.toFixed(1)}{r.unit}</span>
+                            </div>
+                            {prem!=null&&(
+                              <div className="mt-1.5 h-1 rounded overflow-hidden" style={{background:"rgba(255,255,255,0.06)"}}>
+                                <div style={{
+                                  width:`${Math.min(100,Math.abs(prem)*2)}%`,
+                                  height:"100%",
+                                  background:isGood?GREEN:RED,
+                                  marginLeft:prem<0?"0":`${50}%`,
+                                  maxWidth:"50%",
+                                  borderRadius:999,
+                                }}/>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ):(
+                  <div className="py-6 text-center"><p className="text-[10px]" style={{color:"#ffffff20"}}>Need peer data for relative scoring</p></div>
+                )}
+              </Card>
+
+              {/* ══ LOOP 13: PEG + Magic Formula ══ */}
+              <Card title="PEG Ratio & Magic Formula" sub="Growth-adjusted value + Greenblatt earnings yield + ROIC" badge="QUANT">
+                <div className="space-y-3 py-1">
+                  {/* PEG Ratio */}
+                  <div className="rounded p-3" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8px] font-bold uppercase tracking-wider" style={{color:"#ffffff35"}}>PEG Ratio</span>
+                      <span className="text-[7px]" style={{color:"#ffffff20"}}>P/E ÷ EPS Growth %</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-[28px] font-bold tabular-nums" style={{color:relativeValue.peg!=null?relativeValue.peg<1?GREEN:relativeValue.peg<2?AMBER:RED:AMBER}}>
+                        {relativeValue.peg!=null?relativeValue.peg.toFixed(2):"—"}
+                      </p>
+                      <div>
+                        <p className="text-[8px]" style={{color:relativeValue.peg!=null&&relativeValue.peg<1?GREEN:relativeValue.peg!=null&&relativeValue.peg<2?AMBER:RED}}>
+                          {relativeValue.peg!=null?(relativeValue.peg<1?"Potentially undervalued":relativeValue.peg<2?"Fair value":"Growth priced in"):"EPS growth or P/E unavailable"}
+                        </p>
+                        <p className="text-[7px] mt-0.5" style={{color:"#ffffff20"}}>&lt;1 = cheap · 1–2 = fair · &gt;2 = expensive</p>
+                        <p className="text-[7px]" style={{color:"#ffffff20"}}>P/E {facts.pe_ratio?.toFixed(1)??"—"}x ÷ EPS g {facts.eps_growth_yoy?.toFixed(1)??"—"}%</p>
+                      </div>
+                    </div>
+                  </div>
+                  {/* Magic Formula */}
+                  <div className="rounded p-3" style={{background:"rgba(167,139,250,0.06)",border:"1px solid rgba(167,139,250,0.15)"}}>
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="text-[8px] font-bold uppercase tracking-wider" style={{color:PURPLE}}>Magic Formula Score</span>
+                      <span className="text-[7px]" style={{color:"#ffffff20"}}>Greenblatt: EY + ROIC</span>
+                    </div>
+                    <div className="flex items-center gap-3">
+                      <p className="text-[28px] font-bold tabular-nums" style={{color:relativeValue.magicScore!=null?relativeValue.magicScore>40?GREEN:relativeValue.magicScore>20?AMBER:RED:PURPLE}}>
+                        {relativeValue.magicScore!=null?relativeValue.magicScore.toFixed(1):"—"}
+                      </p>
+                      <div>
+                        <p className="text-[8px]" style={{color:"#ffffff40"}}>Earnings Yield + ROIC composite</p>
+                        <p className="text-[7px] mt-0.5" style={{color:"#ffffff20"}}>EY: {relativeValue.earningsYield!=null?relativeValue.earningsYield.toFixed(1)+"%":"—"} · ROIC: {facts.roic!=null?facts.roic.toFixed(1)+"%":"—"}</p>
+                        <p className="text-[7px]" style={{color:"#ffffff20"}}>&gt;40 = top decile · &gt;20 = above avg</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
               </Card>
 
               {/* Earnings beat/miss detail */}
