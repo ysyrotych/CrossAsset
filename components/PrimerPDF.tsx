@@ -126,7 +126,13 @@ function parseSnapshotTable(text: string): { label: string; value: string }[] {
       const parts = l.split("|").map(p => p.trim()).filter(Boolean);
       return parts.length >= 2 ? { label: parts[0], value: parts[1] } : null;
     })
-    .filter((x): x is { label: string; value: string } => x !== null);
+    .filter((x): x is { label: string; value: string } => x !== null)
+    .filter(r =>
+      !r.label.match(/^[-=\s]+$/) &&
+      !r.value.match(/^[-=\s]+$/) &&
+      r.label.toLowerCase() !== "field" &&
+      r.label.toLowerCase() !== "metric"
+    );
 }
 
 function parseBullets(text: string): string[] {
