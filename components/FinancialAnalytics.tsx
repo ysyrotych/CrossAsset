@@ -1392,41 +1392,116 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
 
         {/* ── Quality & Peers ───────────────────────────────────────── */}
         {tab==="quality"&&(
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
-            <Card title="Accruals Ratio" sub="(NI−OCF)/Assets — earnings quality" badge="QUALITY">
-              <AreaChart values={accruals} labels={revYears} color={AMBER}/>
-            </Card>
-            <Card title="SBC % of Revenue" sub="Stock compensation dilution">
-              <LineChart labels={revYears} series={[{name:"SBC %",values:sbcPct,color:PINK}]} pct/>
-            </Card>
-            <Card title="DuPont ROE Decomposition" sub="Net margin × asset TO × leverage">
-              <StackedBar
-                labels={dupontHist.map(d=>d.label)}
-                series={[
-                  {name:"Net Margin %",values:dupontHist.map(d=>d.netMargin),color:GREEN},
-                  {name:"Asset TO ×10",values:dupontHist.map(d=>d.assetTO*10),color:BLUE},
-                  {name:"Leverage ×5",values:dupontHist.map(d=>d.leverage*5),color:PURPLE},
-                ]}
-              />
-            </Card>
-            <Card title="Peer P/E Comparison" sub="Current P/E vs peer group">
-              <HBar
-                data={allPeers.filter(p=>p.pe!=null).map(p=>({label:p.symbol,value:p.pe!,highlight:p.symbol===ticker})).sort((a,b)=>b.value-a.value)}
-                suffix="x" color={BLUE}
-              />
-            </Card>
-            <Card title="Peer ROIC" sub="Return on invested capital vs peers">
-              <HBar
-                data={allPeers.map(p=>({label:p.symbol,value:p.roic??0,highlight:p.symbol===ticker})).sort((a,b)=>b.value-a.value)}
-                suffix="%" color={GREEN}
-              />
-            </Card>
-            <Card title="Peer Net Margin" sub="Profitability vs peer universe">
-              <HBar
-                data={allPeers.map(p=>({label:p.symbol,value:p.net_margin??0,highlight:p.symbol===ticker})).sort((a,b)=>b.value-a.value)}
-                suffix="%" color={TEAL}
-              />
-            </Card>
+          <div className="space-y-3">
+            {/* Comparable Company Analysis table */}
+            <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Comparable Company Analysis</p>
+                  <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Sorted by market cap | Subject highlighted</p>
+                </div>
+                <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(59,130,246,0.15)",color:"#60a5fa",border:"1px solid rgba(59,130,246,0.2)"}}>COMPS TABLE</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse" style={{fontSize:8.5}}>
+                  <thead>
+                    <tr style={{borderBottom:`1px solid ${DARK_BORDER}`}}>
+                      {["Company","Mkt Cap","Rev Growth","P/E","EV/EBITDA","P/FCF","ROIC","Net Margin"].map(h=>(
+                        <th key={h} className="px-3 py-2 text-right first:text-left font-bold uppercase tracking-wider" style={{color:"#ffffff25",fontSize:7}}>{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {allPeers.sort((a,b)=>(b.market_cap??0)-(a.market_cap??0)).map((p,i)=>{
+                      const isSubject=p.symbol===ticker;
+                      const rowBg=isSubject?"rgba(59,130,246,0.1)":"transparent";
+                      const rowBorder=isSubject?`1px solid rgba(59,130,246,0.25)`:undefined;
+                      const fmt=(v:number|null,suf="",dec=1)=>v!=null?`${v.toFixed(dec)}${suf}`:"—";
+                      return(
+                        <tr key={i} style={{background:rowBg,borderBottom:`1px solid ${DARK_BORDER}`,outline:rowBorder}}>
+                          <td className="px-3 py-2">
+                            <span className="font-bold" style={{color:isSubject?"#93c5fd":"#ffffff70"}}>{p.symbol}</span>
+                            {p.name&&<span className="ml-1.5 text-[7.5px]" style={{color:"#ffffff25"}}>{p.name.length>20?p.name.slice(0,20)+"…":p.name}</span>}
+                            {isSubject&&<span className="ml-1.5 text-[7px] px-1 py-0.5 rounded" style={{background:"rgba(59,130,246,0.2)",color:"#60a5fa"}}>YOU</span>}
+                          </td>
+                          <td className="px-3 py-2 text-right" style={{color:"#ffffff50"}}>{p.market_cap?abbr(p.market_cap,"$"):"—"}</td>
+                          <td className="px-3 py-2 text-right font-bold" style={{color:p.rev_growth!=null&&p.rev_growth>15?GREEN:p.rev_growth!=null&&p.rev_growth>0?AMBER:RED}}>
+                            {p.rev_growth!=null?`${p.rev_growth>0?"+":""}${p.rev_growth.toFixed(1)}%`:"—"}
+                          </td>
+                          <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.pe,"x")}</td>
+                          <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.ev_ebitda,"x")}</td>
+                          <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.p_fcf,"x")}</td>
+                          <td className="px-3 py-2 text-right font-bold" style={{color:p.roic>15?GREEN:p.roic>9?AMBER:RED}}>{fmt(p.roic,"%")}</td>
+                          <td className="px-3 py-2 text-right font-bold" style={{color:p.net_margin>20?GREEN:p.net_margin>5?AMBER:RED}}>{fmt(p.net_margin,"%")}</td>
+                        </tr>
+                      );
+                    })}
+                    {/* Median row */}
+                    {allPeers.length>1&&(()=>{
+                      const nonSubject=allPeers.filter(p=>p.symbol!==ticker);
+                      const med=(arr:(number|null)[])=>{const v=arr.filter((x):x is number=>x!=null).sort((a,b)=>a-b);return v.length?v[Math.floor(v.length/2)]:null;};
+                      return(
+                        <tr style={{borderTop:`2px solid ${DARK_BORDER}`,background:"rgba(255,255,255,0.02)"}}>
+                          <td className="px-3 py-1.5 font-bold text-[7.5px] uppercase" style={{color:"#ffffff25"}}>Peer Median</td>
+                          <td className="px-3 py-1.5 text-right" style={{color:"#ffffff30"}}>—</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.rev_growth??null)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.pe)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.ev_ebitda)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.p_fcf)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.roic)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.net_margin)))}</td>
+                        </tr>
+                      );
+                    })()}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
+              <Card title="Accruals Ratio" sub="(NI−OCF)/Assets — earnings quality" badge="QUALITY">
+                <AreaChart values={accruals} labels={revYears} color={AMBER}/>
+              </Card>
+              <Card title="SBC % of Revenue" sub="Stock compensation dilution">
+                <LineChart labels={revYears} series={[{name:"SBC %",values:sbcPct,color:PINK}]} pct/>
+              </Card>
+              <Card title="DuPont ROE Decomposition" sub="Net margin × asset TO × leverage">
+                <StackedBar
+                  labels={dupontHist.map(d=>d.label)}
+                  series={[
+                    {name:"Net Margin %",values:dupontHist.map(d=>d.netMargin),color:GREEN},
+                    {name:"Asset TO ×10",values:dupontHist.map(d=>d.assetTO*10),color:BLUE},
+                    {name:"Leverage ×5",values:dupontHist.map(d=>d.leverage*5),color:PURPLE},
+                  ]}
+                />
+              </Card>
+              <Card title="Peer P/E vs ROIC Scatter" sub="Quality vs price quadrant analysis">
+                {allPeers.filter(p=>p.pe!=null).length>=2
+                  ?<Scatter
+                    points={allPeers.filter(p=>p.pe!=null).map(p=>({label:p.symbol,x:p.roic??0,y:p.pe!,highlight:p.symbol===ticker}))}
+                    xLabel="ROIC %" yLabel="P/E x"
+                  />
+                  :<div className="py-8 text-center"><p className="text-[10px] text-white/20">Need ≥2 peers with P/E data</p></div>}
+              </Card>
+              <Card title="Peer Rev Growth vs Margin" sub="Growth quality scatter">
+                {allPeers.filter(p=>p.rev_growth!=null).length>=2
+                  ?<Scatter
+                    points={allPeers.filter(p=>p.rev_growth!=null).map(p=>({label:p.symbol,x:p.rev_growth!,y:p.net_margin??0,highlight:p.symbol===ticker}))}
+                    xLabel="Rev Growth %" yLabel="Net Margin %"
+                  />
+                  :<NoData W={320} H={160}/>}
+              </Card>
+              <Card title="SBC-Adjusted FCF" sub="True FCF after stock comp cost">
+                <BarChart
+                  data={revYears.map(y=>({
+                    label:y,
+                    value:(history.free_cash_flow?.[y]??0)-(history.sbc_expense?.[y]??0),
+                  }))}
+                  color={TEAL}
+                  showGrowth
+                />
+              </Card>
+            </div>
           </div>
         )}
 
