@@ -9,6 +9,11 @@ const PrimerDownloadButton = dynamic(
   { ssr: false }
 );
 
+const FinancialAnalytics = dynamic(
+  () => import("@/components/FinancialAnalytics"),
+  { ssr: false }
+);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type FilingSection = { item: string; title: string; text: string; char_count: number };
@@ -2014,6 +2019,24 @@ export default function TenKPage() {
           {data.history && Object.keys(data.history).length > 0 && (
             <HistoryTable history={data.history} />
           )}
+
+          {/* Financial Analytics — 30 Charts */}
+          <div>
+            <p className="text-[10px] font-bold uppercase tracking-widest text-[#bbb] mb-3">Financial Analytics</p>
+            <FinancialAnalytics
+              ticker={data.company.ticker}
+              companyName={data.company.name}
+              facts={data.xbrl_facts}
+              history={data.history ?? {}}
+              quarterly={data.quarterly_xbrl ?? {}}
+              quarterlyPeriod={data.quarterly_period ?? ""}
+              kmHistory={data.fmp_extended?.km_history}
+              growthHistory={data.fmp_extended?.growth_history}
+              earningsSurprises={data.fmp_extended?.earnings_surprises}
+              peers={data.fmp_extended?.peer_comparison}
+              sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
+            />
+          </div>
 
           {/* Valuation & Returns */}
           {Object.keys(data.xbrl_facts).length > 0 && (() => {
