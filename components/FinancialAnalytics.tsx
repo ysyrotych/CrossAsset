@@ -27,6 +27,7 @@ export type FinancialAnalyticsProps = {
   segments?: SegmentData;
   geoSegments?: SegmentData;
   analystEstimates?: AnalystEstimates;
+  fmpRating?: string;
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -598,7 +599,7 @@ type CatId = typeof CATS[number]["id"];
 export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
-  segments, geoSegments, analystEstimates=[],
+  segments, geoSegments, analystEstimates=[], fmpRating,
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -1086,10 +1087,30 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-1">Financial Analytics Suite</p>
           <h3 className="text-[16px] font-bold text-white leading-tight">{companyName}</h3>
-          <p className="text-[10.5px] text-white/35 mt-0.5">7 categories · 35 charts · Monte Carlo · DCF · Peer regression · AI analysis</p>
+          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 40+ charts · Monte Carlo · DCF Sensitivity · Piotroski · Altman Z · AI analysis</p>
+          {/* Quant scores row */}
+          <div className="flex items-center gap-3 mt-2 flex-wrap">
+            <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:`rgba(${qualityScore>=70?"16,185,129":qualityScore>=40?"245,158,11":"239,68,68"},0.15)`,color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED}}>
+              Quality {qualityScore}/100
+            </span>
+            {piotroski.maxScore>0&&(
+              <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(255,255,255,0.06)",color:piotroski.score>=7?GREEN:piotroski.score>=4?AMBER:RED}}>
+                Piotroski {piotroski.score}/{piotroski.maxScore}
+              </span>
+            )}
+            {altmanZ&&(
+              <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(255,255,255,0.06)",color:altmanZ.color}}>
+                Altman Z {altmanZ.z} · {altmanZ.zone}
+              </span>
+            )}
+            {fmpRating&&(
+              <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:"rgba(96,165,250,0.12)",color:"#60a5fa"}}>
+                {fmpRating}
+              </span>
+            )}
+          </div>
         </div>
         <div className="flex flex-col items-end gap-2">
-          {/* Summary pills */}
           {facts.pe_ratio&&<span className="text-[9px] font-bold text-[#60a5fa]">P/E {facts.pe_ratio.toFixed(1)}x · EV/EBITDA {facts.ev_ebitda?.toFixed(1)??"—"}x</span>}
           <button onClick={runAI} disabled={aiRunning}
             className="flex items-center gap-2 px-4 py-2.5 rounded-lg text-[11px] font-bold transition-all shrink-0"
@@ -1313,6 +1334,15 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             <Card title="Current Ratio" sub="Short-term liquidity coverage">
               <LineChart labels={asYears} series={[{name:"Current Ratio",values:crVals,color:TEAL}]}/>
             </Card>
+            <Card title="Interest Coverage Ratio" sub="EBIT / Interest Expense — debt service ability">
+              <LineChart
+                labels={asYears}
+                series={[{name:"Coverage",values:asYears.map(y=>{
+                  const ei=history.operating_income?.[y];const ie=history.interest_expense?.[y];
+                  return ei&&ie&&ie>0?ei/ie:null;
+                }),color:TEAL}]}
+              />
+            </Card>
             <Card title="Equity & Retained Earnings" sub="Book value expansion">
               <GroupedBar
                 groups={asYears}
@@ -1499,6 +1529,21 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   }))}
                   color={TEAL}
                   showGrowth
+                />
+              </Card>
+              <Card title="ROIC / ROE / ROA History" sub="Returns on capital — trend analysis">
+                <LineChart
+                  labels={asYears}
+                  series={[
+                    {name:"ROIC",values:asYears.map(y=>{
+                      const oi=history.operating_income?.[y];const ta=history.total_assets?.[y];const cl=history.current_liabilities?.[y];const cash=history.cash?.[y];const tr=history.income_tax?.[y];const pt=history.pretax_income?.[y];
+                      const taxR=pt&&tr?tr/Math.abs(pt):0.21;const ic=ta&&cl&&cash!=null?ta-cl-cash:null;
+                      return oi&&ic&&ic>0?oi*(1-taxR)/ic*100:null;
+                    }),color:GREEN},
+                    {name:"ROE",values:asYears.map(y=>{const ni=history.net_income?.[y];const eq=history.equity?.[y];return ni&&eq&&eq>0?ni/eq*100:null;}),color:BLUE},
+                    {name:"ROA",values:asYears.map(y=>{const ni=history.net_income?.[y];const ta=history.total_assets?.[y];return ni&&ta&&ta>0?ni/ta*100:null;}),color:TEAL},
+                  ]}
+                  pct
                 />
               </Card>
             </div>

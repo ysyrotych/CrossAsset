@@ -2038,6 +2038,7 @@ export default function TenKPage() {
               segments={data.fmp_extended?.segments}
               geoSegments={data.fmp_extended?.geo_segments}
               analystEstimates={data.fmp_extended?.analyst_estimates}
+              fmpRating={data.fmp_extended?.fmp_rating}
             />
           </div>
 
