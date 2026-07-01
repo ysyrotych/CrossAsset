@@ -967,6 +967,52 @@ export default function FinancialAnalytics({
     return Math.min(100, Math.round(score));
   }, [piotroski, altmanZ, facts, earningsStreak]);
 
+  // ── DCF Sensitivity grid (WACC × terminal growth) ────────────────────────
+  const dcfSensitivity = useMemo(() => {
+    const fcf = facts.free_cash_flow;
+    const shares = facts.shares_diluted_wtd;
+    if (!fcf || !shares || fcf <= 0) return null;
+    const rev = facts.revenue ?? fcf / 0.15;
+    const fcfMargin = facts.revenue ? fcf / facts.revenue : 0.15;
+    const netD = (facts.long_term_debt ?? 0) - (facts.cash ?? 0);
+    const termMult = facts.ev_ebitda || 15;
+    const ebitdaMarg = facts.ebitda && facts.revenue ? facts.ebitda / facts.revenue : 0.25;
+    const waccVals = [0.07, 0.08, 0.09, 0.10, 0.11];
+    const growthVals = [0.03, 0.05, 0.08, 0.10, 0.12];
+    const currentPrice = facts.stock_price || (facts.market_cap && shares ? facts.market_cap / shares : 0);
+
+    const grid = waccVals.map(wacc =>
+      growthVals.map(g => {
+        let cumFcf = 0, curRev = rev;
+        for (let yr = 1; yr <= 5; yr++) {
+          curRev *= (1 + g + 0.03);
+          cumFcf += curRev * fcfMargin / Math.pow(1 + wacc, yr);
+        }
+        const termEV = curRev * ebitdaMarg * (termMult * (1 + g * 2)) / Math.pow(1 + wacc, 5);
+        const price = Math.max(0, cumFcf + termEV - netD) / shares;
+        return parseFloat(price.toFixed(0));
+      })
+    );
+    return { grid, waccVals, growthVals, currentPrice };
+  }, [facts]);
+
+  // ── Working Capital metrics ───────────────────────────────────────────────
+  const workingCapital = useMemo(() => {
+    const rev = facts.revenue;
+    const cogs = facts.cost_of_revenue;
+    const ar = facts.accounts_receivable;
+    const inv = facts.inventory;
+    const ap = facts.accounts_payable;
+    const ca = facts.current_assets;
+    const cl = facts.current_liabilities;
+    const dso = ar && rev && rev > 0 ? ar / rev * 365 : null;
+    const dio = inv && cogs && cogs > 0 ? inv / cogs * 365 : null;
+    const dpo = ap && cogs && cogs > 0 ? ap / cogs * 365 : null;
+    const ccc = dso != null && dpo != null ? (dso + (dio ?? 0) - dpo) : null;
+    const nwc = ca && cl ? ca - cl : null;
+    return { dso, dio, dpo, ccc, nwc };
+  }, [facts]);
+
   // ── Segment data ──────────────────────────────────────────────────────────
   const segmentItems = useMemo(() => {
     if (!segments?.data) return [];
@@ -1074,6 +1120,29 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
           </div>
         </div>
       )}
+
+      {/* Key Stats Banner */}
+      <div className="flex overflow-x-auto gap-0 border-b" style={{background:"#040d1c",borderColor:DARK_BORDER}}>
+        {[
+          { label:"Rev", value:abbr(facts.revenue||0,"$"), sub:facts.revenue_growth_yoy!=null?`${facts.revenue_growth_yoy>0?"+":""}${facts.revenue_growth_yoy.toFixed(1)}% YoY`:undefined, color:"#ffffff70" },
+          { label:"Gross Margin", value:facts.gross_margin_pct!=null?`${facts.gross_margin_pct.toFixed(1)}%`:"—", color:facts.gross_margin_pct&&facts.gross_margin_pct>50?GREEN:AMBER },
+          { label:"Op Margin", value:facts.operating_margin_pct!=null?`${facts.operating_margin_pct.toFixed(1)}%`:"—", color:facts.operating_margin_pct&&facts.operating_margin_pct>20?GREEN:facts.operating_margin_pct&&facts.operating_margin_pct>0?AMBER:RED },
+          { label:"Net Margin", value:facts.net_margin_pct!=null?`${facts.net_margin_pct.toFixed(1)}%`:"—", color:facts.net_margin_pct&&facts.net_margin_pct>15?GREEN:facts.net_margin_pct&&facts.net_margin_pct>0?AMBER:RED },
+          { label:"ROIC", value:facts.roic!=null?`${facts.roic.toFixed(1)}%`:"—", color:facts.roic&&facts.roic>15?GREEN:facts.roic&&facts.roic>9?AMBER:RED },
+          { label:"P/E", value:facts.pe_ratio!=null?`${facts.pe_ratio.toFixed(1)}x`:"—", color:"#ffffff70" },
+          { label:"EV/EBITDA", value:facts.ev_ebitda!=null?`${facts.ev_ebitda.toFixed(1)}x`:"—", color:"#ffffff70" },
+          { label:"P/FCF", value:facts.p_fcf!=null?`${facts.p_fcf.toFixed(1)}x`:"—", color:"#ffffff70" },
+          { label:"Mkt Cap", value:abbr(facts.market_cap||0,"$"), color:"#ffffff70" },
+          { label:"Beta", value:facts.beta!=null?facts.beta.toFixed(2):"—", color:facts.beta&&facts.beta>1.5?RED:facts.beta&&facts.beta<0.8?GREEN:"#ffffff70" },
+          ...(facts.pt_consensus?[{ label:"PT Consensus", value:abbr(facts.pt_consensus,"$"), sub:facts.stock_price?`${((facts.pt_consensus/facts.stock_price-1)*100).toFixed(0)}% upside`:undefined, color:facts.stock_price&&facts.pt_consensus>facts.stock_price?GREEN:RED }]:[]),
+        ].map((s,i)=>(
+          <div key={i} className="flex flex-col items-center px-3.5 py-2.5 shrink-0 border-r" style={{borderColor:DARK_BORDER}}>
+            <p className="text-[7px] font-bold uppercase tracking-widest mb-0.5" style={{color:"#ffffff25"}}>{s.label}</p>
+            <p className="text-[11px] font-bold tabular-nums" style={{color:s.color}}>{s.value}</p>
+            {s.sub&&<p className="text-[7.5px] mt-0.5" style={{color:"#ffffff30"}}>{s.sub}</p>}
+          </div>
+        ))}
+      </div>
 
       {/* Category tabs */}
       <div className="flex overflow-x-auto border-b" style={{background:"#04090f",borderColor:DARK_BORDER}}>
@@ -1253,6 +1322,41 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ]}
               />
             </Card>
+            <Card title="Working Capital Efficiency" sub="DSO / DIO / DPO / Cash Conversion Cycle" badge="WC">
+              <div className="py-2 space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  <Pill label="DSO (days)" value={workingCapital.dso!=null?workingCapital.dso.toFixed(0):"—"} color={workingCapital.dso!=null&&workingCapital.dso<45?GREEN:AMBER}/>
+                  <Pill label="DIO (days)" value={workingCapital.dio!=null?workingCapital.dio.toFixed(0):"—"} color={workingCapital.dio!=null&&workingCapital.dio<60?GREEN:AMBER}/>
+                  <Pill label="DPO (days)" value={workingCapital.dpo!=null?workingCapital.dpo.toFixed(0):"—"} color={workingCapital.dpo!=null&&workingCapital.dpo>30?GREEN:AMBER}/>
+                  <Pill label="CCC (days)" value={workingCapital.ccc!=null?workingCapital.ccc.toFixed(0):"—"} color={workingCapital.ccc!=null&&workingCapital.ccc<30?GREEN:workingCapital.ccc!=null&&workingCapital.ccc<60?AMBER:RED}/>
+                </div>
+                <div className="rounded p-2 space-y-1" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                  {[
+                    {k:"Days Sales Outstanding",v:workingCapital.dso,unit:"d",formula:"AR / Revenue × 365"},
+                    {k:"Days Inventory Outstanding",v:workingCapital.dio,unit:"d",formula:"Inv / COGS × 365"},
+                    {k:"Days Payable Outstanding",v:workingCapital.dpo,unit:"d",formula:"AP / COGS × 365"},
+                    {k:"Net Working Capital",v:workingCapital.nwc!=null?workingCapital.nwc/1e9:null,unit:"B",formula:"Current Assets – Current Liab."},
+                  ].map((r,i)=>(
+                    <div key={i} className="flex items-center justify-between">
+                      <div>
+                        <p className="text-[8px]" style={{color:"#ffffff40"}}>{r.k}</p>
+                        <p className="text-[6.5px]" style={{color:"#ffffff20"}}>{r.formula}</p>
+                      </div>
+                      <span className="text-[9px] font-bold tabular-nums" style={{color:"#ffffff60"}}>{r.v!=null?`${r.v.toFixed(1)}${r.unit}`:"—"}</span>
+                    </div>
+                  ))}
+                </div>
+                {workingCapital.ccc!=null&&(
+                  <div className="rounded p-2 text-center" style={{background:workingCapital.ccc<0?"rgba(16,185,129,0.1)":"rgba(245,158,11,0.08)",border:`1px solid ${workingCapital.ccc<0?GREEN:DARK_BORDER}`}}>
+                    <p className="text-[8px] font-bold" style={{color:workingCapital.ccc<0?GREEN:AMBER}}>
+                      {workingCapital.ccc<0?"Negative CCC: Company collects before paying suppliers — strong working capital position"
+                       :workingCapital.ccc<30?"Short CCC: Efficient cash cycle management"
+                       :`CCC ${workingCapital.ccc.toFixed(0)} days — monitor AR/inventory efficiency`}
+                    </p>
+                  </div>
+                )}
+              </div>
+            </Card>
           </div>
         )}
 
@@ -1380,6 +1484,54 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 />
               </Card>
             </div>
+
+            {/* DCF Sensitivity Table */}
+            {dcfSensitivity&&(
+              <Card title="DCF Sensitivity — Price per Share" sub="WACC (rows) × Terminal Growth Rate (cols) | current highlighted" badge="SENSITIVITY">
+                <div className="overflow-x-auto mt-1">
+                  <table className="w-full border-collapse text-[8px]">
+                    <thead>
+                      <tr>
+                        <td className="px-1.5 py-1 text-right" style={{color:"#ffffff25",fontSize:7}}>WACC ↓ / g →</td>
+                        {dcfSensitivity.growthVals.map(g=>(
+                          <td key={g} className="px-2 py-1 text-center font-bold" style={{color:"#ffffff45",borderLeft:`1px solid ${DARK_BORDER}`}}>{(g*100).toFixed(0)}%</td>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {dcfSensitivity.grid.map((row, wi)=>{
+                        const wacc=dcfSensitivity.waccVals[wi];
+                        return(
+                          <tr key={wi} style={{borderTop:`1px solid ${DARK_BORDER}`}}>
+                            <td className="px-1.5 py-1.5 text-right font-bold" style={{color:"#ffffff40",fontSize:7}}>{(wacc*100).toFixed(0)}%</td>
+                            {row.map((price, gi)=>{
+                              const cp=dcfSensitivity.currentPrice;
+                              const pct=cp>0?(price-cp)/cp:0;
+                              const bg=pct>0.15?"rgba(16,185,129,0.25)":pct>0?"rgba(16,185,129,0.10)":pct>-0.15?"rgba(245,158,11,0.15)":"rgba(239,68,68,0.20)";
+                              const col=pct>0.15?GREEN:pct>0?GREEN:pct>-0.15?AMBER:RED;
+                              const isMid=wi===2&&gi===2;
+                              return(
+                                <td key={gi} className="px-2 py-1.5 text-center font-bold tabular-nums" style={{
+                                  background:isMid?"rgba(59,130,246,0.2)":bg,
+                                  color:isMid?"#93c5fd":col,
+                                  border:isMid?`1px solid #3b82f6`:`1px solid ${DARK_BORDER}`,
+                                  fontSize:8.5,
+                                }}>
+                                  ${price.toLocaleString()}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[7px] mt-1.5 text-right" style={{color:"#ffffff20"}}>
+                    Current price: ${dcfSensitivity.currentPrice>0?dcfSensitivity.currentPrice.toFixed(0):"—"} · Base case (9% WACC, 8% g) highlighted blue · WACC=9%, EV/EBITDA terminal
+                  </p>
+                </div>
+              </Card>
+            )}
           </div>
         )}
 
