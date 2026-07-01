@@ -110,6 +110,32 @@ def get_fmp_financials(ticker: str) -> dict:
                 return data[0] if data else {}
             return data if isinstance(data, dict) else {}
 
+        # Helper: try stable endpoint first, fall back to v3 path-based
+        def fetch_km(limit=8):
+            # Try stable key-metrics first
+            r = fetch("key-metrics", {"period": "annual"}, limit)
+            if r:
+                return r
+            return fetch_v3("key-metrics", limit)
+
+        def fetch_growth(limit=6):
+            r = fetch("financial-growth", {"period": "annual"}, limit)
+            if r:
+                return r
+            return fetch_v3("financial-growth", limit)
+
+        def fetch_ratios(limit=6):
+            r = fetch("ratios", {"period": "annual"}, limit)
+            if r:
+                return r
+            return fetch_v3("ratios", limit)
+
+        def fetch_earnings(limit=8):
+            r = fetch("earnings-surprises", None, limit)
+            if r:
+                return r
+            return fetch_v3("earnings-surprises", limit)
+
         with _cf.ThreadPoolExecutor(max_workers=18) as ex:
             fs = {
                 "inc_a":     ex.submit(fetch, "income-statement"),
@@ -119,16 +145,14 @@ def get_fmp_financials(ticker: str) -> dict:
                 "bal_q":     ex.submit(fetch, "balance-sheet-statement",  {"period": "quarterly"}),
                 "cf_q":      ex.submit(fetch, "cash-flow-statement",      {"period": "quarterly"}),
                 "profile":   ex.submit(fetch_one, "profile"),
-                # v3 for historical multiples (stable doesn't expose these)
-                "km":        ex.submit(fetch_v3, "key-metrics", 8),
-                "km_ttm":    ex.submit(fetch_v3, "key-metrics-ttm", 1),
-                "growth":    ex.submit(fetch_v3, "financial-growth", 6),
-                "ratios":    ex.submit(fetch_v3, "ratios", 6),
+                "km":        ex.submit(fetch_km, 8),
+                "km_ttm":    ex.submit(fetch, "key-metrics-ttm"),
+                "growth":    ex.submit(fetch_growth, 6),
+                "ratios":    ex.submit(fetch_ratios, 6),
                 "estimates": ex.submit(fetch, "analyst-estimates", None, 4),
                 "rating":    ex.submit(fetch_one, "ratings"),
                 "pt":        ex.submit(fetch_one, "price-target-summary"),
-                # v3 for earnings surprises (path-based)
-                "earnings":  ex.submit(fetch_v3, "earnings-surprises", 8),
+                "earnings":  ex.submit(fetch_earnings, 8),
                 "segments":  ex.submit(fetch, "revenue-product-segmentation", None, 3),
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
                 "news":      ex.submit(fetch, "stock-news", None, 12),
@@ -150,23 +174,36 @@ def get_fmp_financials(ticker: str) -> dict:
         if peer_symbols:
             def fetch_peer_data(sym: str) -> dict:
                 try:
-                    # Use v3 key-metrics for peers
-                    url_km = f"{FMP_V3}/key-metrics/{sym}?limit=1&apikey={FMP_API_KEY}"
+                    # Try stable key-metrics first, fall back to v3
+                    url_km_stable = f"{FMP_BASE}/key-metrics?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
+                    url_km_v3 = f"{FMP_V3}/key-metrics/{sym}?limit=1&apikey={FMP_API_KEY}"
                     url_pr = f"{FMP_BASE}/profile?symbol={sym}&apikey={FMP_API_KEY}"
-                    rk = httpx.get(url_km, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    url_inc = f"{FMP_BASE}/income-statement?symbol={sym}&limit=2&apikey={FMP_API_KEY}"
+                    rk = httpx.get(url_km_stable, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     rp = httpx.get(url_pr, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    ri = httpx.get(url_inc, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     km_item = {}
                     pr_item = {}
+                    inc_items = []
                     if rk.status_code == 200:
                         d = rk.json()
                         km_item = d[0] if isinstance(d, list) and d else {}
+                    # Fall back to v3 if stable returned empty
+                    if not km_item:
+                        rk2 = httpx.get(url_km_v3, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                        if rk2.status_code == 200:
+                            d2 = rk2.json()
+                            km_item = d2[0] if isinstance(d2, list) and d2 else {}
                     if rp.status_code == 200:
                         d = rp.json()
                         pr_item = d[0] if isinstance(d, list) and d else (d if isinstance(d, dict) else {})
-                    return {"km": km_item, "pr": pr_item}
+                    if ri.status_code == 200:
+                        d = ri.json()
+                        inc_items = d if isinstance(d, list) else []
+                    return {"km": km_item, "pr": pr_item, "inc": inc_items}
                 except Exception as e:
                     print(f"Peer fetch error for {sym}: {e}")
-                    return {"km": {}, "pr": {}}
+                    return {"km": {}, "pr": {}, "inc": []}
 
             with _cf.ThreadPoolExecutor(max_workers=6) as ex2:
                 peer_data_fs = {sym: ex2.submit(fetch_peer_data, sym) for sym in peer_symbols}
@@ -183,14 +220,32 @@ def get_fmp_financials(ticker: str) -> dict:
                 pd = peer_data_map.get(sym, {})
                 km = pd.get("km", {})
                 pr = pd.get("pr", {})
+                inc = pd.get("inc", [])
                 if km or pr:
-                    pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe")
-                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda")
-                    p_fcf = _peer_val(km, "pfcfRatio", "priceToFreeCashFlowsRatio")
+                    pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio")
+                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "enterpriseValueMultiple")
+                    p_fcf = _peer_val(km, "pfcfRatio", "priceToFreeCashFlowsRatio", "priceToFreeCashFlow")
                     roic  = _peer_val(km, "roic", "returnOnInvestedCapital")
-                    npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT")
-                    rev_g = _peer_val(km, "revenueGrowth")
+                    npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage")
+                    rev_g = _peer_val(km, "revenueGrowth", "revenuePerShareGrowth")
                     mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
+                    pr_price = safe_float(pr.get("price"))
+
+                    # Compute from income statement if km missing
+                    if inc and len(inc) >= 1:
+                        ia0 = inc[0]; ia1 = inc[1] if len(inc) > 1 else {}
+                        ni0 = safe_float(ia0.get("netIncome"))
+                        ni1 = safe_float(ia1.get("netIncome"))
+                        rev0 = safe_float(ia0.get("revenue"))
+                        rev1 = safe_float(ia1.get("revenue"))
+                        oi0 = safe_float(ia0.get("operatingIncome"))
+                        if mc and ni0 and ni0 > 0 and not pe:
+                            pe = round(mc / ni0, 1)
+                        if rev0 and ni0 and rev0 > 0 and not npm:
+                            npm = ni0 / rev0
+                        if rev0 and rev1 and rev1 > 0 and not rev_g:
+                            rev_g = (rev0 - rev1) / abs(rev1)
+
                     peer_comparison.append({
                         "symbol":     sym,
                         "name":       pr.get("companyName", sym),
@@ -590,25 +645,25 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
                     return v
             return None
         for k, candidates in [
-            ("pe_ratio",        ["peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio"]),
-            ("p_sales",         ["priceToSalesRatio", "priceSalesRatio", "ps"]),
-            ("p_fcf",           ["pfcfRatio", "priceToFreeCashFlowsRatio", "pfcf"]),
-            ("p_book",          ["pbRatio", "priceToBookRatio", "pb"]),
-            ("enterprise_value",["enterpriseValue", "ev"]),
-            ("ev_ebitda",       ["enterpriseValueOverEBITDA", "evEbitda", "evToEbitda"]),
-            ("ev_revenue",      ["evToSales", "evToRevenue", "evSales"]),
+            ("pe_ratio",        ["peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio", "priceEarnings"]),
+            ("p_sales",         ["priceToSalesRatio", "priceSalesRatio", "ps", "priceToSales"]),
+            ("p_fcf",           ["pfcfRatio", "priceToFreeCashFlowsRatio", "pfcf", "priceToFreeCashFlow", "priceFreeCashFlow"]),
+            ("p_book",          ["pbRatio", "priceToBookRatio", "pb", "priceToBook"]),
+            ("enterprise_value",["enterpriseValue", "ev", "enterpriseVal"]),
+            ("ev_ebitda",       ["enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "evToEBITDA", "enterpriseValueMultiple"]),
+            ("ev_revenue",      ["evToSales", "evToRevenue", "evSales", "enterpriseValueToRevenue"]),
             ("current_ratio",   ["currentRatio"]),
-            ("debt_to_equity",  ["debtToEquity", "debtEquityRatio"]),
-            ("interest_coverage",["interestCoverage"]),
-            ("income_quality",  ["incomeQuality"]),
+            ("debt_to_equity",  ["debtToEquity", "debtEquityRatio", "totalDebtToEquity"]),
+            ("interest_coverage",["interestCoverage", "interestCoverageRatio"]),
+            ("income_quality",  ["incomeQuality", "accruals"]),
         ]:
             v = _km(candidates)
             if v is not None: facts[k] = round(v, 2)
         for k, candidates in [
-            ("roic",         ["roic", "returnOnInvestedCapital"]),
+            ("roic",         ["roic", "returnOnInvestedCapital", "returnOnCapitalEmployed"]),
             ("roe_km",       ["roe", "returnOnEquity"]),
-            ("dividend_yield",["dividendYield"]),
-            ("fcf_yield",    ["freeCashFlowYield", "fcfYield"]),
+            ("dividend_yield",["dividendYield", "dividendYielPercentage", "dividendYieldPercentage"]),
+            ("fcf_yield",    ["freeCashFlowYield", "fcfYield", "freeCashFlowToEquity"]),
         ]:
             v = _km(candidates)
             if v is not None: facts[k] = round(v * 100, 2)
@@ -719,20 +774,41 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         if surprises:
             fmp_ext["earnings_surprises"] = surprises
 
-    # Revenue segments — each period is {date, seg1: val, seg2: val, ...}
+    # Revenue segments — FMP returns {date, segName: value} or {date, segName: {value: ...}}
+    # Exclude metadata keys: date, fiscalYear, symbol, period, reportedCurrency
+    _META_KEYS = {"date", "fiscalYear", "fiscal_year", "symbol", "period", "reportedCurrency", "cik", "acceptedDate", "link", "finalLink"}
+
+    def _parse_seg(raw_list: list) -> dict:
+        if not raw_list:
+            return {}
+        latest = raw_list[0] if isinstance(raw_list[0], dict) else {}
+        seg_date = latest.get("date", "")
+        seg_data: dict = {}
+        for k, v in latest.items():
+            if k in _META_KEYS:
+                continue
+            # Handle nested dict e.g. {"Family of Apps": {"revenue": 161888000000}}
+            if isinstance(v, dict):
+                inner = v.get("revenue") or v.get("value") or (list(v.values())[0] if v else None)
+                if inner is not None:
+                    fv = safe_float(inner)
+                    if fv and fv > 1e6:  # must be at least $1M to be a real segment
+                        seg_data[k] = fv
+            elif isinstance(v, (int, float)) and v > 1e6:
+                seg_data[k] = v
+        if not seg_data:
+            return {}
+        return {"date": seg_date, "data": seg_data}
+
     raw_segs = fmp.get("segments", [])
-    if raw_segs:
-        latest_seg = raw_segs[0] if raw_segs else {}
-        seg_data = {k: v for k, v in latest_seg.items() if k != "date" and isinstance(v, (int, float)) and v}
-        if seg_data:
-            fmp_ext["segments"] = {"date": latest_seg.get("date",""), "data": seg_data}
+    parsed_segs = _parse_seg(raw_segs)
+    if parsed_segs:
+        fmp_ext["segments"] = parsed_segs
 
     raw_geo = fmp.get("geo_segments", [])
-    if raw_geo:
-        latest_geo = raw_geo[0] if raw_geo else {}
-        geo_data = {k: v for k, v in latest_geo.items() if k != "date" and isinstance(v, (int, float)) and v}
-        if geo_data:
-            fmp_ext["geo_segments"] = {"date": latest_geo.get("date",""), "data": geo_data}
+    parsed_geo = _parse_seg(raw_geo)
+    if parsed_geo:
+        fmp_ext["geo_segments"] = parsed_geo
 
     # Recent news
     raw_news = fmp.get("news", [])
@@ -1763,7 +1839,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
     # ── Financial data priority: FMP statements > yfinance > XBRL ───────────
     # FMP supplemental (profile, valuation, analyst, segments) always used when available.
     FMP_SUPPLEMENTAL = {
-        "market_cap","beta","pe_ratio","ev_ebitda","p_fcf","p_sales","p_book",
+        "market_cap","beta","stock_price","pe_ratio","ev_ebitda","p_fcf","p_sales","p_book",
         "enterprise_value","ev_revenue","roic","roe_km","current_ratio","debt_to_equity",
         "interest_coverage","dividend_yield","fcf_yield","income_quality",
         "revenue_growth_yoy","eps_growth_yoy","fcf_growth_yoy","ni_growth_yoy","ocf_growth_yoy",
@@ -1790,6 +1866,35 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
             for k, v in supp_facts.items():
                 if k in FMP_SUPPLEMENTAL:
                     merged_facts[k] = v
+
+    # ── Post-merge: compute missing valuation multiples from available data ──────
+    _mc  = merged_facts.get("market_cap")
+    _ni  = merged_facts.get("net_income")
+    _rev = merged_facts.get("revenue")
+    _fcf = merged_facts.get("free_cash_flow")
+    _ebi = merged_facts.get("ebitda")
+    _csh = merged_facts.get("cash", 0) or 0
+    _ltd = merged_facts.get("long_term_debt", 0) or 0
+    _ev  = merged_facts.get("enterprise_value") or (_mc + _ltd - _csh if _mc else None)
+    if _ev and not merged_facts.get("enterprise_value"):
+        merged_facts["enterprise_value"] = _ev
+    if _mc and _ni and _ni > 0 and not merged_facts.get("pe_ratio"):
+        merged_facts["pe_ratio"] = round(_mc / _ni, 1)
+    if _ev and _ebi and _ebi > 0 and not merged_facts.get("ev_ebitda"):
+        merged_facts["ev_ebitda"] = round(_ev / _ebi, 1)
+    if _mc and _fcf and _fcf > 0 and not merged_facts.get("p_fcf"):
+        merged_facts["p_fcf"] = round(_mc / _fcf, 1)
+    if _mc and _rev and _rev > 0 and not merged_facts.get("p_sales"):
+        merged_facts["p_sales"] = round(_mc / _rev, 1)
+    # ROIC from operating income / invested capital if not set
+    if not merged_facts.get("roic"):
+        _oi  = merged_facts.get("operating_income")
+        _eq  = merged_facts.get("equity")
+        _tax_rate = (merged_facts.get("effective_tax_rate") or 21.0) / 100
+        if _oi and _eq and _eq > 0:
+            _nopat = _oi * (1 - _tax_rate)
+            _ic = max(1, _eq + _ltd - _csh)
+            merged_facts["roic"] = round(_nopat / _ic * 100, 2)
 
     return AnalysisPayload(
         company=info,
