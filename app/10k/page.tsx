@@ -960,7 +960,7 @@ function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
     { key: "roic",          label: "ROIC",           suffix: "%" },
     { key: "current_ratio", label: "Current Ratio",  suffix: "x" },
     { key: "debt_equity",   label: "D/E",            suffix: "x" },
-  ].filter(c => recent.some(r => r[c.key] != null));
+  ].filter(c => recent.some(r => r[c.key as keyof KmHistory[number]] != null));
 
   if (!cols.length) return null;
 
