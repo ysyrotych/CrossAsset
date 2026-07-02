@@ -813,7 +813,9 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     if pt:
         for k, pk in [("pt_consensus","lastMonthAvgPriceTarget"),
                       ("pt_last_month","lastMonth"),
-                      ("pt_last_quarter","lastQuarterAvgPriceTarget")]:
+                      ("pt_last_quarter","lastQuarterAvgPriceTarget"),
+                      ("pt_high","lastMonthHighPriceTarget"),
+                      ("pt_low","lastMonthLowPriceTarget")]:
             v = safe_float(pt.get(pk))
             if v: facts[k] = v
 
@@ -1697,6 +1699,16 @@ def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
             pct = round(div_yf * 100, 2)
             if 0 < pct < 20:  # reject implausibly high yields (yfinance scale inconsistency)
                 facts["dividend_yield"] = pct
+        # 52-week range
+        high52 = safe_float(info.get("fiftyTwoWeekHigh"))
+        low52  = safe_float(info.get("fiftyTwoWeekLow"))
+        if high52: facts["week52_high"] = round(high52, 2)
+        if low52:  facts["week52_low"]  = round(low52, 2)
+        # Short interest
+        short_ratio = safe_float(info.get("shortRatio"))
+        short_float = safe_float(info.get("shortPercentOfFloat"))
+        if short_ratio: facts["short_ratio"]       = round(short_ratio, 1)
+        if short_float: facts["short_float_pct"]   = round(short_float * 100, 1)
 
     return facts
 
@@ -1964,7 +1976,8 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         "interest_coverage","dividend_yield","fcf_yield","income_quality",
         "revenue_growth_yoy","eps_growth_yoy","fcf_growth_yoy","ni_growth_yoy","ocf_growth_yoy",
         "rev_est_next","ebitda_est_next","eps_est_next","ni_est_next","num_analysts",
-        "fmp_rating_score","pt_consensus","pt_last_month","pt_last_quarter","employees",
+        "fmp_rating_score","pt_consensus","pt_last_month","pt_last_quarter","pt_high","pt_low","employees",
+        "week52_high","week52_low","short_ratio","short_float_pct",
     }
 
     fmp_ext = {}

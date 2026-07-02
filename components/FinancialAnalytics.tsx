@@ -2656,6 +2656,119 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               </div>
             </div>
 
+            {/* ══ LOOP 16: Price Position Card ══ */}
+            {(facts.week52_high||facts.pt_consensus)&&(()=>{
+              const price=facts.stock_price;
+              const lo=facts.week52_low, hi=facts.week52_high;
+              const ptLo=facts.pt_low, ptHi=facts.pt_high, ptMid=facts.pt_consensus;
+              const toX=(v:number,min:number,max:number)=>Math.max(0,Math.min(100,((v-min)/(max-min||1))*100));
+              const pctFrom52Lo=lo&&price?((price-lo)/(hi!-lo||1)*100):null;
+              const ptUpsidePct=ptMid&&price?((ptMid-price)/price*100):null;
+              const totalSYield=capitalReturns.totalYield>0?capitalReturns.totalYield:null;
+              return(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Price Position</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>52-week range · Analyst price target distribution · Shareholder yield</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(59,130,246,0.15)",color:BLUE,border:`1px solid rgba(59,130,246,0.25)`}}>MARKET CONTEXT</span>
+                </div>
+                <div className="px-4 py-3 space-y-4">
+                  {/* 52-week range */}
+                  {lo!=null&&hi!=null&&price!=null&&(
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[7.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff30"}}>52-Week Range</span>
+                        <span className="text-[8px] font-bold" style={{color:"#ffffff50"}}>${price.toFixed(2)} — {pctFrom52Lo!=null?`${pctFrom52Lo.toFixed(0)}% above 52W low`:""}</span>
+                      </div>
+                      <div className="relative h-4 rounded" style={{background:"rgba(255,255,255,0.06)"}}>
+                        <div className="absolute inset-y-0 left-0 rounded" style={{width:`${toX(price,lo,hi)}%`,background:`linear-gradient(90deg,rgba(59,130,246,0.3),rgba(59,130,246,0.5))`}}/>
+                        {/* Current price marker */}
+                        <div className="absolute top-0 bottom-0 w-0.5 rounded" style={{left:`${toX(price,lo,hi)}%`,background:AMBER,transform:"translateX(-50%)"}}/>
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        <span className="text-[7px]" style={{color:"#ffffff25"}}>${lo.toFixed(0)} 52W Low</span>
+                        <span className="text-[7px]" style={{color:"#ffffff25"}}>${hi.toFixed(0)} 52W High</span>
+                      </div>
+                    </div>
+                  )}
+                  {/* Analyst PT range */}
+                  {ptMid!=null&&price!=null&&(()=>{
+                    const rangeMin=Math.min(lo??price,ptLo??ptMid*0.8,price)*0.97;
+                    const rangeMax=Math.max(hi??price,ptHi??ptMid*1.2,price)*1.03;
+                    return(
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[7.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff30"}}>Analyst Price Target</span>
+                        <span className="text-[8px] font-bold" style={{color:ptUpsidePct!=null&&ptUpsidePct>0?GREEN:RED}}>
+                          ${ptMid.toFixed(0)} consensus {ptUpsidePct!=null?`(${ptUpsidePct>0?"+":""}${ptUpsidePct.toFixed(1)}% vs current)`:""}
+                          {facts.num_analysts!=null?` · ${Math.round(facts.num_analysts)} analysts`:""}
+                        </span>
+                      </div>
+                      <div className="relative h-4 rounded" style={{background:"rgba(255,255,255,0.06)"}}>
+                        {/* PT range band */}
+                        {ptLo!=null&&ptHi!=null&&(
+                          <div className="absolute inset-y-0 rounded" style={{
+                            left:`${toX(ptLo,rangeMin,rangeMax)}%`,
+                            width:`${toX(ptHi,rangeMin,rangeMax)-toX(ptLo,rangeMin,rangeMax)}%`,
+                            background:"rgba(16,185,129,0.2)",border:"1px solid rgba(16,185,129,0.3)"
+                          }}/>
+                        )}
+                        {/* PT consensus marker */}
+                        <div className="absolute top-0 bottom-0 w-0.5 rounded" style={{left:`${toX(ptMid,rangeMin,rangeMax)}%`,background:GREEN,transform:"translateX(-50%)"}}/>
+                        {/* Current price marker */}
+                        <div className="absolute top-0 bottom-0 w-0.5 rounded" style={{left:`${toX(price,rangeMin,rangeMax)}%`,background:AMBER,transform:"translateX(-50%)"}}/>
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        {ptLo!=null&&<span className="text-[7px]" style={{color:"#ffffff25"}}>${ptLo.toFixed(0)} PT Low</span>}
+                        {ptHi!=null&&<span className="text-[7px]" style={{color:"#ffffff25"}}>${ptHi.toFixed(0)} PT High</span>}
+                      </div>
+                    </div>
+                    );
+                  })()}
+                  {/* Key metrics row */}
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1 border-t" style={{borderColor:DARK_BORDER}}>
+                    {facts.short_float_pct!=null&&(
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Short Interest</p>
+                        <p className="text-[9px] font-bold" style={{color:facts.short_float_pct>10?RED:AMBER}}>{facts.short_float_pct.toFixed(1)}% of float</p>
+                        {facts.short_ratio!=null&&<p className="text-[7px]" style={{color:"#ffffff25"}}>{facts.short_ratio.toFixed(1)}d to cover</p>}
+                      </div>
+                    )}
+                    {totalSYield!=null&&(
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Total Shareholder Yield</p>
+                        <p className="text-[9px] font-bold" style={{color:GREEN}}>{totalSYield.toFixed(1)}%</p>
+                        <p className="text-[7px]" style={{color:"#ffffff25"}}>
+                          {capitalReturns.buybackYield!=null?`${capitalReturns.buybackYield.toFixed(1)}% bb`:""}
+                          {capitalReturns.buybackYield!=null&&capitalReturns.divYield!=null?" + ":""}
+                          {capitalReturns.divYield!=null?`${capitalReturns.divYield.toFixed(1)}% div`:""}
+                        </p>
+                      </div>
+                    )}
+                    {facts.pt_last_quarter!=null&&facts.pt_consensus!=null&&(
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>PT Revision (QoQ)</p>
+                        <p className="text-[9px] font-bold" style={{color:facts.pt_consensus>facts.pt_last_quarter?GREEN:RED}}>
+                          {facts.pt_consensus>facts.pt_last_quarter?"+":""}${(facts.pt_consensus-facts.pt_last_quarter).toFixed(0)}
+                        </p>
+                        <p className="text-[7px]" style={{color:"#ffffff25"}}>vs prior qtr avg</p>
+                      </div>
+                    )}
+                    {facts.beta!=null&&(
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Beta (5Y Monthly)</p>
+                        <p className="text-[9px] font-bold" style={{color:facts.beta>1.5?RED:facts.beta>1?AMBER:GREEN}}>{facts.beta.toFixed(2)}</p>
+                        <p className="text-[7px]" style={{color:"#ffffff25"}}>vs S&P 500</p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+
             {/* ══ LOOP 9: Multi-Factor Score Engine ══ */}
             <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
               <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
