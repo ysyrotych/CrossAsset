@@ -1094,11 +1094,11 @@ export default function FinancialAnalytics({
     // MOMENTUM (4 sub-signals)
     const revG=facts.revenue_growth_yoy, epsG=facts.eps_growth_yoy;
     // Prefer OCF growth (operating cash momentum) over FCF growth (capex-distorted)
-    const ocfG=(facts as Record<string,number|null|undefined>).ocf_growth_yoy??facts.fcf_growth_yoy;
+    const ocfG="ocf_growth_yoy" in facts ? facts.ocf_growth_yoy : facts.fcf_growth_yoy;
     const beatRate=earningsStreak.total>0?earningsStreak.beats/earningsStreak.total*100:null;
     const m_rev =revG!=null?clamp(revG/30*100+50):null;
     const m_eps =epsG!=null?clamp(epsG/25*100+50):null;
-    const m_ocf =ocfG!=null?clamp((ocfG as number)/30*100+50):null;
+    const m_ocf =ocfG!=null?clamp(ocfG/30*100+50):null;
     const m_beat=beatRate!=null?clamp(beatRate):null;
     const momentumFactor=Math.round(avg_([m_rev,m_eps,m_ocf,m_beat])??0);
 
@@ -1141,7 +1141,7 @@ export default function FinancialAnalytics({
         momentum:[
           {name:"Rev Growth YoY",score:Math.round(m_rev??0),detail:revG!=null?`${revG.toFixed(1)}%`:"—"},
           {name:"EPS Growth YoY",score:Math.round(m_eps??0),detail:epsG!=null?`${epsG.toFixed(1)}%`:"—"},
-          {name:"OCF Growth YoY",score:Math.round(m_ocf??0),detail:ocfG!=null?`${(ocfG as number).toFixed(1)}%`:"—"},
+          {name:"OCF Growth YoY",score:Math.round(m_ocf??0),detail:ocfG!=null?`${ocfG.toFixed(1)}%`:"—"},
           {name:"Beat Rate",score:Math.round(m_beat??0),detail:earningsStreak.total>0?`${earningsStreak.beats}/${earningsStreak.total}`:"—"},
         ],
         safety:[
