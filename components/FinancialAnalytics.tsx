@@ -1943,6 +1943,18 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               />
             </Card>
 
+            <Card title="FCF/Share vs EPS" sub="Per-share cash value vs accounting earnings">
+              {facts.shares_diluted_wtd!=null&&facts.shares_diluted_wtd>0?(
+                <LineChart
+                  labels={cfYears}
+                  series={[
+                    {name:"FCF/sh",values:cfYears.map(y=>{const f=history.free_cash_flow?.[y];const sh=facts.shares_diluted_wtd;return f!=null&&sh&&sh>0?f/sh:null;}),color:TEAL},
+                    {name:"EPS",values:cfYears.map(y=>history.eps_diluted?.[y]??null),color:AMBER},
+                  ]}
+                />
+              ):<NoData W={320} H={160}/>}
+            </Card>
+
             {/* ══ LOOP 13: Capital Returns & Shareholder Yield ══ */}
             <Card title="Total Shareholder Yield" sub="Dividend yield + buyback yield (vs current market cap)" badge="TSY">
               {capitalReturns.yieldByYear.some(y=>y.divYield!=null||y.bbYield!=null)?(
