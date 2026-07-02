@@ -1650,15 +1650,21 @@ Revenue: ${abbr(facts.revenue||0,"$")} | Net Income: ${abbr(facts.net_income||0,
 Margins: Gross ${facts.gross_margin_pct?.toFixed(1)??"—"}% | Op ${facts.operating_margin_pct?.toFixed(1)??"—"}% | Net ${facts.net_margin_pct?.toFixed(1)??"—"}%
 Valuation: P/E ${facts.pe_ratio?.toFixed(1)??"—"}x | EV/EBITDA ${facts.ev_ebitda?.toFixed(1)??"—"}x | P/FCF ${facts.p_fcf?.toFixed(1)??"—"}x
 Rev 5Y CAGR: ${(revCAGRYrs*100).toFixed(1)}% | FCF/NI: ${facts.free_cash_flow&&facts.net_income&&facts.net_income>0?(facts.free_cash_flow/facts.net_income*100).toFixed(0)??"—":0}%
-ROIC: ${facts.roic?.toFixed(1)??"—"}% | Market Cap: ${abbr(facts.market_cap||0,"$")}
-Sector: ${sector}
-Monte Carlo P95 price: ${monteCarloResults.p95!=null?abbr(monteCarloResults.p95,"$"):"N/A"} | P5: ${monteCarloResults.p5!=null?abbr(monteCarloResults.p5,"$"):"N/A"}
-Prob above current: ${monteCarloResults.pUp!=null?monteCarloResults.pUp.toFixed(0)+"%":"N/A"}
-EPS surprises: ${earningsSurprises.slice(0,4).map(e=>`${e.surprise_pct!=null?(e.surprise_pct>0?"+":""):""} ${e.surprise_pct?.toFixed(1)??"?"}%`).join(", ")}
-Peers: ${peers.slice(0,4).map(p=>`${p.symbol}(P/E ${p.pe?.toFixed(1)??"—"}x ROIC ${p.roic.toFixed(1)}%)`).join(", ")}
-52W Range: ${facts.week52_low!=null&&facts.week52_high!=null?`$${facts.week52_low?.toFixed(0)}–$${facts.week52_high?.toFixed(0)} | Current $${facts.stock_price?.toFixed(0)}`:"-"}
+ROIC: ${facts.roic?.toFixed(1)??"—"}% | Market Cap: ${abbr(facts.market_cap||0,"$")} | Sector: ${sector}
+Monte Carlo P95/P5: ${monteCarloResults.p95!=null?abbr(monteCarloResults.p95,"$"):"N/A"} / ${monteCarloResults.p5!=null?abbr(monteCarloResults.p5,"$"):"N/A"} | Prob above current: ${monteCarloResults.pUp!=null?monteCarloResults.pUp.toFixed(0)+"%":"N/A"}
+
+EARNINGS EXECUTION:
+Beat rate: ${earningsSurprises.length>0?`${earningsStreak.beats}/${earningsStreak.total} (${Math.round(earningsStreak.beats/Math.max(earningsStreak.total,1)*100)}%)`:"-"} | Current streak: ${earningsStreak.streak}× | Avg beat: ${earningsStreak.avgBeatMag!=null?`+${earningsStreak.avgBeatMag.toFixed(1)}%`:"-"}
+Recent surprises: ${earningsSurprises.slice(0,4).map(e=>`${e.date?.slice(0,7)??"?"}: ${e.surprise_pct!=null?(e.surprise_pct>0?"+":"")+(e.surprise_pct?.toFixed(1)??"?")+"%":""}`).join(", ")}
+
+PEER COMPARISON (vs ${peers.length} peers):
+${peers.slice(0,5).map(p=>`${p.symbol}: P/E ${p.pe?.toFixed(1)??"—"}x | EV/EBITDA ${p.ev_ebitda?.toFixed(1)??"—"}x | GM ${p.gross_margin?.toFixed(1)??"—"}% | ROIC ${p.roic?.toFixed(1)??"—"}% | Rev/Emp $${p.rev_per_emp?.toFixed(0)??"—"}K`).join("\n")}
+Subject vs median: GM ${relativeValue.gmDiff!=null?(relativeValue.gmDiff>0?"+":"")+relativeValue.gmDiff.toFixed(1)+"pp":"-"} | P/E premium ${relativeValue.pePrem!=null?(relativeValue.pePrem>0?"+":"")+relativeValue.pePrem.toFixed(0)+"%":"-"}
+
+MARKET POSITIONING:
+52W Range: ${facts.week52_low!=null&&facts.week52_high!=null?`$${facts.week52_low?.toFixed(0)}–$${facts.week52_high?.toFixed(0)} | Current $${facts.stock_price?.toFixed(0)} (${facts.week52_low&&facts.week52_high&&facts.stock_price?((facts.stock_price-facts.week52_low)/(facts.week52_high-facts.week52_low)*100).toFixed(0):"?"}th pctile)`:"-"}
 Short Interest: ${facts.short_float_pct!=null?`${facts.short_float_pct.toFixed(1)}% of float, ${facts.short_ratio?.toFixed(1)??"?"}d to cover`:"-"}
-Analyst PT: ${facts.pt_consensus!=null?`$${facts.pt_consensus.toFixed(0)} consensus (${analystRec?`${analystRec.strong_buy+analystRec.buy}B/${analystRec.hold}H/${analystRec.sell+analystRec.strong_sell}S`:"-"})`:"-"}
+Analyst PT: ${facts.pt_consensus!=null?`$${facts.pt_consensus.toFixed(0)} (${facts.stock_price?((facts.pt_consensus/facts.stock_price-1)*100).toFixed(0)+"% upside":"-"}) | ${analystRec?`${analystRec.strong_buy+analystRec.buy}B/${analystRec.hold}H/${analystRec.sell+analystRec.strong_sell}S`:"-"}`:"-"}
 Insider Activity: ${insiderTrading.length>0?`${insiderTrading.filter(t=>/purchase|buy/i.test(t.transaction||"")).length} buys / ${insiderTrading.filter(t=>/sale|sell/i.test(t.transaction||"")).length} sells (last ${insiderTrading.length} transactions)`:"-"}
 
 Write 7 sections with bold headers:
@@ -1765,6 +1771,8 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
           { label:"P/FCF", value:facts.p_fcf!=null?`${facts.p_fcf.toFixed(1)}x`:"—", color:"#ffffff70" },
           { label:"Mkt Cap", value:abbr(facts.market_cap||0,"$"), color:"#ffffff70" },
           { label:"Beta", value:facts.beta!=null?facts.beta.toFixed(2):"—", color:facts.beta&&facts.beta>1.5?RED:facts.beta&&facts.beta<0.8?GREEN:"#ffffff70" },
+          ...(facts.short_float_pct!=null?[{ label:"Short %", value:`${facts.short_float_pct.toFixed(1)}%`, sub:facts.short_ratio!=null?`${facts.short_ratio.toFixed(1)}d cover`:undefined, color:facts.short_float_pct>15?RED:facts.short_float_pct>5?AMBER:"#ffffff70" }]:[]),
+          ...(facts.next_earnings_ts?(()=>{const d=Math.ceil((facts.next_earnings_ts*1000-Date.now())/(864e5));return d>0&&d<120?[{label:"Earnings In",value:`${d}d`,color:d<=14?AMBER:BLUE}]:[];})():[]),
           ...(facts.pt_consensus?[{ label:"PT Consensus", value:abbr(facts.pt_consensus,"$"), sub:facts.stock_price?`${((facts.pt_consensus/facts.stock_price-1)*100).toFixed(0)}% upside`:undefined, color:facts.stock_price&&facts.pt_consensus>facts.stock_price?GREEN:RED }]:[]),
         ].map((s,i)=>(
           <div key={i} className="flex flex-col items-center px-3.5 py-2.5 shrink-0 border-r" style={{borderColor:DARK_BORDER}}>
