@@ -583,30 +583,44 @@ function QuarterlyHeatTable({ data }:{ data:QuarterlyTrend }) {
 function parseTranscript(text:string):{guidance:string[];questions:string[];keyNumbers:string[];totalLength:number;hasQA:boolean}|null {
   if(!text||text.length<500) return null;
   const upper=text.toUpperCase();
-  const markers=["QUESTIONS AND ANSWERS","QUESTION AND ANSWER","Q&A SESSION","\nQ:","QUESTION:","\nQUESTION "];
+  // Find Q&A section start (handles both FMP "Operator: we will now begin..." and formatted Q: markers)
+  const markers=["QUESTIONS AND ANSWERS","QUESTION AND ANSWER","Q&A SESSION","\nQ:","QUESTION:","\nQUESTION ","WE WILL NOW BEGIN THE QUESTION","NOW OPEN THE LINE","NOW TAKE QUESTIONS"];
   let qaStart=-1;
   for(const m of markers){const idx=upper.indexOf(m);if(idx>300&&(qaStart<0||idx<qaStart))qaStart=idx;}
   const mgmt=qaStart>0?text.slice(0,qaStart):text.slice(0,8000);
-  const qa=qaStart>0?text.slice(qaStart,qaStart+8000):"";
+  const qa=qaStart>0?text.slice(qaStart,qaStart+10000):"";
   const GUIDE=/\b(expect(?:s|ed|ing)?|guid(?:e|ance|ing)|target(?:s|ed)?|anticip(?:ate|ates|ating)|project(?:s|ed|ing)?|forecast|outlook|full.?year|fy\s*2[0-9]|next quarter|next year|on track|reaffirm|rais(?:e|ed|ing)|lower(?:ed|ing)? guid)/i;
   const allText=mgmt+(qa.length>0?" "+qa:"");
   const sents=allText.split(/(?<=[.!?])\s+(?=[A-Z"])/).filter(s=>s.length>50&&s.length<450);
   const guidance=sents.filter(s=>GUIDE.test(s)).map(s=>s.trim()).slice(0,5);
+  // Extract analyst questions from Q&A section
+  // FMP format: "Analyst Name - Firm Name\n\nQuestion text" or "Q: text" or speaker lines ending in colon
   const questions:string[]=[];
-  const qaLines=qa.split('\n').map(l=>l.trim()).filter(Boolean);
-  let curQ="";
-  for(let i=0;i<qaLines.length&&questions.length<5;i++){
-    const l=qaLines[i];
-    if(/^q\s*[:\.]/i.test(l)){
-      if(curQ.length>30)questions.push(curQ.slice(0,220).trim());
-      curQ=l.replace(/^q\s*[:.]\s*/i,'');
-    } else if(/^a\s*[:\.]/i.test(l)||/^[A-Z ]{4,}:/.test(l)){
-      if(curQ.length>30){questions.push(curQ.slice(0,220).trim());curQ="";}
-    } else if(curQ){
-      curQ+=" "+l;
+  if(qa.length>100){
+    const qaLines=qa.split('\n').map(l=>l.trim()).filter(Boolean);
+    let curQ="",isInQuestion=false;
+    // Detect analyst lines: "Name - Firm" pattern or lines matching known analyst firm names
+    const isAnalystLine=(l:string)=>{
+      if(/^q\s*[:\.]/i.test(l)) return true;
+      // FMP: "First Last - Firm Name" on its own line (short line, ends with common firm indicators)
+      if(l.length<80&&/-\s+\w/.test(l)&&!/^operator|^ceo|^cfo|^president|^chief/i.test(l)) return true;
+      return false;
+    };
+    const isMgmtLine=(l:string)=>/^a\s*[:\.]/i.test(l)||/^operator\s*:/i.test(l)||/^[A-Z][a-z]+ [A-Z][a-z]+ -- /i.test(l);
+    for(let i=0;i<qaLines.length&&questions.length<5;i++){
+      const l=qaLines[i];
+      if(isAnalystLine(l)){
+        if(curQ.length>30)questions.push(curQ.slice(0,220).trim());
+        curQ=l.replace(/^q\s*[:.]\s*/i,'').replace(/^.*?-\s+\w[^-]+\s*$/,'');
+        isInQuestion=true;
+      } else if(isMgmtLine(l)&&isInQuestion){
+        if(curQ.length>30){questions.push(curQ.slice(0,220).trim());curQ="";isInQuestion=false;}
+      } else if(isInQuestion&&l.length>10){
+        curQ+=" "+l;
+      }
     }
+    if(curQ.length>30&&questions.length<5)questions.push(curQ.slice(0,220).trim());
   }
-  if(curQ.length>30&&questions.length<5)questions.push(curQ.slice(0,220).trim());
   const numRe=/\$[\d,.]+\s*(?:billion|million|trillion|B|M|T)?\b|\b\d+(?:\.\d+)?%/gi;
   const keyNumbers=[...new Set(text.match(numRe)??[])].slice(0,12);
   return{guidance,questions:questions.slice(0,4),keyNumbers,totalLength:text.length,hasQA:qa.length>100};
