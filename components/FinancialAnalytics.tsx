@@ -10,6 +10,7 @@ type GrowthHistory = { date: string; rev_growth: number; eps_growth: number; fcf
 type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number|null; surprise_pct: number|null }[];
 type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number; gross_margin?: number|null; rev_per_emp?: number|null; market_cap?: number|null; rev_growth?: number|null }[];
 type SegmentData = { date: string; data: Record<string, number> };
+type SegmentHistory = { date: string; data: Record<string, number> }[];
 type AnalystEstimates = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
 type QuarterlyTrend = { date: string; revenue?: number; gross_margin_pct?: number; operating_margin_pct?: number; net_margin_pct?: number; eps_diluted?: number; free_cash_flow?: number }[];
 type InsiderTrade = { name: string; title?: string; transaction?: string; shares?: number|null; price?: number|null; value?: number|null; date?: string };
@@ -28,6 +29,8 @@ export type FinancialAnalyticsProps = {
   sector?: string;
   segments?: SegmentData;
   geoSegments?: SegmentData;
+  segmentHistory?: SegmentHistory;
+  geoSegmentHistory?: SegmentHistory;
   analystEstimates?: AnalystEstimates;
   fmpRating?: string;
   quarterlyTrends?: QuarterlyTrend;
@@ -836,7 +839,7 @@ type CatId = typeof CATS[number]["id"];
 export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
-  segments, geoSegments, analystEstimates=[], fmpRating, quarterlyTrends=[],
+  segments, geoSegments, segmentHistory=[], geoSegmentHistory=[], analystEstimates=[], fmpRating, quarterlyTrends=[],
   earningsTranscript="", insiderTrading=[], analystRec,
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
@@ -3311,6 +3314,42 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   <NoData W={320} H={120}/>
                 </Card>
               )}
+
+              {/* ══ LOOP 21: Segment Revenue Trend (mix shift over time) ══ */}
+              {segmentHistory.length>=2&&(()=>{
+                // Collect all segment names
+                const allSegs=Array.from(new Set(segmentHistory.flatMap(p=>Object.keys(p.data)))).slice(0,6);
+                const labels=segmentHistory.map(p=>p.date.slice(0,7));
+                return(
+                <Card title="Segment Revenue Trend" sub="Business mix evolution — which segments are gaining/losing share" badge="MIX SHIFT">
+                  <StackedBar
+                    labels={labels}
+                    series={allSegs.map((seg,i)=>({
+                      name:seg.length>20?seg.slice(0,20)+"…":seg,
+                      values:segmentHistory.map(p=>p.data[seg]??0),
+                      color:PALETTE[i%PALETTE.length],
+                    }))}
+                  />
+                </Card>
+                );
+              })()}
+
+              {geoSegmentHistory.length>=2&&(()=>{
+                const allGeos=Array.from(new Set(geoSegmentHistory.flatMap(p=>Object.keys(p.data)))).slice(0,6);
+                const labels=geoSegmentHistory.map(p=>p.date.slice(0,7));
+                return(
+                <Card title="Geographic Revenue Trend" sub="Regional mix shift — identifying growth markets and concentration risk" badge="GEO SHIFT">
+                  <StackedBar
+                    labels={labels}
+                    series={allGeos.map((geo,i)=>({
+                      name:geo.length>20?geo.slice(0,20)+"…":geo,
+                      values:geoSegmentHistory.map(p=>p.data[geo]??0),
+                      color:PALETTE[i%PALETTE.length],
+                    }))}
+                  />
+                </Card>
+                );
+              })()}
 
               {/* Analyst Forward Estimates */}
               <Card title="Analyst Forward Estimates" sub="Consensus revenue forecast">

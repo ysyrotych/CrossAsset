@@ -861,37 +861,57 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     # Exclude metadata keys: date, fiscalYear, symbol, period, reportedCurrency
     _META_KEYS = {"date", "fiscalYear", "fiscal_year", "symbol", "period", "reportedCurrency", "cik", "acceptedDate", "link", "finalLink", "data", "total"}
 
-    def _parse_seg(raw_list: list) -> dict:
-        if not raw_list:
-            return {}
-        latest = raw_list[0] if isinstance(raw_list[0], dict) else {}
-        seg_date = latest.get("date", "")
+    def _extract_seg_data(item: dict) -> dict:
+        """Extract {segment_name: value} from one FMP segment period."""
         seg_data: dict = {}
-        for k, v in latest.items():
+        for k, v in item.items():
             if k in _META_KEYS:
                 continue
-            # Handle nested dict e.g. {"Family of Apps": {"revenue": 161888000000}}
             if isinstance(v, dict):
                 inner = v.get("revenue") or v.get("value") or (list(v.values())[0] if v else None)
                 if inner is not None:
                     fv = safe_float(inner)
-                    if fv and fv > 1e6:  # must be at least $1M to be a real segment
+                    if fv and fv > 1e6:
                         seg_data[k] = fv
             elif isinstance(v, (int, float)) and v > 1e6:
                 seg_data[k] = v
+        return seg_data
+
+    def _parse_seg(raw_list: list) -> dict:
+        if not raw_list:
+            return {}
+        latest = raw_list[0] if isinstance(raw_list[0], dict) else {}
+        seg_data = _extract_seg_data(latest)
         if not seg_data:
             return {}
-        return {"date": seg_date, "data": seg_data}
+        return {"date": latest.get("date", ""), "data": seg_data}
+
+    def _parse_seg_history(raw_list: list) -> list:
+        """Return all available periods sorted by date ascending."""
+        out = []
+        for item in raw_list:
+            if not isinstance(item, dict):
+                continue
+            seg_data = _extract_seg_data(item)
+            if seg_data:
+                out.append({"date": item.get("date", ""), "data": seg_data})
+        return sorted(out, key=lambda x: x["date"])
 
     raw_segs = fmp.get("segments", [])
     parsed_segs = _parse_seg(raw_segs)
     if parsed_segs:
         fmp_ext["segments"] = parsed_segs
+    seg_history = _parse_seg_history(raw_segs)
+    if len(seg_history) > 1:
+        fmp_ext["segment_history"] = seg_history
 
     raw_geo = fmp.get("geo_segments", [])
     parsed_geo = _parse_seg(raw_geo)
     if parsed_geo:
         fmp_ext["geo_segments"] = parsed_geo
+    geo_history = _parse_seg_history(raw_geo)
+    if len(geo_history) > 1:
+        fmp_ext["geo_segment_history"] = geo_history
 
     # Recent news
     raw_news = fmp.get("news", [])

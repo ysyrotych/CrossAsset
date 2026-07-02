@@ -31,6 +31,7 @@ type FmpExtended   = {
   ceo?: string; sector?: string; fmp_industry?: string; country?: string; exchange?: string;
   website?: string; ipo_date?: string; company_description?: string; fmp_rating?: string;
   segments?: SegmentData; geo_segments?: SegmentData;
+  segment_history?: SegmentData[]; geo_segment_history?: SegmentData[];
   km_history?: KmHistory; growth_history?: GrowthHistory;
   earnings_surprises?: EarningsSurprise; analyst_estimates?: AnalystEstimate;
   peer_comparison?: PeerComp; recent_news?: RecentNews;
@@ -2042,6 +2043,8 @@ export default function TenKPage() {
               sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
               segments={data.fmp_extended?.segments}
               geoSegments={data.fmp_extended?.geo_segments}
+              segmentHistory={data.fmp_extended?.segment_history}
+              geoSegmentHistory={data.fmp_extended?.geo_segment_history}
               analystEstimates={data.fmp_extended?.analyst_estimates}
               fmpRating={data.fmp_extended?.fmp_rating}
               quarterlyTrends={data.fmp_extended?.quarterly_trends}
