@@ -121,6 +121,25 @@ export async function POST(req: NextRequest) {
   // Earnings transcript (truncated)
   const transcriptStr = earningsTranscript ? earningsTranscript.slice(0, 5000) : "Not available";
 
+  // Market positioning data
+  const week52 = f.week52_high && f.week52_low && f.stock_price
+    ? `52W Range: $${f.week52_low.toFixed(2)} – $${f.week52_high.toFixed(2)} | Current: $${f.stock_price.toFixed(2)} (${(((f.stock_price - f.week52_low) / (f.week52_high - f.week52_low)) * 100).toFixed(0)}th percentile of range)`
+    : "N/A";
+  const shortInterest = f.short_float_pct != null
+    ? `Short Interest: ${f.short_float_pct.toFixed(1)}% of float${f.short_ratio != null ? ` | Days to Cover: ${f.short_ratio.toFixed(1)}d` : ""}`
+    : "N/A";
+  const analystRecStr = (ext as any).analyst_rec
+    ? `Analyst Ratings: ${(ext as any).analyst_rec.strong_buy + (ext as any).analyst_rec.buy} Buy / ${(ext as any).analyst_rec.hold} Hold / ${(ext as any).analyst_rec.sell + (ext as any).analyst_rec.strong_sell} Sell (${(ext as any).analyst_rec.total} analysts)`
+    : "N/A";
+  const insiderStr = (() => {
+    const trades = (ext as any).insider_trading as any[] | undefined;
+    if (!trades || !trades.length) return "N/A";
+    const buys = trades.filter((t:any) => /purchase|buy|acquired/i.test(t.transaction || "")).length;
+    const sells = trades.filter((t:any) => /sale|sell|sold|disposed/i.test(t.transaction || "")).length;
+    const recent = trades.slice(0, 5).map((t:any) => `${t.name} (${t.title || "?"}) ${t.transaction} $${((t.value || 0) / 1e6).toFixed(1)}M on ${t.date || "?"}`).join("; ");
+    return `Net: ${buys} buys / ${sells} sells (last ${trades.length} transactions). Recent: ${recent}`;
+  })();
+
   const prompt = `You are a senior equity research analyst at Edgewood Management, an elite institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}). This document will be read by portfolio managers, CIOs, and institutional investors. It must match Goldman Sachs / Morgan Stanley research quality.
 
 ═══════════════════════════════════════════════════════════════
@@ -130,6 +149,10 @@ CEO: ${ext.ceo ?? "N/A"} | Sector: ${ext.sector ?? "N/A"} | Industry: ${ext.fmp_
 Country: ${ext.country ?? "N/A"} | Exchange: ${ext.exchange ?? "N/A"} | IPO: ${ext.ipo_date ?? "N/A"}
 Employees: ${f.employees != null ? num(f.employees) : "N/A"} | Website: ${ext.website ?? "N/A"}
 Market Cap: ${fmt(f.market_cap)} | Enterprise Value: ${fmt(f.enterprise_value)} | Beta: ${f.beta != null ? f.beta.toFixed(2) : "N/A"}
+${week52}
+${shortInterest}
+${analystRecStr}
+PT Consensus: ${f.pt_consensus != null ? `$${f.pt_consensus.toFixed(0)} (${f.pt_low != null ? `range $${f.pt_low.toFixed(0)}–$${f.pt_high?.toFixed(0)}` : "high/low N/A"})` : "N/A"}
 
 ${ext.company_description ? `COMPANY DESCRIPTION: ${ext.company_description.slice(0, 500)}` : ""}
 
@@ -229,6 +252,11 @@ ${peerTable}
 RECENT NEWS & CATALYSTS (last 30 days)
 ═══════════════════════════════════════════════════════════════
 ${newsStr}
+
+═══════════════════════════════════════════════════════════════
+INSIDER TRADING ACTIVITY (Form 4)
+═══════════════════════════════════════════════════════════════
+${insiderStr}
 
 ═══════════════════════════════════════════════════════════════
 EARNINGS CALL / MOST RECENT 8-K FILING
