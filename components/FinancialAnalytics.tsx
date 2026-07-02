@@ -33,6 +33,7 @@ export type FinancialAnalyticsProps = {
   quarterlyTrends?: QuarterlyTrend;
   earningsTranscript?: string;
   insiderTrading?: InsiderTrade[];
+  analystRec?: { strong_buy: number; buy: number; hold: number; sell: number; strong_sell: number; total: number; date?: string };
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -836,7 +837,7 @@ export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
   segments, geoSegments, analystEstimates=[], fmpRating, quarterlyTrends=[],
-  earningsTranscript="", insiderTrading=[],
+  earningsTranscript="", insiderTrading=[], analystRec,
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -2753,6 +2754,35 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                     </div>
                     );
                   })()}
+                  {/* Analyst recommendation distribution */}
+                  {analystRec&&analystRec.total>0&&(()=>{
+                    const bullish=analystRec.strong_buy+analystRec.buy;
+                    const bearish=analystRec.sell+analystRec.strong_sell;
+                    const bullPct=bullish/analystRec.total*100;
+                    const holdPct=analystRec.hold/analystRec.total*100;
+                    const bearPct=bearish/analystRec.total*100;
+                    return(
+                    <div>
+                      <div className="flex items-center justify-between mb-1">
+                        <span className="text-[7.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff30"}}>Analyst Ratings ({analystRec.total} analysts)</span>
+                        <span className="text-[8px] font-bold" style={{color:bullPct>60?GREEN:bearPct>40?RED:AMBER}}>
+                          {Math.round(bullPct)}% Buy · {Math.round(holdPct)}% Hold · {Math.round(bearPct)}% Sell
+                        </span>
+                      </div>
+                      <div className="flex h-3 rounded overflow-hidden">
+                        <div style={{width:`${bullPct}%`,background:GREEN,opacity:0.75}}/>
+                        <div style={{width:`${holdPct}%`,background:"#ffffff20"}}/>
+                        <div style={{width:`${bearPct}%`,background:RED,opacity:0.75}}/>
+                      </div>
+                      <div className="flex justify-between mt-0.5">
+                        <span className="text-[7px]" style={{color:GREEN}}>{bullish} Buy/Strong Buy</span>
+                        <span className="text-[7px]" style={{color:"#ffffff25"}}>{analystRec.hold} Hold</span>
+                        <span className="text-[7px]" style={{color:RED}}>{bearish} Sell</span>
+                      </div>
+                    </div>
+                    );
+                  })()}
+
                   {/* Key metrics row */}
                   <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 pt-1 border-t" style={{borderColor:DARK_BORDER}}>
                     {facts.short_float_pct!=null&&(

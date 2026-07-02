@@ -36,6 +36,7 @@ type FmpExtended   = {
   peer_comparison?: PeerComp; recent_news?: RecentNews;
   quarterly_trends?: QuarterlyTrendItem[];
   insider_trading?: { name: string; title?: string; transaction?: string; shares?: number|null; price?: number|null; value?: number|null; date?: string }[];
+  analyst_rec?: { strong_buy: number; buy: number; hold: number; sell: number; strong_sell: number; total: number; date?: string };
 };
 type Payload       = {
   company: CompanyInfo;
@@ -2045,6 +2046,7 @@ export default function TenKPage() {
               quarterlyTrends={data.fmp_extended?.quarterly_trends}
               earningsTranscript={data.earnings_transcript ?? ""}
               insiderTrading={data.fmp_extended?.insider_trading}
+              analystRec={data.fmp_extended?.analyst_rec}
             />
           </div>
 

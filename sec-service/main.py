@@ -159,6 +159,7 @@ def get_fmp_financials(ticker: str) -> dict:
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
                 "transcript": ex.submit(fetch_v3, "earning_call_transcript", 1),
                 "insider":   ex.submit(fetch, "insider-trading", None, 20),
+                "rec":       ex.submit(fetch_v3, "analyst-stock-recommendations", 1),
             }
             res = {k: v.result() for k, v in fs.items()}
 
@@ -311,6 +312,7 @@ def get_fmp_financials(ticker: str) -> dict:
             "peer_comparison":   peer_comparison,
             "transcript_raw":    res.get("transcript", []),
             "insider_trading":   res.get("insider", []),
+            "analyst_rec":       res.get("rec", []),
         }
     except Exception as e:
         print(f"FMP error for {ticker}: {e}")
@@ -898,6 +900,24 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     peer_comp = fmp.get("peer_comparison", [])
     if peer_comp:
         fmp_ext["peer_comparison"] = peer_comp
+
+    # Analyst recommendation breakdown (buy/hold/sell counts)
+    raw_rec = fmp.get("analyst_rec", [])
+    if raw_rec:
+        rec = raw_rec[0] if isinstance(raw_rec, list) and raw_rec else {}
+        if isinstance(rec, dict):
+            strong_buy = int(safe_float(rec.get("strongBuy") or rec.get("strong_buy") or 0) or 0)
+            buy        = int(safe_float(rec.get("buy") or 0) or 0)
+            hold       = int(safe_float(rec.get("hold") or 0) or 0)
+            sell       = int(safe_float(rec.get("sell") or 0) or 0)
+            strong_sell= int(safe_float(rec.get("strongSell") or rec.get("strong_sell") or 0) or 0)
+            total = strong_buy + buy + hold + sell + strong_sell
+            if total > 0:
+                fmp_ext["analyst_rec"] = {
+                    "strong_buy": strong_buy, "buy": buy, "hold": hold,
+                    "sell": sell, "strong_sell": strong_sell, "total": total,
+                    "date": (rec.get("date") or "")[:10],
+                }
 
     # Insider trading (last 20 Form 4 transactions)
     raw_insider = fmp.get("insider_trading", [])
