@@ -1488,6 +1488,22 @@ def get_yfinance_financials(ticker: str) -> dict:
             "priceToBook",
         ]}
 
+        # Historical year-end prices for P/E and EV/EBITDA history charts
+        price_history: dict = {}
+        try:
+            ph_df = t.history(period="6y", interval="1mo")
+            if ph_df is not None and not ph_df.empty:
+                cur_year = datetime.now().year
+                for yr in range(cur_year - 5, cur_year + 1):
+                    yr_prices = ph_df[ph_df.index.year == yr]
+                    if yr_prices.empty:
+                        continue
+                    dec = yr_prices[yr_prices.index.month == 12]
+                    row = dec.iloc[-1] if not dec.empty else yr_prices.iloc[-1]
+                    price_history[f"{yr}-12-31"] = round(float(row["Close"]), 2)
+        except Exception as _pe:
+            print(f"yfinance price_history error for {ticker}: {_pe}")
+
         print(f"yfinance: {len(annual_income.get('columns', []))} annual + {len(q_income.get('columns', []))} quarterly periods for {ticker}")
         return {
             "income": annual_income,
@@ -1497,6 +1513,7 @@ def get_yfinance_financials(ticker: str) -> dict:
             "quarterly_balance": q_balance,
             "quarterly_cashflow": q_cashflow,
             "info": info,
+            "price_history": price_history,
         }
     except Exception as e:
         print(f"yfinance error for {ticker}: {e}")
@@ -2010,6 +2027,37 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         _iexp = merged_facts.get("interest_expense")
         if _oi2 and _iexp and _iexp > 0:
             merged_facts["interest_coverage"] = round(_oi2 / _iexp, 1)
+
+    # ── Historical P/E and EV/EBITDA from yfinance price history ─────────────
+    _price_hist = yf_data.get("price_history", {}) if yf_data else {}
+    if _price_hist:
+        _eps_hist   = merged_history.get("eps_diluted", {})
+        _ebitda_hist = merged_history.get("ebitda", {})
+        _ltd_hist   = merged_history.get("long_term_debt", {})
+        _cash_hist  = merged_history.get("cash", {})
+        _shares_cur = merged_facts.get("shares_diluted_wtd") or safe_float(
+            yf_data.get("info", {}).get("sharesOutstanding"))
+        pe_hist: dict = {}
+        ev_ebitda_hist: dict = {}
+        for yr_key, px in _price_hist.items():
+            if not px: continue
+            eps = _eps_hist.get(yr_key)
+            if eps and abs(eps) > 0.01:
+                pe = round(px / eps, 1)
+                if 0 < pe < 1000:
+                    pe_hist[yr_key] = pe
+            ebi = _ebitda_hist.get(yr_key)
+            ltd = _ltd_hist.get(yr_key, 0) or 0
+            csh = _cash_hist.get(yr_key, 0) or 0
+            if ebi and ebi > 0 and _shares_cur:
+                ev = px * _shares_cur + ltd - csh
+                ev_ebitda = round(ev / ebi, 1)
+                if 0 < ev_ebitda < 200:
+                    ev_ebitda_hist[yr_key] = ev_ebitda
+        if pe_hist:
+            merged_history["pe_history"] = dict(sorted(pe_hist.items()))
+        if ev_ebitda_hist:
+            merged_history["ev_ebitda_history"] = dict(sorted(ev_ebitda_hist.items()))
 
     return AnalysisPayload(
         company=info,

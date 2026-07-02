@@ -758,8 +758,8 @@ export default function FinancialAnalytics({
 
       return {
         date: y,
-        pe: null, // Can't derive without price
-        ev_ebitda: null,
+        pe: (history.pe_history as Record<string,number>|undefined)?.[y] ?? null,
+        ev_ebitda: (history.ev_ebitda_history as Record<string,number>|undefined)?.[y] ?? null,
         roic,
         p_fcf: null,
         current_ratio: crv,
