@@ -390,13 +390,29 @@ Write 7 specific, material risks (• prefix). For each: **[Risk Name in Bold]**
 ### Analyst Note
 2-3 sentences: The single most important variable to monitor. The key debate on the stock right now. What an institutional investor must believe to own this stock at the current valuation.
 
+## KEY METRICS DASHBOARD
+Write a compact monitoring table with exactly this format (pipe-delimited):
+
+| KPI | Current | Threshold to Watch | Why It Matters |
+|-----|---------|-------------------|----------------|
+| [metric 1] | [value] | [bull: above X / bear: below Y] | [1-sentence explanation] |
+[Repeat for 6-8 most important KPIs specific to this business model]
+
+Choose metrics that are: (1) directly measurable from public disclosures, (2) leading indicators (not lagging), (3) specific to ${companyName}'s monetization model. For a SaaS company, use NRR/churn. For an advertising company, use CPM/impressions growth. For a bank, use NIM/credit quality. Be sector-specific, not generic.
+
+## EARNINGS CALL QUESTIONS
+Write 8 sharp, specific questions an institutional investor would ask in the Q&A. Format:
+**Q[n]: [Question]** — [Why this question matters / what answer would be bullish vs bearish]
+
+Questions must be: (1) directly answerable from company data (2) not already answered in the prepared remarks (3) specific enough that a vague answer would itself be signal. Include at least 2 questions about forward guidance, 2 about competitive dynamics, 2 about capital allocation, and 2 about risks.
+
 ---
 
 RULES:
 - Every claim must be grounded in the data provided. Never fabricate numbers.
 - Be institutional: direct, no hedging, no "it is worth noting," no preamble
 - Use exact figures throughout — no vague language like "significant" without a number
-- Target 3,000-3,500 words
+- Target 3,500-4,000 words total
 - Do NOT add any text before "## EXECUTIVE SUMMARY"
 - When transcript data is "Not available", synthesize from the MD&A and financial trends instead`;
 
