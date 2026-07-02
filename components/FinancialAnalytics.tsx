@@ -30,6 +30,7 @@ export type FinancialAnalyticsProps = {
   analystEstimates?: AnalystEstimates;
   fmpRating?: string;
   quarterlyTrends?: QuarterlyTrend;
+  earningsTranscript?: string;
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -482,6 +483,135 @@ function NoData({ W=320, H=140 }:{ W?:number; H?:number }) {
   );
 }
 
+// ── LOOP 14: Historical Multiple Range Band ───────────────────────────────────
+
+function MultipleRangeBand({ values, current, unit="x", color=BLUE }:{
+  values:(number|null)[]; current:number|null; unit?:string; color?:string;
+}) {
+  const W=300, H=68, pl=8, pr=8, pt=22, pb=14, cw=W-pl-pr;
+  const valid=values.filter((v):v is number=>v!=null&&v>0);
+  if(valid.length<2||current==null) return <text x={W/2} y={H/2} textAnchor="middle" fontSize="9" fill="#ffffff18">No history</text>;
+  const minV=Math.min(...valid)*0.9, maxV=Math.max(...valid)*1.1, rng=maxV-minV||1;
+  const toX=(v:number)=>pl+Math.max(0,Math.min(cw,((v-minV)/rng)*cw));
+  const sorted=[...valid].sort((a,b)=>a-b);
+  const p25=sorted[Math.floor(sorted.length*0.25)]??sorted[0];
+  const p75=sorted[Math.floor(sorted.length*0.75)]??sorted[sorted.length-1];
+  const avg=valid.reduce((a,b)=>a+b,0)/valid.length;
+  const pct=((current-sorted[0])/(sorted[sorted.length-1]-sorted[0]||1))*100;
+  const xc=toX(current);
+  const isHigh=current>avg;
+  return(
+    <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+      <rect x={toX(sorted[0])} y={pt+2} width={Math.max(0,toX(sorted[sorted.length-1])-toX(sorted[0]))} height={12} fill={`${color}18`} rx={2}/>
+      <rect x={toX(p25)} y={pt} width={Math.max(1,toX(p75)-toX(p25))} height={16} fill={`${color}2a`} rx={3}/>
+      <line x1={toX(avg)} x2={toX(avg)} y1={pt-2} y2={pt+20} stroke={color} strokeWidth="1.2" strokeDasharray="2,2"/>
+      <text x={toX(avg)} y={pt-4} textAnchor="middle" fontSize="6" fill={color} opacity="0.65">{avg.toFixed(1)}{unit}</text>
+      <line x1={xc} x2={xc} y1={pt-5} y2={pt+22} stroke={AMBER} strokeWidth="2"/>
+      <circle cx={xc} cy={pt+8} r={5} fill={AMBER}/>
+      <text x={xc} y={pt-7} textAnchor="middle" fontSize="7.5" fill={AMBER} fontWeight="700">{current.toFixed(1)}{unit}</text>
+      <text x={toX(sorted[0])} y={H-pb+8} textAnchor="middle" fontSize="5.5" fill="#ffffff20">{sorted[0].toFixed(1)}</text>
+      <text x={toX(sorted[sorted.length-1])} y={H-pb+8} textAnchor="middle" fontSize="5.5" fill="#ffffff20">{sorted[sorted.length-1].toFixed(1)}</text>
+      <text x={W/2} y={H-1} textAnchor="middle" fontSize="6.5" fill={isHigh?`${RED}bb`:`${GREEN}bb`}>
+        {Math.round(pct)}th pct · {isHigh?"+":`-`}{Math.abs(((current-avg)/avg)*100).toFixed(0)}% vs {valid.length}Y avg {avg.toFixed(1)}{unit}
+      </text>
+    </svg>
+  );
+}
+
+// ── LOOP 14: Quarterly Earnings Heat Table ─────────────────────────────────────
+
+type QTRow = { key:"revenue"|"gross_margin_pct"|"operating_margin_pct"|"net_margin_pct"|"eps_diluted"|"free_cash_flow"; label:string; fmt:(v:number)=>string };
+
+function QuarterlyHeatTable({ data }:{ data:QuarterlyTrend }) {
+  if(data.length<4) return null;
+  const sorted=[...data].sort((a,b)=>a.date.localeCompare(b.date)).slice(-8);
+  const ROWS:QTRow[]=[
+    {key:"revenue",           label:"Revenue",      fmt:v=>abbr(v,"$")},
+    {key:"gross_margin_pct",  label:"Gross Mgn",    fmt:v=>`${v.toFixed(1)}%`},
+    {key:"operating_margin_pct",label:"Op Mgn",     fmt:v=>`${v.toFixed(1)}%`},
+    {key:"net_margin_pct",    label:"Net Mgn",      fmt:v=>`${v.toFixed(1)}%`},
+    {key:"eps_diluted",       label:"EPS",          fmt:v=>`$${v.toFixed(2)}`},
+    {key:"free_cash_flow",    label:"FCF",          fmt:v=>abbr(v,"$")},
+  ];
+  return(
+    <div className="overflow-x-auto">
+      <table className="w-full border-collapse" style={{fontSize:8}}>
+        <thead>
+          <tr style={{borderBottom:`1px solid ${DARK_BORDER}`}}>
+            <th className="px-2 py-1.5 text-left font-bold" style={{color:"#ffffff25",fontSize:7,minWidth:70}}>METRIC</th>
+            {sorted.map((q,i)=>(
+              <th key={i} className="px-2 py-1.5 text-center font-bold" style={{color:i===sorted.length-1?AMBER:"#ffffff30",fontSize:7,minWidth:58,borderLeft:`1px solid ${DARK_BORDER}`,background:i===sorted.length-1?"rgba(245,158,11,0.06)":"transparent"}}>
+                {q.date?.slice(0,7)??""}
+              </th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {ROWS.map(row=>{
+            return(
+              <tr key={row.key} style={{borderTop:`1px solid ${DARK_BORDER}`}}>
+                <td className="px-2 py-1.5 font-bold" style={{color:"#ffffff35",fontSize:7.5}}>{row.label}</td>
+                {sorted.map((q,i)=>{
+                  const val=q[row.key] as number|undefined;
+                  const prev=i>0?sorted[i-1][row.key] as number|undefined:undefined;
+                  const chg=val!=null&&prev!=null&&Math.abs(prev)>0?(val-prev)/Math.abs(prev)*100:null;
+                  const isLast=i===sorted.length-1;
+                  const bgAlpha=chg!=null?Math.min(Math.abs(chg)*0.008,0.22):0;
+                  const bg=chg!=null?(chg>0?`rgba(16,185,129,${bgAlpha})`:`rgba(239,68,68,${bgAlpha})`):"transparent";
+                  return(
+                    <td key={i} className="px-2 py-1.5 text-center" style={{background:isLast?"rgba(245,158,11,0.05)":bg,borderLeft:`1px solid ${DARK_BORDER}`,outline:isLast?`1px solid rgba(245,158,11,0.18)`:undefined}}>
+                      {val!=null?(
+                        <div>
+                          <div className="font-bold tabular-nums" style={{color:isLast?AMBER:"#ffffff65",fontSize:8}}>{row.fmt(val)}</div>
+                          {chg!=null&&<div style={{color:chg>0?GREEN:RED,fontSize:6}}>{chg>0?"▲":"▼"}{Math.abs(chg).toFixed(1)}%</div>}
+                        </div>
+                      ):<span style={{color:"#ffffff15",fontSize:8}}>—</span>}
+                    </td>
+                  );
+                })}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── LOOP 15: Transcript Intelligence Parser ───────────────────────────────────
+
+function parseTranscript(text:string):{guidance:string[];questions:string[];keyNumbers:string[];totalLength:number;hasQA:boolean}|null {
+  if(!text||text.length<500) return null;
+  const upper=text.toUpperCase();
+  const markers=["QUESTIONS AND ANSWERS","QUESTION AND ANSWER","Q&A SESSION","\nQ:","QUESTION:","\nQUESTION "];
+  let qaStart=-1;
+  for(const m of markers){const idx=upper.indexOf(m);if(idx>300&&(qaStart<0||idx<qaStart))qaStart=idx;}
+  const mgmt=qaStart>0?text.slice(0,qaStart):text.slice(0,8000);
+  const qa=qaStart>0?text.slice(qaStart,qaStart+8000):"";
+  const GUIDE=/\b(expect(?:s|ed|ing)?|guid(?:e|ance|ing)|target(?:s|ed)?|anticip(?:ate|ates|ating)|project(?:s|ed|ing)?|forecast|outlook|full.?year|fy\s*2[0-9]|next quarter|next year|on track|reaffirm|rais(?:e|ed|ing)|lower(?:ed|ing)? guid)/i;
+  const allText=mgmt+(qa.length>0?" "+qa:"");
+  const sents=allText.split(/(?<=[.!?])\s+(?=[A-Z"])/).filter(s=>s.length>50&&s.length<450);
+  const guidance=sents.filter(s=>GUIDE.test(s)).map(s=>s.trim()).slice(0,5);
+  const questions:string[]=[];
+  const qaLines=qa.split('\n').map(l=>l.trim()).filter(Boolean);
+  let curQ="";
+  for(let i=0;i<qaLines.length&&questions.length<5;i++){
+    const l=qaLines[i];
+    if(/^q\s*[:\.]/i.test(l)){
+      if(curQ.length>30)questions.push(curQ.slice(0,220).trim());
+      curQ=l.replace(/^q\s*[:.]\s*/i,'');
+    } else if(/^a\s*[:\.]/i.test(l)||/^[A-Z ]{4,}:/.test(l)){
+      if(curQ.length>30){questions.push(curQ.slice(0,220).trim());curQ="";}
+    } else if(curQ){
+      curQ+=" "+l;
+    }
+  }
+  if(curQ.length>30&&questions.length<5)questions.push(curQ.slice(0,220).trim());
+  const numRe=/\$[\d,.]+\s*(?:billion|million|trillion|B|M|T)?\b|\b\d+(?:\.\d+)?%/gi;
+  const keyNumbers=[...new Set(text.match(numRe)??[])].slice(0,12);
+  return{guidance,questions:questions.slice(0,4),keyNumbers,totalLength:text.length,hasQA:qa.length>100};
+}
+
 // Donut / pie chart
 function DonutChart({ data, H=180 }:{ data:{label:string;value:number}[]; H?:number }) {
   const W=320;
@@ -690,6 +820,7 @@ export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
   segments, geoSegments, analystEstimates=[], fmpRating, quarterlyTrends=[],
+  earningsTranscript="",
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -1157,6 +1288,62 @@ export default function FinancialAnalytics({
       },
     };
   }, [facts, history, peers, piotroski, altmanZ, accruals, earningsStreak, analystEstimates]);
+
+  // ── LOOP 14: Investment Thesis Card ──────────────────────────────────────
+  const investmentThesis = useMemo(() => {
+    const score = factorScores.overall;
+    const verdict = score >= 75 ? "OVERWEIGHT" : score >= 50 ? "NEUTRAL" : "UNDERWEIGHT";
+    const verdictColor = score >= 75 ? GREEN : score >= 50 ? AMBER : RED;
+    const verdictBg = score >= 75 ? "rgba(16,185,129,0.08)" : score >= 50 ? "rgba(245,158,11,0.08)" : "rgba(239,68,68,0.08)";
+
+    type SubEntry = {name:string;score:number;detail:string};
+    const allSubs:SubEntry[]=[
+      ...factorScores.subs.quality,
+      ...factorScores.subs.growth,
+      ...factorScores.subs.momentum,
+      ...factorScores.subs.safety,
+      ...factorScores.subs.value,
+    ];
+    const bullSubs=allSubs.filter(s=>s.score>=70&&s.detail!=="—").sort((a,b)=>b.score-a.score).slice(0,3);
+    const bearSubs=allSubs.filter(s=>s.score<=40&&s.detail!=="—").sort((a,b)=>a.score-b.score).slice(0,3);
+
+    const validPE=kmPE.filter((v):v is number=>v!=null&&v>0);
+    const avgPE=validPE.length?validPE.reduce((a,b)=>a+b,0)/validPE.length:null;
+    const currPE=facts.pe_ratio;
+    const peVsHist=currPE&&avgPE?((currPE-avgPE)/avgPE*100):null;
+
+    const validEV=kmEV.filter((v):v is number=>v!=null&&v>0);
+    const avgEV=validEV.length?validEV.reduce((a,b)=>a+b,0)/validEV.length:null;
+    const currEV=facts.ev_ebitda;
+    const evVsHist=currEV&&avgEV?((currEV-avgEV)/avgEV*100):null;
+
+    return{verdict,verdictColor,verdictBg,score,bullSubs,bearSubs,peVsHist,evVsHist,avgPE,avgEV,currPE,currEV};
+  },[factorScores,kmPE,kmEV,facts]);
+
+  // ── LOOP 14: Revenue × Margin Sensitivity Grid ───────────────────────────
+  const revMarginSensitivity = useMemo(() => {
+    const rev=facts.revenue, ebitda=facts.ebitda, sh=facts.shares_diluted_wtd;
+    const mc=facts.market_cap, ltd=facts.long_term_debt??0, cash=facts.cash??0;
+    const evEBITDA=facts.ev_ebitda;
+    if(!rev||!ebitda||!sh||!mc||!evEBITDA||ebitda<=0) return null;
+    const curMarginPct=ebitda/rev*100;
+    const netD=ltd-cash;
+    const currentPrice=facts.stock_price||(mc/sh);
+    const revGs=[-0.05,0,0.05,0.10,0.15,0.20,0.25,0.30];
+    const mDs=[-0.10,-0.05,0,0.05,0.10];
+    const grid=revGs.map(rg=>mDs.map(md=>{
+      const futRev=rev*(1+rg);
+      const futMargin=Math.max(0.01,(curMarginPct+md*100)/100);
+      const futEBITDA=futRev*futMargin;
+      const futEV=futEBITDA*evEBITDA;
+      const equityVal=Math.max(0,futEV-netD);
+      return Math.round(equityVal/sh);
+    }));
+    return{grid,revGs,mDs,curMarginPct,currentPrice:Math.round(currentPrice)};
+  },[facts]);
+
+  // ── LOOP 15: Transcript parse (memoised) ─────────────────────────────────
+  const transcriptData = useMemo(()=>parseTranscript(earningsTranscript),[earningsTranscript]);
 
   // ── Beneish M-Score — forensic earnings manipulation detector (Loop 10) ──
   const beneishMScore = useMemo(() => {
@@ -1648,6 +1835,22 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
 
         {/* ── Profitability ─────────────────────────────────────────── */}
         {tab==="margins"&&(
+          <div className="space-y-3">
+          {/* ══ LOOP 14: Quarterly Earnings Heat Table ══ */}
+          {quarterlyTrends.length>=4&&(
+            <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                <div>
+                  <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Quarterly Earnings Cadence</p>
+                  <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>8-quarter heat map · Green = QoQ acceleration · Amber = most recent quarter · Arrow = QoQ change</p>
+                </div>
+                <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(20,184,166,0.15)",color:TEAL,border:"1px solid rgba(20,184,166,0.25)"}}>HEAT MAP</span>
+              </div>
+              <div className="px-3 py-3">
+                <QuarterlyHeatTable data={quarterlyTrends}/>
+              </div>
+            </div>
+          )}
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-3">
             <Card title="Margin Evolution" sub="Gross / Operating / Net (%)">
               <LineChart labels={revYears} series={[{name:"Gross %",values:gMarg,color:TEAL},{name:"Op %",values:oMarg,color:BLUE},{name:"Net %",values:nMarg,color:GREEN}]} pct/>
@@ -1684,6 +1887,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ]}
               />
             </Card>
+          </div>
           </div>
         )}
 
@@ -1902,6 +2106,32 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ?<BeatMiss data={earningsSurprises}/>
                 :<div className="py-6 text-center"><p className="text-[10px] text-white/20">Earnings surprise data not available</p></div>}
             </Card>
+
+            {/* ══ LOOP 14: Historical Multiple Range Bands ══ */}
+            {(kmPE.some(v=>v!=null)||kmEV.some(v=>v!=null))&&(
+              <div className="rounded-lg overflow-hidden border col-span-2 lg:col-span-3" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Historical Multiple Range Analysis</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Current multiple vs {kmPE.filter(v=>v!=null).length}-year trading range · IQR box · Avg dashed · NOW in amber</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(245,158,11,0.15)",color:AMBER,border:"1px solid rgba(245,158,11,0.25)"}}>HIST RANGE</span>
+                </div>
+                <div className="px-3 py-3 grid grid-cols-1 lg:grid-cols-2 gap-6">
+                  <div>
+                    <p className="text-[7.5px] font-bold uppercase tracking-widest mb-3" style={{color:"#ffffff30"}}>P/E Multiple — Where It Trades</p>
+                    <MultipleRangeBand values={kmPE} current={facts.pe_ratio??null} color={BLUE}/>
+                  </div>
+                  <div>
+                    <p className="text-[7.5px] font-bold uppercase tracking-widest mb-3" style={{color:"#ffffff30"}}>EV/EBITDA — Where It Trades</p>
+                    <MultipleRangeBand values={kmEV} current={facts.ev_ebitda??null} color={AMBER}/>
+                  </div>
+                </div>
+                <div className="px-3 py-2 border-t" style={{borderColor:DARK_BORDER}}>
+                  <p className="text-[7px]" style={{color:"#ffffff20"}}>IQR box = 25th–75th percentile range · Dashed line = historical average · NOW marker = current multiple from FMP key-metrics</p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
@@ -2283,12 +2513,148 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 </div>
               </Card>
             )}
+
+            {/* ══ LOOP 14: Revenue × Margin Sensitivity Grid ══ */}
+            {revMarginSensitivity&&(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Revenue Growth × EBITDA Margin — Implied Price</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Current EV/EBITDA applied to forward EBITDA · Rows = 1Y rev growth · Cols = EBITDA margin delta vs today ({revMarginSensitivity.curMarginPct.toFixed(1)}%)</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(16,185,129,0.15)",color:GREEN,border:"1px solid rgba(16,185,129,0.25)"}}>2-WAY SENSI</span>
+                </div>
+                <div className="px-3 py-3 overflow-x-auto">
+                  <table className="border-collapse text-[8px]" style={{minWidth:"100%"}}>
+                    <thead>
+                      <tr>
+                        <td className="px-2 py-1 text-right" style={{color:"#ffffff20",fontSize:7}}>Rev g ↓ / Margin Δ →</td>
+                        {revMarginSensitivity.mDs.map(md=>(
+                          <td key={md} className="px-2 py-1 text-center font-bold" style={{color:md===0?AMBER:"#ffffff35",borderLeft:`1px solid ${DARK_BORDER}`,fontSize:7,background:md===0?"rgba(245,158,11,0.05)":"transparent"}}>
+                            {md===0?"Base":`${md>0?"+":""}${(md*100).toFixed(0)}pp`}
+                          </td>
+                        ))}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {revMarginSensitivity.grid.map((row,ri)=>{
+                        const rg=revMarginSensitivity.revGs[ri];
+                        const cp=revMarginSensitivity.currentPrice;
+                        return(
+                          <tr key={ri} style={{borderTop:`1px solid ${DARK_BORDER}`}}>
+                            <td className="px-2 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:7}}>{rg===0?"Flat":rg>0?`+${(rg*100).toFixed(0)}%`:`${(rg*100).toFixed(0)}%`}</td>
+                            {row.map((price,mi)=>{
+                              const pct=cp>0?(price-cp)/cp:0;
+                              const md=revMarginSensitivity.mDs[mi];
+                              const isBase=rg===0&&md===0;
+                              const bg=pct>0.15?"rgba(16,185,129,0.28)":pct>0.05?"rgba(16,185,129,0.14)":pct>-0.05?"rgba(245,158,11,0.12)":pct>-0.15?"rgba(239,68,68,0.14)":"rgba(239,68,68,0.28)";
+                              const col=pct>0?GREEN:pct>-0.10?AMBER:RED;
+                              return(
+                                <td key={mi} className="px-2 py-1.5 text-center font-bold tabular-nums" style={{
+                                  background:isBase?"rgba(245,158,11,0.18)":bg,
+                                  color:isBase?AMBER:col,
+                                  border:isBase?`1px solid rgba(245,158,11,0.4)`:`1px solid ${DARK_BORDER}`,
+                                  fontSize:8.5,
+                                }}>
+                                  ${price.toLocaleString()}
+                                  {cp>0&&!isBase&&<div style={{fontSize:6,color:pct>0?`${GREEN}bb`:`${RED}bb`}}>{pct>=0?"+":""}{(pct*100).toFixed(0)}%</div>}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[7px] mt-2" style={{color:"#ffffff20"}}>
+                    Assumes current EV/EBITDA ({facts.ev_ebitda?.toFixed(1)??"—"}x) held constant · Net debt: ${facts.long_term_debt&&facts.cash?abbr((facts.long_term_debt-facts.cash),""):"-"} · Current: ${revMarginSensitivity.currentPrice} · Base cell highlighted amber
+                  </p>
+                </div>
+              </div>
+            )}
           </div>
         )}
 
         {/* ── Signals & Scores ──────────────────────────────────── */}
         {tab==="signals"&&(
           <div className="space-y-4">
+
+            {/* ══ LOOP 14: Investment Thesis Card ══ */}
+            <div className="rounded-lg overflow-hidden border" style={{background:investmentThesis.verdictBg,borderColor:investmentThesis.verdictColor+"44"}}>
+              <div className="px-4 py-3 border-b flex items-center justify-between" style={{borderColor:investmentThesis.verdictColor+"33"}}>
+                <div className="flex items-center gap-3">
+                  <span className="text-[13px] font-black tracking-widest" style={{color:investmentThesis.verdictColor}}>{investmentThesis.verdict}</span>
+                  <span className="text-[8px] text-white/40">·</span>
+                  <span className="text-[8.5px] font-bold" style={{color:"#ffffff50"}}>Factor Score {investmentThesis.score}/100 · {companyName} ({ticker})</span>
+                </div>
+                <span className="text-[7px] px-2 py-0.5 rounded font-bold" style={{background:"rgba(255,255,255,0.08)",color:"#ffffff40",border:"1px solid rgba(255,255,255,0.12)"}}>ER ANALYST BRIEF</span>
+              </div>
+              <div className="px-4 py-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                {/* Bull case */}
+                <div>
+                  <p className="text-[7.5px] font-bold uppercase tracking-widest mb-2" style={{color:GREEN}}>▲ Bull Case — Top Strengths</p>
+                  <div className="space-y-1.5">
+                    {investmentThesis.bullSubs.length>0?investmentThesis.bullSubs.map((s,i)=>(
+                      <div key={i} className="flex items-start gap-2 rounded px-2 py-1.5" style={{background:"rgba(16,185,129,0.07)",border:"1px solid rgba(16,185,129,0.15)"}}>
+                        <span className="text-[8px] font-bold tabular-nums shrink-0 mt-0.5" style={{color:GREEN}}>{s.score}</span>
+                        <div>
+                          <span className="text-[8px] font-bold" style={{color:"#ffffff65"}}>{s.name}</span>
+                          <span className="text-[7.5px] ml-1.5" style={{color:"#ffffff35"}}>{s.detail}</span>
+                        </div>
+                      </div>
+                    )):<p className="text-[8px]" style={{color:"#ffffff25"}}>Insufficient data for bull signals</p>}
+                  </div>
+                </div>
+                {/* Bear case */}
+                <div>
+                  <p className="text-[7.5px] font-bold uppercase tracking-widest mb-2" style={{color:RED}}>▼ Bear Case — Key Risks</p>
+                  <div className="space-y-1.5">
+                    {investmentThesis.bearSubs.length>0?investmentThesis.bearSubs.map((s,i)=>(
+                      <div key={i} className="flex items-start gap-2 rounded px-2 py-1.5" style={{background:"rgba(239,68,68,0.07)",border:"1px solid rgba(239,68,68,0.15)"}}>
+                        <span className="text-[8px] font-bold tabular-nums shrink-0 mt-0.5" style={{color:RED}}>{s.score}</span>
+                        <div>
+                          <span className="text-[8px] font-bold" style={{color:"#ffffff65"}}>{s.name}</span>
+                          <span className="text-[7.5px] ml-1.5" style={{color:"#ffffff35"}}>{s.detail}</span>
+                        </div>
+                      </div>
+                    )):<p className="text-[8px]" style={{color:"#ffffff25"}}>No significant bear signals detected</p>}
+                  </div>
+                </div>
+              </div>
+              {/* Bottom context bar */}
+              <div className="px-4 py-2 border-t flex flex-wrap items-center gap-x-5 gap-y-1" style={{borderColor:investmentThesis.verdictColor+"22",background:"rgba(0,0,0,0.15)"}}>
+                {investmentThesis.currPE!=null&&investmentThesis.avgPE!=null&&(
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[7px] font-bold uppercase" style={{color:"#ffffff25"}}>P/E vs Hist</span>
+                    <span className="text-[8px] font-bold" style={{color:investmentThesis.peVsHist!=null&&investmentThesis.peVsHist>0?RED:GREEN}}>
+                      {investmentThesis.currPE.toFixed(1)}x {investmentThesis.peVsHist!=null?(investmentThesis.peVsHist>0?"+":"")+investmentThesis.peVsHist.toFixed(0)+"% vs "+investmentThesis.avgPE.toFixed(1)+"x avg":""}
+                    </span>
+                  </div>
+                )}
+                {investmentThesis.currEV!=null&&investmentThesis.avgEV!=null&&(
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[7px] font-bold uppercase" style={{color:"#ffffff25"}}>EV/EBITDA vs Hist</span>
+                    <span className="text-[8px] font-bold" style={{color:investmentThesis.evVsHist!=null&&investmentThesis.evVsHist>0?RED:GREEN}}>
+                      {investmentThesis.currEV.toFixed(1)}x {investmentThesis.evVsHist!=null?(investmentThesis.evVsHist>0?"+":"")+investmentThesis.evVsHist.toFixed(0)+"% vs "+investmentThesis.avgEV.toFixed(1)+"x avg":""}
+                    </span>
+                  </div>
+                )}
+                {reverseDCF&&(
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[7px] font-bold uppercase" style={{color:"#ffffff25"}}>Mkt Implies</span>
+                    <span className="text-[8px] font-bold" style={{color:BLUE}}>{reverseDCF.impliedGrowth}% rev CAGR</span>
+                  </div>
+                )}
+                {scenarioPrices.base!=null&&scenarioPrices.current>0&&(
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-[7px] font-bold uppercase" style={{color:"#ffffff25"}}>Base DCF</span>
+                    <span className="text-[8px] font-bold" style={{color:scenarioPrices.base>scenarioPrices.current?GREEN:RED}}>
+                      ${Math.round(scenarioPrices.base)} ({((scenarioPrices.base-scenarioPrices.current)/scenarioPrices.current*100).toFixed(0)}%)
+                    </span>
+                  </div>
+                )}
+              </div>
+            </div>
 
             {/* ══ LOOP 9: Multi-Factor Score Engine ══ */}
             <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
@@ -2634,6 +3000,59 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 </div>
               </Card>
 
+              {/* ══ LOOP 15: Transcript Intelligence ══ */}
+              {transcriptData&&(
+                <div className="rounded-lg overflow-hidden border col-span-2 lg:col-span-3" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                  <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Earnings Call Intelligence</p>
+                      <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Management guidance · Analyst Q&A themes · Auto-extracted from most recent transcript ({Math.round(transcriptData.totalLength/1000)}k chars)</p>
+                    </div>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(167,139,250,0.15)",color:PURPLE,border:`1px solid rgba(167,139,250,0.25)`}}>TRANSCRIPT</span>
+                  </div>
+                  <div className="px-3 py-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* Guidance */}
+                    <div>
+                      <p className="text-[7.5px] font-bold uppercase tracking-widest mb-2" style={{color:TEAL}}>Management Guidance & Outlook</p>
+                      {transcriptData.guidance.length>0?(
+                        <div className="space-y-2">
+                          {transcriptData.guidance.map((g,i)=>(
+                            <div key={i} className="rounded px-2 py-1.5 text-[8px] leading-relaxed" style={{background:"rgba(20,184,166,0.06)",border:"1px solid rgba(20,184,166,0.15)",color:"#ffffff60"}}>
+                              "{g.length>300?g.slice(0,300)+"…":g}"
+                            </div>
+                          ))}
+                        </div>
+                      ):<p className="text-[8px]" style={{color:"#ffffff20"}}>No forward-looking guidance statements found</p>}
+                    </div>
+                    {/* Q&A themes + numbers */}
+                    <div className="space-y-3">
+                      {transcriptData.hasQA&&transcriptData.questions.length>0&&(
+                        <div>
+                          <p className="text-[7.5px] font-bold uppercase tracking-widest mb-2" style={{color:BLUE}}>Analyst Q&A — Key Questions</p>
+                          <div className="space-y-1.5">
+                            {transcriptData.questions.map((q,i)=>(
+                              <div key={i} className="rounded px-2 py-1.5 flex items-start gap-2" style={{background:"rgba(59,130,246,0.06)",border:"1px solid rgba(59,130,246,0.15)"}}>
+                                <span className="text-[7px] font-bold shrink-0 mt-0.5" style={{color:"#60a5fa"}}>Q{i+1}</span>
+                                <p className="text-[7.5px] leading-snug" style={{color:"#ffffff55"}}>{q.length>220?q.slice(0,220)+"…":q}</p>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                      {transcriptData.keyNumbers.length>0&&(
+                        <div>
+                          <p className="text-[7.5px] font-bold uppercase tracking-widest mb-1.5" style={{color:AMBER}}>Key Numbers Cited</p>
+                          <div className="flex flex-wrap gap-1.5">
+                            {transcriptData.keyNumbers.slice(0,10).map((n,i)=>(
+                              <span key={i} className="text-[8px] font-bold tabular-nums rounded px-1.5 py-0.5" style={{background:"rgba(245,158,11,0.12)",color:AMBER,border:"1px solid rgba(245,158,11,0.2)"}}>{n}</span>
+                            ))}
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              )}
               {/* Earnings beat/miss detail */}
               <Card title="Earnings Quality" sub="Beat/miss streak + history" badge={earningsStreak.streak>0?`${earningsStreak.streak}-STREAK`:earningsStreak.total>0?"CHECK":""}>
                 <div className="space-y-2 py-1">

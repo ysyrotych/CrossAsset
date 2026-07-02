@@ -2042,6 +2042,7 @@ export default function TenKPage() {
               analystEstimates={data.fmp_extended?.analyst_estimates}
               fmpRating={data.fmp_extended?.fmp_rating}
               quarterlyTrends={data.fmp_extended?.quarterly_trends}
+              earningsTranscript={data.earnings_transcript ?? ""}
             />
           </div>
 
