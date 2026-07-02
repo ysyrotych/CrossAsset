@@ -2001,6 +2001,9 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
     if not merged_facts.get("ni_growth_yoy") and merged_history.get("net_income"):
         v = _yoy(merged_history["net_income"])
         if v is not None: merged_facts["ni_growth_yoy"] = v
+    if not merged_facts.get("ocf_growth_yoy") and merged_history.get("operating_cf"):
+        v = _yoy(merged_history["operating_cf"])
+        if v is not None: merged_facts["ocf_growth_yoy"] = v
 
     # ── Post-merge: compute missing valuation multiples from available data ──────
     _mc  = merged_facts.get("market_cap")
