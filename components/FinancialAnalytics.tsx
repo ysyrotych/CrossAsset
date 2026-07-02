@@ -12,6 +12,7 @@ type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: num
 type SegmentData = { date: string; data: Record<string, number> };
 type AnalystEstimates = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
 type QuarterlyTrend = { date: string; revenue?: number; gross_margin_pct?: number; operating_margin_pct?: number; net_margin_pct?: number; eps_diluted?: number; free_cash_flow?: number }[];
+type InsiderTrade = { name: string; title?: string; transaction?: string; shares?: number|null; price?: number|null; value?: number|null; date?: string };
 
 export type FinancialAnalyticsProps = {
   ticker: string;
@@ -31,6 +32,7 @@ export type FinancialAnalyticsProps = {
   fmpRating?: string;
   quarterlyTrends?: QuarterlyTrend;
   earningsTranscript?: string;
+  insiderTrading?: InsiderTrade[];
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -834,7 +836,7 @@ export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
   segments, geoSegments, analystEstimates=[], fmpRating, quarterlyTrends=[],
-  earningsTranscript="",
+  earningsTranscript="", insiderTrading=[],
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
   const [aiText, setAiText]     = useState("");
@@ -3188,6 +3190,67 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   </div>
                 </div>
               )}
+              {/* ══ LOOP 17: Insider Trading Activity ══ */}
+              {insiderTrading.length>0&&(()=>{
+                // Summarize: net buy/sell count and value
+                const buys=insiderTrading.filter(t=>/P-Purchase|buy|acquired/i.test(t.transaction||""));
+                const sells=insiderTrading.filter(t=>/S-Sale|sell|sold|disposed/i.test(t.transaction||""));
+                const netBuys=buys.length-sells.length;
+                const netVal=(buys.reduce((s,t)=>s+(t.value??0),0))-(sells.reduce((s,t)=>s+(t.value??0),0));
+                const sentiment=netBuys>2?GREEN:netBuys<-2?RED:AMBER;
+                const abbr2=(v:number|null|undefined)=>v==null?"—":Math.abs(v)>=1e6?`$${(Math.abs(v)/1e6).toFixed(1)}M`:Math.abs(v)>=1e3?`$${(Math.abs(v)/1e3).toFixed(0)}K`:`$${Math.abs(v).toFixed(0)}`;
+                return(
+                <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                  <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Insider Activity (Form 4)</p>
+                      <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Recent executive and director transactions · Net sentiment: {buys.length}B / {sells.length}S</p>
+                    </div>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:sentiment+"25",color:sentiment,border:`1px solid ${sentiment}40`}}>
+                      {netBuys>0?`+${netBuys} NET BUY`:netBuys<0?`${netBuys} NET SELL`:"NEUTRAL"}
+                    </span>
+                  </div>
+                  <div className="px-3 py-2">
+                    {/* Summary bar */}
+                    <div className="grid grid-cols-3 gap-3 mb-3 pb-2 border-b" style={{borderColor:DARK_BORDER}}>
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Buys ({buys.length})</p>
+                        <p className="text-[9px] font-bold" style={{color:GREEN}}>{abbr2(buys.reduce((s,t)=>s+(t.value??0),0))}</p>
+                      </div>
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Sells ({sells.length})</p>
+                        <p className="text-[9px] font-bold" style={{color:RED}}>{abbr2(sells.reduce((s,t)=>s+(t.value??0),0))}</p>
+                      </div>
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Net Flow</p>
+                        <p className="text-[9px] font-bold" style={{color:netVal>=0?GREEN:RED}}>{netVal>=0?"+":""}{abbr2(netVal)}</p>
+                      </div>
+                    </div>
+                    {/* Transaction rows */}
+                    <div className="space-y-1.5 max-h-48 overflow-y-auto">
+                      {insiderTrading.slice(0,12).map((t,i)=>{
+                        const isBuy=/P-Purchase|buy|acquired/i.test(t.transaction||"");
+                        const isSell=/S-Sale|sell|sold|disposed/i.test(t.transaction||"");
+                        const col=isBuy?GREEN:isSell?RED:AMBER;
+                        return(
+                          <div key={i} className="flex items-center gap-2 rounded px-2 py-1.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                            <div className="w-1.5 h-1.5 rounded-full shrink-0" style={{background:col}}/>
+                            <div className="flex-1 min-w-0">
+                              <span className="text-[8px] font-bold" style={{color:"#ffffff60"}}>{t.name}</span>
+                              {t.title&&<span className="text-[7px] ml-1.5" style={{color:"#ffffff25"}}>{t.title.length>25?t.title.slice(0,25)+"…":t.title}</span>}
+                            </div>
+                            <span className="text-[7.5px] font-bold shrink-0" style={{color:col}}>{t.transaction?.replace("P-Purchase","BUY").replace("S-Sale","SELL")}</span>
+                            <span className="text-[7.5px] tabular-nums shrink-0" style={{color:"#ffffff35"}}>{abbr2(t.value)}</span>
+                            <span className="text-[7px] tabular-nums shrink-0" style={{color:"#ffffff25"}}>{t.date?.slice(0,7)??""}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+                );
+              })()}
+
               {/* Earnings beat/miss detail */}
               <Card title="Earnings Quality" sub="Beat/miss streak + history" badge={earningsStreak.streak>0?`${earningsStreak.streak}-STREAK`:earningsStreak.total>0?"CHECK":""}>
                 <div className="space-y-2 py-1">

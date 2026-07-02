@@ -158,6 +158,7 @@ def get_fmp_financials(ticker: str) -> dict:
                 "news":      ex.submit(fetch, "stock-news", None, 12),
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
                 "transcript": ex.submit(fetch_v3, "earning_call_transcript", 1),
+                "insider":   ex.submit(fetch, "insider-trading", None, 20),
             }
             res = {k: v.result() for k, v in fs.items()}
 
@@ -309,6 +310,7 @@ def get_fmp_financials(ticker: str) -> dict:
             "news":              res["news"],
             "peer_comparison":   peer_comparison,
             "transcript_raw":    res.get("transcript", []),
+            "insider_trading":   res.get("insider", []),
         }
     except Exception as e:
         print(f"FMP error for {ticker}: {e}")
@@ -896,6 +898,22 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
     peer_comp = fmp.get("peer_comparison", [])
     if peer_comp:
         fmp_ext["peer_comparison"] = peer_comp
+
+    # Insider trading (last 20 Form 4 transactions)
+    raw_insider = fmp.get("insider_trading", [])
+    if raw_insider:
+        fmp_ext["insider_trading"] = [
+            {
+                "name":        p.get("reportingName", "") or p.get("insiderName", ""),
+                "title":       p.get("typeOfOwner", "") or p.get("title", ""),
+                "transaction": p.get("transactionType", "") or p.get("type", ""),
+                "shares":      safe_float(p.get("securitiesTransacted") or p.get("shares")),
+                "price":       safe_float(p.get("price") or p.get("transactionPrice")),
+                "value":       safe_float(p.get("value") or p.get("amount")),
+                "date":        (p.get("transactionDate") or p.get("date") or "")[:10],
+            }
+            for p in raw_insider[:15] if p.get("reportingName") or p.get("insiderName")
+        ]
 
     # Quarterly trends
     if q_trend:
