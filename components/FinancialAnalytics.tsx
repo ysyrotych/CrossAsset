@@ -2184,7 +2184,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 <table className="w-full border-collapse" style={{fontSize:8.5}}>
                   <thead>
                     <tr style={{borderBottom:`1px solid ${DARK_BORDER}`}}>
-                      {["Company","Mkt Cap","Rev Growth","P/E","EV/EBITDA","P/FCF","ROIC","Net Margin"].map(h=>(
+                      {["Company","Mkt Cap","Rev Growth","P/E","EV/EBITDA","EV/G","P/FCF","ROIC","Net Margin"].map(h=>(
                         <th key={h} className="px-3 py-2 text-right first:text-left font-bold uppercase tracking-wider" style={{color:"#ffffff25",fontSize:7}}>{h}</th>
                       ))}
                     </tr>
@@ -2195,6 +2195,8 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                       const rowBg=isSubject?"rgba(59,130,246,0.1)":"transparent";
                       const rowBorder=isSubject?`1px solid rgba(59,130,246,0.25)`:undefined;
                       const fmt=(v:number|null,suf="",dec=1)=>v!=null?`${v.toFixed(dec)}${suf}`:"—";
+                      // EV/G = EV/EBITDA ÷ Rev Growth (growth-adjusted multiple)
+                      const evg=p.ev_ebitda!=null&&p.rev_growth!=null&&p.rev_growth>0?p.ev_ebitda/p.rev_growth:null;
                       return(
                         <tr key={i} style={{background:rowBg,borderBottom:`1px solid ${DARK_BORDER}`,outline:rowBorder}}>
                           <td className="px-3 py-2">
@@ -2208,6 +2210,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                           </td>
                           <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.pe,"x")}</td>
                           <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.ev_ebitda,"x")}</td>
+                          <td className="px-3 py-2 text-right font-bold" style={{color:evg!=null?evg<0.5?GREEN:evg<1?AMBER:RED:"#ffffff40"}}>{evg!=null?evg.toFixed(2):"—"}</td>
                           <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.p_fcf,"x")}</td>
                           <td className="px-3 py-2 text-right font-bold" style={{color:p.roic>15?GREEN:p.roic>9?AMBER:RED}}>{fmt(p.roic,"%")}</td>
                           <td className="px-3 py-2 text-right font-bold" style={{color:p.net_margin>20?GREEN:p.net_margin>5?AMBER:RED}}>{fmt(p.net_margin,"%")}</td>
@@ -2225,6 +2228,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.rev_growth??null)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.pe)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.ev_ebitda)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(2):"—")(med(nonSubject.map(p=>p.ev_ebitda!=null&&p.rev_growth!=null&&p.rev_growth>0?p.ev_ebitda/p.rev_growth:null)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.p_fcf)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.roic)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.net_margin)))}</td>
