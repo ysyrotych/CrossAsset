@@ -2236,6 +2236,14 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   />
                   :<NoData W={320} H={160}/>}
               </Card>
+              <Card title="EV/EBITDA vs Rev Growth" sub="Growth-justified valuation — premium/discount vs peers" badge="KEY COMPS">
+                {allPeers.filter(p=>p.ev_ebitda!=null&&p.rev_growth!=null).length>=2
+                  ?<Scatter
+                    points={allPeers.filter(p=>p.ev_ebitda!=null&&p.rev_growth!=null).map(p=>({label:p.symbol,x:p.rev_growth!,y:p.ev_ebitda!,highlight:p.symbol===ticker}))}
+                    xLabel="Rev Growth %" yLabel="EV/EBITDA x"
+                  />
+                  :<NoData W={320} H={160}/>}
+              </Card>
               <Card title="SBC-Adjusted FCF" sub="True FCF after stock comp cost">
                 <BarChart
                   data={revYears.map(y=>({
