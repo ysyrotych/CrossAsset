@@ -249,11 +249,13 @@ def get_fmp_financials(ticker: str) -> dict:
                         rev_g= safe_float(info.get("revenueGrowth"))
                         roic = safe_float(info.get("returnOnInvestedCapital") or info.get("returnOnEquity"))
                         # Compute P/FCF from marketCap / freeCashflow when ratio not directly available
+                        # Cap at 100x: yfinance sometimes returns quarterly FCF, inflating ratio
                         p_fcf= safe_float(info.get("priceToFreeCashflows") or info.get("priceToFreeCashFlow"))
                         if not p_fcf and mc:
                             fcf = safe_float(info.get("freeCashflow"))
                             if fcf and fcf > 0:
-                                p_fcf = mc / fcf
+                                computed = mc / fcf
+                                p_fcf = computed if computed <= 100 else None
                         name = info.get("longName") or info.get("shortName") or sym
                         return {
                             "symbol":     sym,
