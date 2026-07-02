@@ -48,6 +48,31 @@ FMP_API_KEY  = _os.environ.get("FMP_API_KEY", "").strip()
 FMP_BASE     = "https://financialmodelingprep.com/stable"
 FMP_V3       = "https://financialmodelingprep.com/api/v3"
 
+KNOWN_PEERS: dict[str, list[str]] = {
+    "META":  ["GOOGL", "SNAP", "PINS", "AMZN", "NFLX"],
+    "AAPL":  ["MSFT", "GOOGL", "AMZN", "NVDA", "DELL"],
+    "MSFT":  ["AAPL", "GOOGL", "AMZN", "ORCL", "CRM"],
+    "GOOGL": ["META", "MSFT", "AMZN", "AAPL", "SNAP"],
+    "GOOG":  ["META", "MSFT", "AMZN", "AAPL", "SNAP"],
+    "AMZN":  ["MSFT", "GOOGL", "AAPL", "WMT", "COST"],
+    "NVDA":  ["AMD", "INTC", "AVGO", "QCOM", "ARM"],
+    "TSLA":  ["F", "GM", "RIVN", "BMW.DE", "TM"],
+    "JPM":   ["BAC", "WFC", "GS", "C", "MS"],
+    "JNJ":   ["PFE", "ABBV", "MRK", "BMY", "LLY"],
+    "V":     ["MA", "AXP", "DFS", "PYPL", "SQ"],
+    "WMT":   ["TGT", "COST", "AMZN", "KR", "DG"],
+    "XOM":   ["CVX", "COP", "BP", "SHEL", "TTE"],
+    "UNH":   ["CVS", "CI", "HUM", "ELV", "MOH"],
+    "BRK-B": ["JPM", "BAC", "WFC", "AIG", "MET"],
+    "UBER":  ["LYFT", "ABNB", "DASH", "BKNG", "EXPE"],
+    "NFLX":  ["DIS", "PARA", "WBD", "SPOT", "AMZN"],
+    "PYPL":  ["V", "MA", "SQ", "AFRM", "SOFI"],
+    "HOOD":  ["SCHW", "IBKR", "AMTD", "ETSY", "COIN"],
+    "COIN":  ["MSTR", "RIOT", "MARA", "CLSK", "HUT"],
+    "DUOL":  ["CHGG", "TAL", "EDU", "UDMY", "COURSERA"],
+    "CMG":   ["MCD", "SBUX", "YUM", "QSR", "DPZ"],
+}
+
 def get_fmp_financials(ticker: str) -> dict:
     """
     Fetch comprehensive data from FMP.
@@ -207,6 +232,44 @@ def get_fmp_financials(ticker: str) -> dict:
                         "market_cap": mc,
                         "rev_growth": round((rev_g or 0) * 100, 1) if rev_g else None,
                     })
+
+        # ── yfinance peer fallback when FMP returns no peers ─────────────────
+        if not peer_comparison and YF_AVAILABLE:
+            fallback_syms = KNOWN_PEERS.get(ticker.upper(), [])[:5]
+            if fallback_syms:
+                def _fetch_yf_peer(sym: str) -> dict:
+                    try:
+                        info = yf.Ticker(sym).info
+                        if not info: return {}
+                        mc   = safe_float(info.get("marketCap"))
+                        pe   = safe_float(info.get("trailingPE"))
+                        ev_e = safe_float(info.get("enterpriseToEbitda"))
+                        npm  = safe_float(info.get("netMargins"))
+                        rev_g= safe_float(info.get("revenueGrowth"))
+                        roic = safe_float(info.get("returnOnInvestedCapital") or info.get("returnOnEquity"))
+                        p_fcf= safe_float(info.get("priceToFreeCashflows") or info.get("priceToFreeCashFlow"))
+                        name = info.get("longName") or info.get("shortName") or sym
+                        return {
+                            "symbol":     sym,
+                            "name":       name,
+                            "pe":         round(pe, 1) if pe and pe > 0 else None,
+                            "ev_ebitda":  round(ev_e, 1) if ev_e and ev_e > 0 else None,
+                            "p_fcf":      round(p_fcf, 1) if p_fcf and p_fcf > 0 else None,
+                            "roic":       round(roic * 100, 1) if roic else None,
+                            "net_margin": round(npm * 100, 1) if npm else None,
+                            "market_cap": mc,
+                            "rev_growth": round(rev_g * 100, 1) if rev_g is not None else None,
+                        }
+                    except Exception as e:
+                        print(f"yfinance peer error for {sym}: {e}")
+                        return {}
+                with _cf.ThreadPoolExecutor(max_workers=5) as ex_yf:
+                    yf_peer_futs = {s: ex_yf.submit(_fetch_yf_peer, s) for s in fallback_syms}
+                    for s, fut in yf_peer_futs.items():
+                        p = fut.result()
+                        if p:
+                            peer_comparison.append(p)
+                print(f"yfinance peer fallback for {ticker}: {[p['symbol'] for p in peer_comparison]}")
 
         has_statements = bool(res["inc_a"])
         print(f"FMP {ticker}: stmts={'yes' if has_statements else 'NO'} | km={len(res['km'])} | ratios={len(res['ratios'])} | growth={len(res['growth'])} | earnings={len(res['earnings'])} | peers={len(peer_comparison)}")
