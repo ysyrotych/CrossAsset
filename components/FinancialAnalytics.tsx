@@ -1639,6 +1639,10 @@ Monte Carlo P95 price: ${monteCarloResults.p95!=null?abbr(monteCarloResults.p95,
 Prob above current: ${monteCarloResults.pUp!=null?monteCarloResults.pUp.toFixed(0)+"%":"N/A"}
 EPS surprises: ${earningsSurprises.slice(0,4).map(e=>`${e.surprise_pct!=null?(e.surprise_pct>0?"+":""):""} ${e.surprise_pct?.toFixed(1)??"?"}%`).join(", ")}
 Peers: ${peers.slice(0,4).map(p=>`${p.symbol}(P/E ${p.pe?.toFixed(1)??"—"}x ROIC ${p.roic.toFixed(1)}%)`).join(", ")}
+52W Range: ${facts.week52_low!=null&&facts.week52_high!=null?`$${facts.week52_low?.toFixed(0)}–$${facts.week52_high?.toFixed(0)} | Current $${facts.stock_price?.toFixed(0)}`:"-"}
+Short Interest: ${facts.short_float_pct!=null?`${facts.short_float_pct.toFixed(1)}% of float, ${facts.short_ratio?.toFixed(1)??"?"}d to cover`:"-"}
+Analyst PT: ${facts.pt_consensus!=null?`$${facts.pt_consensus.toFixed(0)} consensus (${analystRec?`${analystRec.strong_buy+analystRec.buy}B/${analystRec.hold}H/${analystRec.sell+analystRec.strong_sell}S`:"-"})`:"-"}
+Insider Activity: ${insiderTrading.length>0?`${insiderTrading.filter(t=>/purchase|buy/i.test(t.transaction||"")).length} buys / ${insiderTrading.filter(t=>/sale|sell/i.test(t.transaction||"")).length} sells (last ${insiderTrading.length} transactions)`:"-"}
 
 Write 7 sections with bold headers:
 **PATTERN RECOGNITION** — 3 non-obvious statistical patterns in margins/FCF/growth trajectory
