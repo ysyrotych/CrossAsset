@@ -2703,7 +2703,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               const lo=facts.week52_low, hi=facts.week52_high;
               const ptLo=facts.pt_low, ptHi=facts.pt_high, ptMid=facts.pt_consensus;
               const toX=(v:number,min:number,max:number)=>Math.max(0,Math.min(100,((v-min)/(max-min||1))*100));
-              const pctFrom52Lo=lo&&price?((price-lo)/(hi!-lo||1)*100):null;
+              const pctFrom52Lo=lo!=null&&hi!=null&&price!=null?((price-lo)/((hi-lo)||1)*100):null;
               const ptUpsidePct=ptMid&&price?((ptMid-price)/price*100):null;
               const totalSYield=capitalReturns.totalYield>0?capitalReturns.totalYield:null;
               const nextEarningsDate=facts.next_earnings_ts?new Date(facts.next_earnings_ts*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):null;

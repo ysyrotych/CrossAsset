@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 type Msg = { role: "user" | "assistant"; content: string };
 
 export async function POST(req: NextRequest) {
-  const { ticker, companyName, industry, messages, facts, history, quarterlyPeriod, documentContext } = await req.json() as {
+  const { ticker, companyName, industry, messages, facts, history, quarterlyPeriod, fmpExtended, documentContext } = await req.json() as {
     ticker: string;
     companyName: string;
     industry: string;
@@ -13,6 +13,7 @@ export async function POST(req: NextRequest) {
     facts: Record<string, number>;
     history: Record<string, Record<string, number>>;
     quarterlyPeriod: string;
+    fmpExtended?: Record<string, any>;
     documentContext?: { base64: string; mimeType: string; name: string } | null;
   };
 
@@ -40,21 +41,44 @@ export async function POST(req: NextRequest) {
         .map(([yr, v]) => `${yr.slice(0,4)}: ${fmt(v)}`).join(" → ")
     : "N/A";
 
-  const system = `You are a senior equity research analyst at a top-tier asset management firm. You have deep knowledge of ${companyName} (${ticker}) based on their SEC filings.
+  const ext = fmpExtended ?? {};
+  const peerRows = (ext.peer_comparison as any[]) ?? [];
+  const peerStr = peerRows.length > 0
+    ? peerRows.map((p:any) => `${p.symbol}: P/E ${p.pe ?? "—"}x | EV/EBITDA ${p.ev_ebitda ?? "—"}x | Net Margin ${p.net_margin ?? "—"}% | Rev Growth ${p.rev_growth != null ? (p.rev_growth > 0 ? "+" : "") + p.rev_growth + "%" : "—"}`).join(" | ")
+    : "N/A";
+  const newsStr = (ext.recent_news as any[])?.slice(0, 5).map((n:any) => `[${n.date}] ${n.title}`).join("; ") ?? "N/A";
+  const insiderStr = (ext.insider_trading as any[])?.slice(0, 6).map((t:any) => `${t.name} (${t.title ?? "?"}): ${t.transaction ?? "?"} $${((t.value ?? 0) / 1e6).toFixed(1)}M on ${t.date ?? "?"}`).join("; ") ?? "N/A";
+  const analystRec = ext.analyst_rec as any;
+  const analystRecStr = analystRec ? `${analystRec.strong_buy + analystRec.buy} Buy / ${analystRec.hold} Hold / ${analystRec.sell + analystRec.strong_sell} Sell (${analystRec.total} analysts)` : "N/A";
+
+  const system = `You are a senior equity research analyst at a top-tier asset management firm. You have deep knowledge of ${companyName} (${ticker}) based on their SEC filings and market data.
 
 COMPANY: ${companyName} | Ticker: ${ticker} | Industry: ${industry}
+CEO: ${ext.ceo ?? "N/A"} | Sector: ${ext.sector ?? "N/A"} | Exchange: ${ext.exchange ?? "N/A"}
 
 KEY FINANCIALS (Most Recent Annual):
 Revenue: ${fmt(f.revenue)} | Gross Margin: ${pct(f.gross_margin_pct)} | Op Margin: ${pct(f.operating_margin_pct)} | Net Margin: ${pct(f.net_margin_pct)}
 EBITDA: ${fmt(f.ebitda)} | FCF: ${fmt(f.free_cash_flow)} | Op CF: ${fmt(f.operating_cf)}
 Net Income: ${fmt(f.net_income)} | EPS Diluted: ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"}
 Cash: ${fmt(f.cash)} | LT Debt: ${fmt(f.long_term_debt)} | Total Assets: ${fmt(f.total_assets)} | Equity: ${fmt(f.equity)}
-ROE: ${f.net_income && f.equity ? pct(f.net_income/f.equity*100) : "N/A"} | ROA: ${f.net_income && f.total_assets ? pct(f.net_income/f.total_assets*100) : "N/A"}
+ROE: ${f.net_income && f.equity ? pct(f.net_income/f.equity*100) : "N/A"} | ROIC: ${pct(f.roic)}
 SBC: ${fmt(f.sbc_expense)} | R&D: ${fmt(f.rd_expense)} | CapEx: ${fmt(f.capex)}
-Interest Coverage: ${f.operating_income && f.interest_expense ? `${(f.operating_income/f.interest_expense).toFixed(0)}×` : "N/A"}
+
+VALUATION:
+P/E: ${f.pe_ratio != null ? f.pe_ratio.toFixed(1)+"x" : "N/A"} | EV/EBITDA: ${f.ev_ebitda != null ? f.ev_ebitda.toFixed(1)+"x" : "N/A"} | P/FCF: ${f.p_fcf != null ? f.p_fcf.toFixed(1)+"x" : "N/A"}
+Current Price: ${f.stock_price != null ? `$${f.stock_price.toFixed(2)}` : "N/A"} | 52W: ${f.week52_low != null ? `$${f.week52_low.toFixed(0)}–$${f.week52_high?.toFixed(0)}` : "N/A"}
+PT Consensus: ${f.pt_consensus != null ? `$${f.pt_consensus.toFixed(0)}` : "N/A"} | Analyst Ratings: ${analystRecStr}
+Short Interest: ${f.short_float_pct != null ? `${f.short_float_pct.toFixed(1)}% of float` : "N/A"}
 
 5-YEAR REVENUE TREND: ${revHist}
 5-YEAR NET INCOME TREND: ${niHist}
+
+PEER COMPARISON:
+${peerStr}
+
+RECENT NEWS: ${newsStr}
+
+INSIDER ACTIVITY: ${insiderStr}
 
 MOST RECENT QUARTER (${quarterlyPeriod || "N/A"}): Available in XBRL data.
 

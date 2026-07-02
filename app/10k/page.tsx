@@ -1818,6 +1818,7 @@ export default function TenKPage() {
           facts: data.xbrl_facts,
           history: data.history ?? {},
           quarterlyPeriod: data.quarterly_period ?? "",
+          fmpExtended: data.fmp_extended ?? {},
           documentContext: uploadedDoc ?? null,
         }),
       });
