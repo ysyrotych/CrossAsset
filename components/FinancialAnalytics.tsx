@@ -1855,6 +1855,79 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 />
               </Card>
             )}
+            {/* ══ LOOP 19: Forward Estimates Bridge ══ */}
+            {analystEstimates.length>0&&(()=>{
+              const sortedEst=[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date));
+              const histRevYears=revYears.slice(-3);
+              const histRevData=histRevYears.map(y=>({label:y.slice(0,4),value:history.revenue?.[y]??0,historical:true}));
+              const fwdRevData=sortedEst.map(e=>({label:e.date?.slice(0,7)??"",value:e.rev_avg??0,historical:false}));
+              const allRevData=[...histRevData,...fwdRevData].filter(d=>d.value>0);
+              const maxRevVal=Math.max(...allRevData.map(d=>d.value));
+              const W=320, H=150;
+              const bw=Math.max(10,Math.floor((W-PAD.l-PAD.r)/Math.max(allRevData.length,1)-4));
+              const step=(W-PAD.l-PAD.r)/Math.max(allRevData.length,1);
+              const toX=(i:number)=>PAD.l+i*step+step/2;
+              const toY=(v:number)=>PAD.t+(1-(v/maxRevVal))*(H-PAD.t-PAD.b);
+              return(
+              <Card title="Revenue: Actuals → Forward Consensus" sub="3Y history + analyst estimates (lighter = forward)" badge="CONSENSUS">
+                <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                  <line x1={PAD.l} x2={W-PAD.r} y1={H-PAD.b} y2={H-PAD.b} stroke={DARK_BORDER} strokeWidth="0.8"/>
+                  {/* Divider: historical vs forward */}
+                  {histRevData.length>0&&fwdRevData.length>0&&(
+                    <line x1={toX(histRevData.length-1)+bw/2+4} x2={toX(histRevData.length-1)+bw/2+4} y1={PAD.t} y2={H-PAD.b} stroke={AMBER} strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5"/>
+                  )}
+                  {allRevData.map((d,i)=>{
+                    const x=toX(i)-bw/2, y=toY(d.value), barH=H-PAD.b-y;
+                    const col=d.historical?BLUE:TEAL;
+                    return(
+                      <g key={i}>
+                        <rect x={x} y={y} width={bw} height={barH} fill={col} opacity={d.historical?0.8:0.4} rx="1.5"/>
+                        <text x={x+bw/2} y={H-PAD.b+11} textAnchor="middle" fontSize="6" fill="#ffffff40">{d.label}</text>
+                        <text x={x+bw/2} y={y-2} textAnchor="middle" fontSize="6.5" fill={col} opacity={d.historical?0.9:0.7}>{d.value>=1e9?`$${(d.value/1e9).toFixed(1)}B`:d.value>=1e6?`$${(d.value/1e6).toFixed(0)}M`:""}</text>
+                      </g>
+                    );
+                  })}
+                  <text x={toX(0)} y={PAD.t-4} textAnchor="middle" fontSize="6" fill={BLUE} opacity="0.7">Actual</text>
+                  {fwdRevData.length>0&&<text x={toX(histRevData.length)} y={PAD.t-4} textAnchor="middle" fontSize="6" fill={TEAL} opacity="0.7">Consensus</text>}
+                </svg>
+              </Card>
+              );
+            })()}
+            {analystEstimates.length>0&&(()=>{
+              const sortedEst=[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date));
+              const histEpsYears=epsYears.slice(-3);
+              const histEpsData=histEpsYears.map(y=>({label:y.slice(0,4),value:history.eps_diluted?.[y]??0,historical:true}));
+              const fwdEpsData=sortedEst.filter(e=>e.eps_avg!=null).map(e=>({label:e.date?.slice(0,7)??"",value:e.eps_avg!,historical:false}));
+              const allEpsData=[...histEpsData,...fwdEpsData].filter(d=>d.value!==0);
+              if(!allEpsData.length) return null;
+              const maxEpsVal=Math.max(...allEpsData.map(d=>Math.abs(d.value)),0.01);
+              const W=320, H=150;
+              const bw=Math.max(10,Math.floor((W-PAD.l-PAD.r)/Math.max(allEpsData.length,1)-4));
+              const step=(W-PAD.l-PAD.r)/Math.max(allEpsData.length,1);
+              const toX=(i:number)=>PAD.l+i*step+step/2;
+              const toY=(v:number)=>PAD.t+(1-(v/maxEpsVal))*(H-PAD.t-PAD.b);
+              return(
+              <Card title="EPS: Actuals → Forward Consensus" sub="3Y EPS history + analyst estimates" badge="EPS BRIDGE">
+                <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                  <line x1={PAD.l} x2={W-PAD.r} y1={H-PAD.b} y2={H-PAD.b} stroke={DARK_BORDER} strokeWidth="0.8"/>
+                  {histEpsData.length>0&&fwdEpsData.length>0&&(
+                    <line x1={toX(histEpsData.length-1)+bw/2+4} x2={toX(histEpsData.length-1)+bw/2+4} y1={PAD.t} y2={H-PAD.b} stroke={AMBER} strokeWidth="0.8" strokeDasharray="3,3" opacity="0.5"/>
+                  )}
+                  {allEpsData.map((d,i)=>{
+                    const x=toX(i)-bw/2, y=toY(Math.max(0,d.value)), barH=H-PAD.b-y;
+                    const col=d.historical?AMBER:PURPLE;
+                    return(
+                      <g key={i}>
+                        <rect x={x} y={y} width={bw} height={Math.max(1,barH)} fill={col} opacity={d.historical?0.8:0.4} rx="1.5"/>
+                        <text x={x+bw/2} y={H-PAD.b+11} textAnchor="middle" fontSize="6" fill="#ffffff40">{d.label}</text>
+                        <text x={x+bw/2} y={y-2} textAnchor="middle" fontSize="6.5" fill={col} opacity={d.historical?0.9:0.7}>{d.value>=0?`$${d.value.toFixed(2)}`:""}</text>
+                      </g>
+                    );
+                  })}
+                </svg>
+              </Card>
+              );
+            })()}
           </div>
         )}
 
@@ -2312,6 +2385,23 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   pct
                 />
               </Card>
+              {/* ══ LOOP 19: Peer Gross Margin + Rev/Employee ══ */}
+              {allPeers.some(p=>p.gross_margin!=null)&&(
+                <Card title="Peer Gross Margin Comparison" sub="Business model quality — higher = better unit economics" badge="EFFICIENCY">
+                  <HBar
+                    data={allPeers.filter(p=>p.gross_margin!=null).sort((a,b)=>(b.gross_margin??0)-(a.gross_margin??0)).map(p=>({label:p.symbol,value:p.gross_margin!,highlight:p.symbol===ticker}))}
+                    suffix="%" color={TEAL}
+                  />
+                </Card>
+              )}
+              {allPeers.some(p=>p.rev_per_emp!=null)&&(
+                <Card title="Revenue per Employee ($K)" sub="Labor efficiency — higher = more scalable business model" badge="EFFICIENCY">
+                  <HBar
+                    data={allPeers.filter(p=>p.rev_per_emp!=null).sort((a,b)=>(b.rev_per_emp??0)-(a.rev_per_emp??0)).map(p=>({label:p.symbol,value:p.rev_per_emp!,highlight:p.symbol===ticker}))}
+                    suffix="K" color={PURPLE}
+                  />
+                </Card>
+              )}
             </div>
           </div>
         )}
@@ -2629,6 +2719,68 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         {/* ── Signals & Scores ──────────────────────────────────── */}
         {tab==="signals"&&(
           <div className="space-y-4">
+
+            {/* ══ LOOP 20: Financial Health Tripwires ══ */}
+            {(()=>{
+              const lastYear=revYears[revYears.length-1];const prevYear=revYears[revYears.length-2];
+              const lastRev=history.revenue?.[lastYear]??0;const prevRev=history.revenue?.[prevYear]??1;
+              const lastAR=history.accounts_receivable?.[lastYear]??0;const prevAR=history.accounts_receivable?.[prevYear]??1;
+              const lastInv=history.inventory?.[lastYear]??null;const prevInv=history.inventory?.[prevYear]??null;
+              const lastGM=history.gross_profit?.[lastYear]&&lastRev?history.gross_profit[lastYear]!/lastRev*100:null;
+              const prevGM=history.gross_profit?.[prevYear]&&prevRev?history.gross_profit[prevYear]!/prevRev*100:null;
+              const lastROIC=facts.roic;
+              const prevROICFromHist=kmHistory.length>=2?kmHistory[kmHistory.length-2]?.roic:null;
+              const fcfNi=facts.free_cash_flow&&facts.net_income&&facts.net_income>0?facts.free_cash_flow/facts.net_income:null;
+              const sbcPctVal=facts.sbc_expense&&lastRev?facts.sbc_expense/lastRev*100:null;
+              const netDebtEBITDA=facts.long_term_debt&&facts.cash&&facts.ebitda&&facts.ebitda>0?(facts.long_term_debt-facts.cash)/facts.ebitda:null;
+              const revGrowthRate=lastRev&&prevRev?((lastRev-prevRev)/prevRev*100):null;
+              const prevRevGrowth=prevYear&&revYears.length>=3?(()=>{const py2=revYears[revYears.length-3];const r2=history.revenue?.[py2]??1;return prevRev&&r2?((prevRev-r2)/r2*100):null;})():null;
+              const arGrowthVsRev=lastAR&&prevAR&&lastRev&&prevRev?((lastAR-prevAR)/prevAR*100)-((lastRev-prevRev)/prevRev*100):null;
+              const invGrowthVsRev=lastInv&&prevInv&&lastRev&&prevRev?((lastInv-prevInv)/Math.abs(prevInv)*100)-((lastRev-prevRev)/prevRev*100):null;
+              type TW={label:string;ok:boolean|null;warning:string;clean:string;value:string};
+              const tripwires:TW[]=[
+                {label:"Earnings Quality",ok:fcfNi!=null?fcfNi>=0.7:null,warning:`FCF/NI ${fcfNi!=null?fcfNi.toFixed(2):"?"} — earnings may exceed cash`,clean:`FCF/NI ${fcfNi!=null?fcfNi.toFixed(2):"?"} — strong cash conversion`,value:fcfNi!=null?fcfNi.toFixed(2):"—"},
+                {label:"Gross Margin Trend",ok:lastGM!=null&&prevGM!=null?lastGM>=prevGM-0.5:null,warning:`Gross margin compressing ${lastGM?.toFixed(1)??"-"}% vs ${prevGM?.toFixed(1)??"-"}%`,clean:`Gross margin stable/expanding at ${lastGM?.toFixed(1)??"-"}%`,value:lastGM!=null&&prevGM!=null?(lastGM-prevGM>0?"+":"")+((lastGM??0)-(prevGM??0)).toFixed(1)+"pp":"—"},
+                {label:"AR vs Rev Growth",ok:arGrowthVsRev!=null?arGrowthVsRev<10:null,warning:`AR growing ${arGrowthVsRev!=null?arGrowthVsRev.toFixed(1):"?"}pp faster than rev — collection risk`,clean:`AR in line with revenue growth`,value:arGrowthVsRev!=null?(arGrowthVsRev>0?"+":"")+arGrowthVsRev.toFixed(1)+"pp":"—"},
+                {label:"Inventory Quality",ok:lastInv==null||(invGrowthVsRev!=null?invGrowthVsRev<15:true),warning:`Inventory growing ${invGrowthVsRev!=null?invGrowthVsRev.toFixed(1):"?"}pp faster than rev`,clean:`Inventory in line with sales`,value:invGrowthVsRev!=null?(invGrowthVsRev>0?"+":"")+invGrowthVsRev.toFixed(1)+"pp":lastInv==null?"N/A":"—"},
+                {label:"SBC Dilution",ok:sbcPctVal!=null?sbcPctVal<10:null,warning:`SBC ${sbcPctVal?.toFixed(1)??"-"}% of revenue — elevated dilution`,clean:`SBC ${sbcPctVal?.toFixed(1)??"-"}% of revenue — within range`,value:sbcPctVal!=null?sbcPctVal.toFixed(1)+"%":"—"},
+                {label:"Leverage",ok:netDebtEBITDA!=null?netDebtEBITDA<3:null,warning:`Net Debt/EBITDA ${netDebtEBITDA?.toFixed(1)??"-"}x — elevated leverage`,clean:`Net Debt/EBITDA ${netDebtEBITDA?.toFixed(1)??"-"}x — manageable`,value:netDebtEBITDA!=null?netDebtEBITDA.toFixed(1)+"x":facts.cash&&facts.long_term_debt&&facts.cash>facts.long_term_debt?"Net Cash":"—"},
+                {label:"Revenue Momentum",ok:revGrowthRate!=null&&prevRevGrowth!=null?revGrowthRate>prevRevGrowth-5:revGrowthRate!=null?revGrowthRate>0:null,warning:`Revenue decelerating: ${revGrowthRate?.toFixed(1)??"-"}% vs ${prevRevGrowth?.toFixed(1)??"-"}% prior`,clean:`Revenue momentum: ${revGrowthRate?.toFixed(1)??"-"}% YoY`,value:revGrowthRate!=null?(revGrowthRate>0?"+":"")+revGrowthRate.toFixed(1)+"%":"—"},
+                {label:"ROIC Trend",ok:lastROIC!=null&&prevROICFromHist!=null?lastROIC>=prevROICFromHist-1:lastROIC!=null?lastROIC>10:null,warning:`ROIC declining: ${lastROIC?.toFixed(1)??"-"}% (was ${prevROICFromHist?.toFixed(1)??"-"}%)`,clean:`ROIC ${lastROIC?.toFixed(1)??"-"}% — capital efficient`,value:lastROIC!=null?lastROIC.toFixed(1)+"%":"—"},
+              ];
+              const greenCount=tripwires.filter(t=>t.ok===true).length;
+              const redCount=tripwires.filter(t=>t.ok===false).length;
+              return(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Financial Health Tripwires</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>8 fundamental analyst checks · Earnings quality · Leverage · Growth quality · Dilution</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(16,185,129,0.12)",color:GREEN,border:"1px solid rgba(16,185,129,0.2)"}}>{greenCount} CLEAR</span>
+                    {redCount>0&&<span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(239,68,68,0.12)",color:RED,border:"1px solid rgba(239,68,68,0.2)"}}>{redCount} FLAG</span>}
+                  </div>
+                </div>
+                <div className="px-3 py-2 grid grid-cols-2 lg:grid-cols-4 gap-1.5">
+                  {tripwires.map((tw,i)=>(
+                    <div key={i} className="rounded p-2" style={{background:tw.ok===false?"rgba(239,68,68,0.06)":tw.ok===true?"rgba(16,185,129,0.04)":"rgba(255,255,255,0.02)",border:`1px solid ${tw.ok===false?"rgba(239,68,68,0.2)":tw.ok===true?"rgba(16,185,129,0.15)":DARK_BORDER}`}}>
+                      <div className="flex items-center justify-between mb-0.5">
+                        <p className="text-[7px] font-bold uppercase tracking-wider" style={{color:"#ffffff35"}}>{tw.label}</p>
+                        <span style={{color:tw.ok===false?RED:tw.ok===true?GREEN:"#ffffff30",fontSize:9}}>
+                          {tw.ok===false?"⚠":"✓"}
+                        </span>
+                      </div>
+                      <p className="text-[10px] font-bold tabular-nums" style={{color:tw.ok===false?RED:tw.ok===true?GREEN:AMBER}}>{tw.value}</p>
+                      <p className="text-[6.5px] mt-0.5 leading-tight" style={{color:tw.ok===false?"rgba(239,68,68,0.7)":tw.ok===true?"rgba(16,185,129,0.6)":"#ffffff20"}}>
+                        {tw.ok===false?tw.warning:tw.ok===true?tw.clean:"No data"}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              );
+            })()}
 
             {/* ══ LOOP 14: Investment Thesis Card ══ */}
             <div className="rounded-lg overflow-hidden border" style={{background:investmentThesis.verdictBg,borderColor:investmentThesis.verdictColor+"44"}}>
