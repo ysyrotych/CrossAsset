@@ -140,6 +140,14 @@ export async function POST(req: NextRequest) {
     return `Net: ${buys} buys / ${sells} sells (last ${trades.length} transactions). Recent: ${recent}`;
   })();
 
+  // Peer median multiples for snapshot table
+  const _med = (arr: (number|null)[]) => { const v = arr.filter((x): x is number => x != null).sort((a,b)=>a-b); return v.length ? v[Math.floor(v.length/2)] : null; };
+  const peerPeMed = peerRows.length > 0 ? _med(peerRows.map((p:any) => p.pe)) : null;
+  const peerEvMed = peerRows.length > 0 ? _med(peerRows.map((p:any) => p.ev_ebitda)) : null;
+  const epsSurprises = (ext.earnings_surprises as any[]) ?? [];
+  const epsBeats = epsSurprises.filter((e:any) => (e.surprise_pct ?? 0) > 0).length;
+  const epsTotal = epsSurprises.length;
+
   const prompt = `You are a senior equity research analyst at Edgewood Management, an elite institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}). This document will be read by portfolio managers, CIOs, and institutional investors. It must match Goldman Sachs / Morgan Stanley research quality.
 
 ═══════════════════════════════════════════════════════════════
@@ -298,6 +306,7 @@ Enterprise Value | ${fmt(f.enterprise_value)}
 Revenue (FY) | ${fmt(f.revenue)}
 EBITDA | ${fmt(f.ebitda)}
 FCF | ${fmt(f.free_cash_flow)}
+Gross Margin | ${pct(f.gross_margin_pct)}
 Operating Margin | ${pct(f.operating_margin_pct)}
 Net Margin | ${pct(f.net_margin_pct)}
 FCF Margin | ${f.free_cash_flow && f.revenue ? pct(f.free_cash_flow/f.revenue*100) : "N/A"}
@@ -305,9 +314,12 @@ EPS Diluted | ${f.eps_diluted != null ? `$${f.eps_diluted.toFixed(2)}` : "N/A"}
 Net Debt | ${netDebt != null ? fmt(netDebt) : "N/A"}
 ROE | ${roe != null ? pct(roe) : "N/A"}
 ROIC | ${f.roic != null ? pct(f.roic) : "N/A"}
-P/E | ${x(f.pe_ratio)}
-EV/EBITDA | ${x(f.ev_ebitda)}
+P/E | ${x(f.pe_ratio)} ${peerPeMed ? `(peer median: ${peerPeMed.toFixed(1)}x)` : ""}
+EV/EBITDA | ${x(f.ev_ebitda)} ${peerEvMed ? `(peer median: ${peerEvMed.toFixed(1)}x)` : ""}
+EPS Beat Rate (8Q) | ${epsBeats}/${epsTotal} quarters
 Beta | ${f.beta != null ? f.beta.toFixed(2) : "N/A"}
+Short Interest | ${f.short_float_pct != null ? pct(f.short_float_pct) + " of float" : "N/A"}
+Analyst Rating | ${analystRecStr}
 
 ## BUSINESS OVERVIEW
 
