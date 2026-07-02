@@ -8,7 +8,7 @@ import { Sparkles, BarChart2, TrendingUp, Activity, Shield, Users, Zap, Calculat
 type KmHistory = { date: string; pe: number|null; ev_ebitda: number|null; roic: number|null; p_fcf: number|null; current_ratio: number|null; debt_equity: number|null }[];
 type GrowthHistory = { date: string; rev_growth: number; eps_growth: number; fcf_growth: number }[];
 type EarningsSurprise = { date: string; eps_actual: number|null; eps_est: number|null; surprise_pct: number|null }[];
-type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number; market_cap?: number|null; rev_growth?: number|null }[];
+type PeerComp = { symbol: string; name?: string; pe: number|null; ev_ebitda: number|null; p_fcf: number|null; roic: number; net_margin: number; gross_margin?: number|null; rev_per_emp?: number|null; market_cap?: number|null; rev_growth?: number|null }[];
 type SegmentData = { date: string; data: Record<string, number> };
 type AnalystEstimates = { date: string; rev_avg: number|null; eps_avg: number|null; ebitda_avg: number|null; num_analysts: number|null }[];
 type QuarterlyTrend = { date: string; revenue?: number; gross_margin_pct?: number; operating_margin_pct?: number; net_margin_pct?: number; eps_diluted?: number; free_cash_flow?: number }[];
@@ -939,8 +939,9 @@ export default function FinancialAnalytics({
   const opexYears = yearsFrom(history.rd_expense ?? history.sga_expense ?? {});
 
   // Peers merged with subject
+  const subjectRevPerEmp = facts.revenue&&facts.employees&&facts.employees>0 ? Math.round(facts.revenue/facts.employees/1000) : null;
   const allPeers: PeerComp = [
-    { symbol: ticker, pe: facts.pe_ratio??null, ev_ebitda: facts.ev_ebitda??null, p_fcf: facts.p_fcf??null, roic: facts.roic??0, net_margin: facts.net_margin_pct??0, market_cap: facts.market_cap??null, rev_growth: facts.revenue_growth_yoy??null },
+    { symbol: ticker, pe: facts.pe_ratio??null, ev_ebitda: facts.ev_ebitda??null, p_fcf: facts.p_fcf??null, roic: facts.roic??0, net_margin: facts.net_margin_pct??0, gross_margin: facts.gross_margin_pct??null, rev_per_emp: subjectRevPerEmp, market_cap: facts.market_cap??null, rev_growth: facts.revenue_growth_yoy??null },
     ...peers,
   ];
 
@@ -1537,24 +1538,27 @@ export default function FinancialAnalytics({
     const peerEV=medArr(peers.map(p=>p.ev_ebitda));
     const peerNM=medArr(peers.map(p=>p.net_margin??null));
     const peerROIC=medArr(peers.map(p=>p.roic??null));
+    const peerGM=medArr(peers.map(p=>p.gross_margin??null));
     const pePrem=facts.pe_ratio&&peerPE?(facts.pe_ratio/peerPE-1)*100:null;
     const evPrem=facts.ev_ebitda&&peerEV?(facts.ev_ebitda/peerEV-1)*100:null;
     const nmDiff=facts.net_margin_pct!=null&&peerNM!=null?facts.net_margin_pct-peerNM:null;
     const roicDiff=facts.roic!=null&&peerROIC!=null?facts.roic-peerROIC:null;
+    const gmDiff=facts.gross_margin_pct!=null&&peerGM!=null?facts.gross_margin_pct-peerGM:null;
     // PEG ratio: P/E / EPS growth (annualised)
     const peg=facts.pe_ratio&&facts.eps_growth_yoy&&facts.eps_growth_yoy>0?facts.pe_ratio/facts.eps_growth_yoy:null;
     // Magic Formula (Greenblatt): earnings yield (EBIT/EV) + ROIC
     const ev_full=facts.market_cap!=null&&facts.long_term_debt!=null&&facts.cash!=null?facts.market_cap+facts.long_term_debt-facts.cash:null;
     const earningsYield=facts.operating_income&&ev_full&&ev_full>0?facts.operating_income/ev_full*100:null;
     const magicScore=earningsYield!=null&&facts.roic!=null?earningsYield+facts.roic:null;
-    // Sectors items for scorecard table
+    // Scorecard table rows
     const rows=[
       {label:"P/E",company:facts.pe_ratio,peer:peerPE,premium:pePrem,unit:"x",lowerBetter:true},
       {label:"EV/EBITDA",company:facts.ev_ebitda,peer:peerEV,premium:evPrem,unit:"x",lowerBetter:true},
+      {label:"Gross Margin",company:facts.gross_margin_pct,peer:peerGM,premium:gmDiff,unit:"%",lowerBetter:false},
       {label:"Net Margin",company:facts.net_margin_pct,peer:peerNM,premium:nmDiff,unit:"%",lowerBetter:false},
       {label:"ROIC",company:facts.roic,peer:peerROIC,premium:roicDiff,unit:"%",lowerBetter:false},
     ].filter(r=>r.company!=null&&r.peer!=null);
-    return{pePrem,evPrem,nmDiff,roicDiff,peg,earningsYield,magicScore,rows,peerPE,peerEV,peerNM,peerROIC};
+    return{pePrem,evPrem,nmDiff,roicDiff,gmDiff,peg,earningsYield,magicScore,rows,peerPE,peerEV,peerNM,peerROIC,peerGM};
   },[facts,peers]);
 
   // ── DCF Sensitivity grid (WACC × terminal growth) ────────────────────────
@@ -1680,7 +1684,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         <div>
           <p className="text-[9px] font-bold uppercase tracking-widest text-white/30 mb-1">Financial Analytics Suite</p>
           <h3 className="text-[16px] font-bold text-white leading-tight">{companyName}</h3>
-          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 60+ charts · EVA Engine · Football Field · 5-Factor Model · Beneish · Magic Formula · PEG · Capital Returns · AI</p>
+          <p className="text-[10.5px] text-white/35 mt-0.5">8 tabs · 60+ charts · EVA Engine · Football Field · 5-Factor Model · Beneish · Magic Formula · Estimate Revisions · Rev/Employee · AI</p>
           {/* Quant scores row */}
           <div className="flex items-center gap-3 mt-2 flex-wrap">
             <span className="text-[8px] font-bold px-2 py-0.5 rounded" style={{background:`rgba(${qualityScore>=70?"16,185,129":qualityScore>=40?"245,158,11":"239,68,68"},0.15)`,color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED}}>
@@ -2184,7 +2188,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 <table className="w-full border-collapse" style={{fontSize:8.5}}>
                   <thead>
                     <tr style={{borderBottom:`1px solid ${DARK_BORDER}`}}>
-                      {["Company","Mkt Cap","Rev Growth","P/E","EV/EBITDA","EV/G","P/FCF","ROIC","Net Margin"].map(h=>(
+                      {["Company","Mkt Cap","Rev Growth","Gross Margin","P/E","EV/EBITDA","EV/G","ROIC","Net Margin","Rev/Emp $K"].map(h=>(
                         <th key={h} className="px-3 py-2 text-right first:text-left font-bold uppercase tracking-wider" style={{color:"#ffffff25",fontSize:7}}>{h}</th>
                       ))}
                     </tr>
@@ -2208,12 +2212,13 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                           <td className="px-3 py-2 text-right font-bold" style={{color:p.rev_growth!=null&&p.rev_growth>15?GREEN:p.rev_growth!=null&&p.rev_growth>0?AMBER:RED}}>
                             {p.rev_growth!=null?`${p.rev_growth>0?"+":""}${p.rev_growth.toFixed(1)}%`:"—"}
                           </td>
+                          <td className="px-3 py-2 text-right font-bold" style={{color:p.gross_margin!=null?p.gross_margin>60?GREEN:p.gross_margin>35?AMBER:RED:"#ffffff40"}}>{p.gross_margin!=null?p.gross_margin.toFixed(1)+"%":"—"}</td>
                           <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.pe,"x")}</td>
                           <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.ev_ebitda,"x")}</td>
                           <td className="px-3 py-2 text-right font-bold" style={{color:evg!=null?evg<0.5?GREEN:evg<1?AMBER:RED:"#ffffff40"}}>{evg!=null?evg.toFixed(2):"—"}</td>
-                          <td className="px-3 py-2 text-right" style={{color:"#ffffff60"}}>{fmt(p.p_fcf,"x")}</td>
                           <td className="px-3 py-2 text-right font-bold" style={{color:p.roic>15?GREEN:p.roic>9?AMBER:RED}}>{fmt(p.roic,"%")}</td>
                           <td className="px-3 py-2 text-right font-bold" style={{color:p.net_margin>20?GREEN:p.net_margin>5?AMBER:RED}}>{fmt(p.net_margin,"%")}</td>
+                          <td className="px-3 py-2 text-right" style={{color:p.rev_per_emp!=null?p.rev_per_emp>500?GREEN:p.rev_per_emp>250?AMBER:RED:"#ffffff40"}}>{p.rev_per_emp!=null?`$${p.rev_per_emp.toFixed(0)}K`:"—"}</td>
                         </tr>
                       );
                     })}
@@ -2226,12 +2231,13 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                           <td className="px-3 py-1.5 font-bold text-[7.5px] uppercase" style={{color:"#ffffff25"}}>Peer Median</td>
                           <td className="px-3 py-1.5 text-right" style={{color:"#ffffff30"}}>—</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.rev_growth??null)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.gross_margin??null)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.pe)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.ev_ebitda)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(2):"—")(med(nonSubject.map(p=>p.ev_ebitda!=null&&p.rev_growth!=null&&p.rev_growth>0?p.ev_ebitda/p.rev_growth:null)))}</td>
-                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"x":"—")(med(nonSubject.map(p=>p.p_fcf)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.roic)))}</td>
                           <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?v.toFixed(1)+"%":"—")(med(nonSubject.map(p=>p.net_margin)))}</td>
+                          <td className="px-3 py-1.5 text-right font-bold" style={{color:"#ffffff35",fontSize:8}}>{(v=>v!=null?`$${v.toFixed(0)}K`:"—")(med(nonSubject.map(p=>p.rev_per_emp??null)))}</td>
                         </tr>
                       );
                     })()}
@@ -2846,6 +2852,110 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                         <p className="text-[7px]" style={{color:"#ffffff25"}}>vs S&P 500</p>
                       </div>
                     )}
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
+
+            {/* ══ LOOP 18: Estimate Revision Tracker ══ */}
+            {analystEstimates&&analystEstimates.length>=2&&(()=>{
+              const sorted=[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date));
+              const latest=sorted[sorted.length-1];const prior=sorted[sorted.length-2];
+              const epsDelta=latest.eps_avg!=null&&prior.eps_avg!=null&&prior.eps_avg!==0?((latest.eps_avg-prior.eps_avg)/Math.abs(prior.eps_avg)*100):null;
+              const revDelta=latest.rev_avg!=null&&prior.rev_avg!=null&&prior.rev_avg!==0?((latest.rev_avg-prior.rev_avg)/Math.abs(prior.rev_avg)*100):null;
+              const ebitDelta=latest.ebitda_avg!=null&&prior.ebitda_avg!=null&&prior.ebitda_avg!==0?((latest.ebitda_avg-prior.ebitda_avg)/Math.abs(prior.ebitda_avg)*100):null;
+              // Count consecutive EPS beats from earningsSurprises
+              let beatStreak=0;let totalBeats=0;
+              for(const s of [...earningsSurprises].sort((a,b)=>b.date.localeCompare(a.date))){
+                const beat=(s.surprise_pct??0)>0;
+                if(beat){totalBeats++;if(beatStreak===totalBeats)beatStreak++;}
+              }
+              const beatPct=earningsSurprises.length>0?earningsSurprises.filter(s=>(s.surprise_pct??0)>0).length/earningsSurprises.length*100:null;
+              const revisionUp=(epsDelta??0)>0&&(revDelta??0)>0;
+              const revisionBias=epsDelta!=null&&revDelta!=null?(epsDelta+revDelta)/2:null;
+              return(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Estimate Revision Tracker</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Consensus revision direction · Beat rate · QoQ EPS & Rev estimate changes</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{
+                    background:revisionBias!=null?revisionBias>1?"rgba(16,185,129,0.15)":revisionBias<-1?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)":"rgba(255,255,255,0.06)",
+                    color:revisionBias!=null?revisionBias>1?GREEN:revisionBias<-1?RED:AMBER:"#ffffff40",
+                    border:`1px solid ${revisionBias!=null?revisionBias>1?"rgba(16,185,129,0.3)":revisionBias<-1?"rgba(239,68,68,0.3)":"rgba(245,158,11,0.3)":"rgba(255,255,255,0.1)"}`
+                  }}>{revisionBias!=null?revisionBias>1?"ESTIMATES ↑":"ESTIMATES ↓":"ESTIMATES →"}</span>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 mb-3">
+                    {/* EPS revision */}
+                    <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase font-bold tracking-widest mb-1" style={{color:"#ffffff25"}}>EPS Est. Revision</p>
+                      <p className="text-[16px] font-bold tabular-nums leading-none" style={{color:epsDelta!=null?epsDelta>0?GREEN:epsDelta<0?RED:AMBER:"#ffffff40"}}>
+                        {epsDelta!=null?`${epsDelta>0?"+":""}${epsDelta.toFixed(1)}%`:"—"}
+                      </p>
+                      <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>
+                        {latest.eps_avg!=null?`Now $${latest.eps_avg.toFixed(2)}`:""}
+                        {prior.eps_avg!=null?` vs $${prior.eps_avg.toFixed(2)}`:""}
+                      </p>
+                    </div>
+                    {/* Rev revision */}
+                    <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase font-bold tracking-widest mb-1" style={{color:"#ffffff25"}}>Rev Est. Revision</p>
+                      <p className="text-[16px] font-bold tabular-nums leading-none" style={{color:revDelta!=null?revDelta>0?GREEN:revDelta<0?RED:AMBER:"#ffffff40"}}>
+                        {revDelta!=null?`${revDelta>0?"+":""}${revDelta.toFixed(1)}%`:"—"}
+                      </p>
+                      <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>
+                        {latest.rev_avg!=null?`Now ${latest.rev_avg>=1e9?`$${(latest.rev_avg/1e9).toFixed(1)}B`:latest.rev_avg>=1e6?`$${(latest.rev_avg/1e6).toFixed(0)}M`:latest.rev_avg.toFixed(0)}`:""}
+                      </p>
+                    </div>
+                    {/* Beat rate */}
+                    <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase font-bold tracking-widest mb-1" style={{color:"#ffffff25"}}>Beat Rate (6Q)</p>
+                      <p className="text-[16px] font-bold tabular-nums leading-none" style={{color:beatPct!=null?beatPct>=75?GREEN:beatPct>=50?AMBER:RED:"#ffffff40"}}>
+                        {beatPct!=null?`${beatPct.toFixed(0)}%`:"—"}
+                      </p>
+                      <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>{earningsSurprises.filter(s=>(s.surprise_pct??0)>0).length}/{earningsSurprises.length} beats</p>
+                    </div>
+                    {/* EBITDA revision */}
+                    <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase font-bold tracking-widest mb-1" style={{color:"#ffffff25"}}>EBITDA Est. Revision</p>
+                      <p className="text-[16px] font-bold tabular-nums leading-none" style={{color:ebitDelta!=null?ebitDelta>0?GREEN:ebitDelta<0?RED:AMBER:"#ffffff40"}}>
+                        {ebitDelta!=null?`${ebitDelta>0?"+":""}${ebitDelta.toFixed(1)}%`:"—"}
+                      </p>
+                      <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>
+                        {latest.num_analysts!=null?`${latest.num_analysts} analysts`:""}
+                        {latest.date?` · ${latest.date.slice(0,7)}`:""}
+                      </p>
+                    </div>
+                  </div>
+                  {/* Estimate trend sparkline */}
+                  <div>
+                    <p className="text-[7px] uppercase font-bold tracking-widest mb-1.5" style={{color:"#ffffff20"}}>Forward EPS Estimate Trend</p>
+                    <svg viewBox="0 0 320 50" style={{width:"100%",height:50}}>
+                      {sorted.map((e,i)=>{
+                        const xStep=sorted.length>1?280/(sorted.length-1):0;
+                        const x=20+i*xStep;
+                        const allEps=sorted.map(s=>s.eps_avg).filter((v):v is number=>v!=null);
+                        const minE=Math.min(...allEps)*0.98, maxE=Math.max(...allEps)*1.02;
+                        const y=e.eps_avg!=null?40-((e.eps_avg-minE)/(maxE-minE||1))*30:null;
+                        return y!=null?(
+                          <g key={i}>
+                            {i>0&&sorted[i-1].eps_avg!=null&&(()=>{
+                              const prevX=20+(i-1)*xStep;
+                              const prevEps=sorted[i-1].eps_avg!;
+                              const prevY=40-((prevEps-minE)/(maxE-minE||1))*30;
+                              const col=e.eps_avg!>prevEps?GREEN:RED;
+                              return<line x1={prevX} y1={prevY} x2={x} y2={y} stroke={col} strokeWidth="1.5" strokeOpacity="0.7"/>;
+                            })()}
+                            <circle cx={x} cy={y} r={3} fill={i===sorted.length-1?AMBER:"#ffffff30"}/>
+                            <text x={x} y={y-5} textAnchor="middle" fontSize="6" fill="#ffffff40">{e.eps_avg!=null?`$${e.eps_avg.toFixed(2)}`:""}</text>
+                            <text x={x} y={48} textAnchor="middle" fontSize="6" fill="#ffffff25">{e.date?.slice(0,7)??""}</text>
+                          </g>
+                        ):null;
+                      })}
+                    </svg>
                   </div>
                 </div>
               </div>

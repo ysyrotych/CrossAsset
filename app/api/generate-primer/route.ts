@@ -118,8 +118,8 @@ export async function POST(req: NextRequest) {
     .map((n:any) => `• [${n.date}] ${n.title}${n.summary ? ` — ${n.summary}` : ""}`)
     .join("\n") ?? "N/A";
 
-  // Earnings transcript (truncated)
-  const transcriptStr = earningsTranscript ? earningsTranscript.slice(0, 5000) : "Not available";
+  // Earnings transcript (truncated) — use more when available from FMP structured transcript
+  const transcriptStr = earningsTranscript ? earningsTranscript.slice(0, 8000) : "Not available";
 
   // Market positioning data
   const week52 = f.week52_high && f.week52_low && f.stock_price
