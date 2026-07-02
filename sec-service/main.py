@@ -227,10 +227,10 @@ def get_fmp_financials(ticker: str) -> dict:
                         "pe":         round(pe, 1) if pe else None,
                         "ev_ebitda":  round(ev_e, 1) if ev_e else None,
                         "p_fcf":      round(p_fcf, 1) if p_fcf else None,
-                        "roic":       round((roic or 0) * 100, 1),
-                        "net_margin": round((npm or 0) * 100, 1),
+                        "roic":       round(roic * 100, 1) if roic is not None else None,
+                        "net_margin": round(npm * 100, 1) if npm is not None else None,
                         "market_cap": mc,
-                        "rev_growth": round((rev_g or 0) * 100, 1) if rev_g else None,
+                        "rev_growth": round(rev_g * 100, 1) if rev_g is not None else None,
                     })
 
         # ── yfinance peer fallback when FMP returns no peers ─────────────────
@@ -244,10 +244,16 @@ def get_fmp_financials(ticker: str) -> dict:
                         mc   = safe_float(info.get("marketCap"))
                         pe   = safe_float(info.get("trailingPE"))
                         ev_e = safe_float(info.get("enterpriseToEbitda"))
-                        npm  = safe_float(info.get("netMargins"))
+                        # profitMargins is more reliably populated than netMargins
+                        npm  = safe_float(info.get("profitMargins") or info.get("netMargins"))
                         rev_g= safe_float(info.get("revenueGrowth"))
                         roic = safe_float(info.get("returnOnInvestedCapital") or info.get("returnOnEquity"))
+                        # Compute P/FCF from marketCap / freeCashflow when ratio not directly available
                         p_fcf= safe_float(info.get("priceToFreeCashflows") or info.get("priceToFreeCashFlow"))
+                        if not p_fcf and mc:
+                            fcf = safe_float(info.get("freeCashflow"))
+                            if fcf and fcf > 0:
+                                p_fcf = mc / fcf
                         name = info.get("longName") or info.get("shortName") or sym
                         return {
                             "symbol":     sym,
