@@ -1187,12 +1187,22 @@ export default function FinancialAnalytics({
   // ── Earnings streak ───────────────────────────────────────────────────────
   const earningsStreak = useMemo(() => {
     let beats = 0, misses = 0, streak = 0;
+    let streakDone = false;
+    const beatMagnitudes: number[] = [];
+    // earningsSurprises[0] = most recent; iterate newest-first for correct streak
     for (const e of earningsSurprises.slice(0, 8)) {
       if (e.surprise_pct == null) continue;
-      if (e.surprise_pct > 0) { streak++; } else { streak = 0; }
-      if (e.surprise_pct > 0) beats++; else misses++;
+      if (e.surprise_pct > 0) {
+        beats++;
+        beatMagnitudes.push(e.surprise_pct);
+        if (!streakDone) streak++;
+      } else {
+        misses++;
+        streakDone = true;
+      }
     }
-    return { streak, beats, misses, total: beats + misses };
+    const avgBeatMag = beatMagnitudes.length > 0 ? beatMagnitudes.reduce((a,b)=>a+b,0)/beatMagnitudes.length : null;
+    return { streak, beats, misses, total: beats + misses, avgBeatMag };
   }, [earningsSurprises]);
 
   // ── Quality composite score (0–100) ──────────────────────────────────────
@@ -2211,11 +2221,22 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             <Card title="D/E History" sub="Financial leverage trend">
               <LineChart labels={kmDates} series={[{name:"D/E",values:kmDE,color:RED}]}/>
             </Card>
-            <Card title="EPS Surprise History" sub="Beat/miss vs consensus">
+            <Card title="EPS Surprise %" sub="Beat/miss vs consensus — streak and magnitude">
               {earningsSurprises.length>0
                 ?<BeatMiss data={earningsSurprises}/>
                 :<div className="py-6 text-center"><p className="text-[10px] text-white/20">Earnings surprise data not available</p></div>}
             </Card>
+            {earningsSurprises.filter(e=>e.eps_actual!=null&&e.eps_est!=null).length>=2&&(
+              <Card title="EPS Actual vs Estimate" sub="Street estimate vs delivered — management execution track record" badge={`${earningsStreak.streak}× BEAT`}>
+                <GroupedBar
+                  groups={earningsSurprises.filter(e=>e.eps_actual!=null&&e.eps_est!=null).slice(0,8).reverse().map(e=>e.date?.slice(0,7)??"" )}
+                  series={[
+                    {name:"Estimate",values:earningsSurprises.filter(e=>e.eps_actual!=null&&e.eps_est!=null).slice(0,8).reverse().map(e=>e.eps_est!),color:"#ffffff20"},
+                    {name:"Actual",values:earningsSurprises.filter(e=>e.eps_actual!=null&&e.eps_est!=null).slice(0,8).reverse().map(e=>e.eps_actual!),color:AMBER},
+                  ]}
+                />
+              </Card>
+            )}
 
             {/* ══ LOOP 14: Historical Multiple Range Bands ══ */}
             {(kmPE.some(v=>v!=null)||kmEV.some(v=>v!=null))&&(
@@ -3573,12 +3594,13 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               })()}
 
               {/* Earnings beat/miss detail */}
-              <Card title="Earnings Quality" sub="Beat/miss streak + history" badge={earningsStreak.streak>0?`${earningsStreak.streak}-STREAK`:earningsStreak.total>0?"CHECK":""}>
+              <Card title="Earnings Quality" sub="Beat/miss streak + history" badge={earningsStreak.streak>0?`${earningsStreak.streak}-STREAK BEAT`:earningsStreak.total>0?"CHECK":""}>
                 <div className="space-y-2 py-1">
-                  <div className="flex items-center gap-4 mb-2">
-                    <Pill label="Beats" value={`${earningsStreak.beats}`} color={GREEN}/>
-                    <Pill label="Misses" value={`${earningsStreak.misses}`} color={RED}/>
+                  <div className="flex items-center gap-3 mb-2 flex-wrap">
+                    <Pill label="Beat Streak" value={`${earningsStreak.streak}×`} color={earningsStreak.streak>=3?GREEN:earningsStreak.streak>=1?AMBER:RED}/>
                     <Pill label="Beat Rate" value={earningsStreak.total>0?`${Math.round(earningsStreak.beats/earningsStreak.total*100)}%`:"—"} color={BLUE}/>
+                    <Pill label="Avg Beat" value={earningsStreak.avgBeatMag!=null?`+${earningsStreak.avgBeatMag.toFixed(1)}%`:"—"} color={TEAL}/>
+                    <Pill label="Misses" value={`${earningsStreak.misses}`} color={RED}/>
                   </div>
                   {earningsSurprises.slice(0,8).map((e,i)=>{
                     const s=e.surprise_pct??0;
