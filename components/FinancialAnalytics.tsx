@@ -2689,6 +2689,8 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               const pctFrom52Lo=lo&&price?((price-lo)/(hi!-lo||1)*100):null;
               const ptUpsidePct=ptMid&&price?((ptMid-price)/price*100):null;
               const totalSYield=capitalReturns.totalYield>0?capitalReturns.totalYield:null;
+              const nextEarningsDate=facts.next_earnings_ts?new Date(facts.next_earnings_ts*1000).toLocaleDateString("en-US",{month:"short",day:"numeric",year:"numeric"}):null;
+              const daysToEarnings=facts.next_earnings_ts?Math.ceil((facts.next_earnings_ts*1000-Date.now())/(1000*60*60*24)):null;
               return(
               <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
                 <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
@@ -2778,6 +2780,13 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                           {facts.pt_consensus>facts.pt_last_quarter?"+":""}${(facts.pt_consensus-facts.pt_last_quarter).toFixed(0)}
                         </p>
                         <p className="text-[7px]" style={{color:"#ffffff25"}}>vs prior qtr avg</p>
+                      </div>
+                    )}
+                    {nextEarningsDate!=null&&daysToEarnings!=null&&daysToEarnings>0&&(
+                      <div>
+                        <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Next Earnings</p>
+                        <p className="text-[9px] font-bold" style={{color:daysToEarnings<=14?AMBER:BLUE}}>{nextEarningsDate}</p>
+                        <p className="text-[7px]" style={{color:daysToEarnings<=14?AMBER+"99":"#ffffff25"}}>{daysToEarnings}d away</p>
                       </div>
                     )}
                     {facts.beta!=null&&(

@@ -1521,7 +1521,10 @@ def get_yfinance_financials(ticker: str) -> dict:
             "fiftyTwoWeekHigh", "fiftyTwoWeekLow", "dividendYield",
             "beta", "sharesOutstanding", "floatShares", "bookValue",
             "enterpriseValue", "enterpriseToRevenue", "enterpriseToEbitda",
-            "priceToBook",
+            "priceToBook", "shortRatio", "shortPercentOfFloat",
+            "priceToFreeCashflows", "freeCashflow", "profitMargins", "revenueGrowth",
+            "earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd",
+            "nextFiscalYearEnd", "mostRecentQuarter",
         ]}
 
         # Historical year-end prices for P/E and EV/EBITDA history charts
@@ -1729,6 +1732,12 @@ def merge_yf_into_facts(facts: dict, yf_data: dict) -> dict:
         short_float = safe_float(info.get("shortPercentOfFloat"))
         if short_ratio: facts["short_ratio"]       = round(short_ratio, 1)
         if short_float: facts["short_float_pct"]   = round(short_float * 100, 1)
+        # Next earnings timestamp (UNIX epoch → store as float for easy date conversion)
+        for ts_key in ["earningsTimestamp", "earningsTimestampStart", "earningsTimestampEnd"]:
+            ts = info.get(ts_key)
+            if ts and isinstance(ts, (int, float)) and ts > 0:
+                facts["next_earnings_ts"] = float(ts)
+                break
 
     return facts
 
@@ -2010,7 +2019,7 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
         "revenue_growth_yoy","eps_growth_yoy","fcf_growth_yoy","ni_growth_yoy","ocf_growth_yoy",
         "rev_est_next","ebitda_est_next","eps_est_next","ni_est_next","num_analysts",
         "fmp_rating_score","pt_consensus","pt_last_month","pt_last_quarter","pt_high","pt_low","employees",
-        "week52_high","week52_low","short_ratio","short_float_pct",
+        "week52_high","week52_low","short_ratio","short_float_pct","next_earnings_ts",
     }
 
     fmp_ext = {}
