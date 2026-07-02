@@ -171,6 +171,12 @@ def get_fmp_financials(ticker: str) -> dict:
             peer_symbols = []
         print(f"FMP peers for {ticker}: {peer_symbols}")
 
+        # Prefer curated KNOWN_PEERS over FMP suggestions for tickers we explicitly define
+        known = KNOWN_PEERS.get(ticker.upper())
+        if known:
+            peer_symbols = known[:6]
+            print(f"Overriding FMP peers with KNOWN_PEERS for {ticker}: {peer_symbols}")
+
         if peer_symbols:
             def fetch_peer_data(sym: str) -> dict:
                 try:
