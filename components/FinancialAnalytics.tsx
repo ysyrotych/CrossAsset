@@ -2607,7 +2607,7 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                       </p>
                       <div>
                         <p className="text-[8px]" style={{color:relativeValue.peg!=null&&relativeValue.peg<1?GREEN:relativeValue.peg!=null&&relativeValue.peg<2?AMBER:RED}}>
-                          {relativeValue.peg!=null?(relativeValue.peg<1?"Potentially undervalued":relativeValue.peg<2?"Fair value":"Growth priced in"):"EPS growth or P/E unavailable"}
+                          {relativeValue.peg!=null?(relativeValue.peg<1?"Potentially undervalued":relativeValue.peg<2?"Fair value":"Growth priced in"):facts.eps_growth_yoy!=null&&facts.eps_growth_yoy<=0?"Negative EPS growth — PEG undefined":"EPS growth or P/E unavailable"}
                         </p>
                         <p className="text-[7px] mt-0.5" style={{color:"#ffffff20"}}>&lt;1 = cheap · 1–2 = fair · &gt;2 = expensive</p>
                         <p className="text-[7px]" style={{color:"#ffffff20"}}>P/E {facts.pe_ratio?.toFixed(1)??"—"}x ÷ EPS g {facts.eps_growth_yoy?.toFixed(1)??"—"}%</p>
