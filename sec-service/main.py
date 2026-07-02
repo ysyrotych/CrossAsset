@@ -157,6 +157,7 @@ def get_fmp_financials(ticker: str) -> dict:
                 "geo_segs":  ex.submit(fetch, "revenue-geographic-segmentation", None, 3),
                 "news":      ex.submit(fetch, "stock-news", None, 12),
                 "peers":     ex.submit(fetch, "stock-peers", None, 15),
+                "transcript": ex.submit(fetch_v3, "earning_call_transcript", 1),
             }
             res = {k: v.result() for k, v in fs.items()}
 
@@ -307,6 +308,7 @@ def get_fmp_financials(ticker: str) -> dict:
             "geo_segments":      res["geo_segs"],
             "news":              res["news"],
             "peer_comparison":   peer_comparison,
+            "transcript_raw":    res.get("transcript", []),
         }
     except Exception as e:
         print(f"FMP error for {ticker}: {e}")
@@ -1964,9 +1966,22 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
     yf_task         = asyncio.to_thread(get_yfinance_financials, ticker)
     transcript_task = asyncio.to_thread(_get_earnings_transcript, company)
 
-    annual, quarterly, xbrl_result, fmp_data, yf_data, earnings_transcript = await asyncio.gather(
+    annual, quarterly, xbrl_result, fmp_data, yf_data, earnings_transcript_edgar = await asyncio.gather(
         annual_task, quarterly_task, xbrl_task, fmp_task, yf_task, transcript_task
     )
+
+    # Prefer FMP earnings call transcript (structured) over EDGAR 8-K text extraction
+    fmp_transcript_raw = (fmp_data or {}).get("transcript_raw", [])
+    if fmp_transcript_raw and isinstance(fmp_transcript_raw, list) and fmp_transcript_raw:
+        t0 = fmp_transcript_raw[0]
+        fmp_content = t0.get("content", "") if isinstance(t0, dict) else ""
+        if fmp_content and len(fmp_content) > 500:
+            earnings_transcript = fmp_content[:15000]
+            print(f"FMP transcript: {len(earnings_transcript)} chars for {ticker} (Q{t0.get('quarter', '?')} {t0.get('year', '?')})")
+        else:
+            earnings_transcript = earnings_transcript_edgar
+    else:
+        earnings_transcript = earnings_transcript_edgar
 
     # ── Financial data priority: FMP statements > yfinance > XBRL ───────────
     # FMP supplemental (profile, valuation, analyst, segments) always used when available.
