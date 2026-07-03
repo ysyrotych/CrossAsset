@@ -360,6 +360,20 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const bear  = parseBullets(secs["BEAR_CASE"] ?? "");
   const note  = parseParas(secs["ANALYST_NOTE"] ?? "");
 
+  // New sections
+  const kpiRaw  = secs["KEY_METRICS_DASHBOARD"] ?? "";
+  const kpiRows = kpiRaw.split("\n").filter(l => l.includes("|")).slice(2).map(l => {
+    const parts = l.split("|").map(p => p.trim()).filter(Boolean);
+    return parts.length >= 4 ? { kpi: parts[0], current: parts[1], threshold: parts[2], why: parts[3] } : null;
+  }).filter((r): r is { kpi: string; current: string; threshold: string; why: string } => r !== null && !r.kpi.match(/^[-=]+$/));
+
+  const qaRaw  = secs["EARNINGS_CALL_QUESTIONS"] ?? "";
+  const qaItems = qaRaw.split("\n")
+    .filter(l => l.trim().match(/^(\d+[\.\)]\s|\*\*Q|\*\*\d|Q\d)/i))
+    .map(l => l.replace(/^\d+[\.\)]\s*/, "").replace(/^\*\*/,"").replace(/\*\*$/,"").trim())
+    .filter(Boolean)
+    .slice(0, 10);
+
   // 5-year summary table
   const fmtM = (v?: number) => v == null ? "—"
     : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B`
@@ -531,6 +545,42 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <Text style={S.noteLabel}>Analyst Note</Text>
               {note.map((p, i) => <Text key={i} style={S.noteText}>{p.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>)}
             </View>
+          )}
+
+          {/* XI. Key Metrics Dashboard */}
+          {kpiRows.length > 0 && (
+            <>
+              <SectionHdr title="XI. Key Metrics Dashboard" />
+              <View style={S.table}>
+                <View style={S.tableHeader}>
+                  {["KPI", "Current", "Watch Threshold", "Why It Matters"].map((h, i) => (
+                    <Text key={h} style={[S.tableHeaderCell, { flex: i === 3 ? 2 : 1 }]}>{h}</Text>
+                  ))}
+                </View>
+                {kpiRows.map((row, i) => (
+                  <View key={i} style={i % 2 === 0 ? S.tableRow : S.tableRowAlt}>
+                    <Text style={[S.tableCellBold, { flex: 1 }]}>{row.kpi}</Text>
+                    <Text style={[S.tableCell,     { flex: 1 }]}>{row.current}</Text>
+                    <Text style={[S.tableCell,     { flex: 1, color: RED }]}>{row.threshold}</Text>
+                    <Text style={[S.tableCell,     { flex: 2 }]}>{row.why.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>
+                  </View>
+                ))}
+              </View>
+            </>
+          )}
+
+          {/* XII. Earnings Call Questions */}
+          {qaItems.length > 0 && (
+            <>
+              <SectionHdr title="XII. Earnings Call Questions" />
+              <Text style={[S.para, { color: GRAY, marginBottom: 8 }]}>Institutional-grade questions for the upcoming earnings call:</Text>
+              {qaItems.map((q, i) => (
+                <View key={i} style={[S.bullet, { marginBottom: 7 }]}>
+                  <Text style={[S.bulletDot, { color: BLUE, minWidth: 18 }]}>{i + 1}.</Text>
+                  <Text style={[S.bulletText, { fontFamily: "Helvetica" }]}>{q.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>
+                </View>
+              ))}
+            </>
           )}
 
         </View>
