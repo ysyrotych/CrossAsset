@@ -1907,6 +1907,68 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 />
               </Card>
             )}
+            {/* ══ Quarterly YoY Growth Acceleration ══ */}
+            {quarterlyTrends.length>=8&&(()=>{
+              const sorted=[...quarterlyTrends].sort((a,b)=>a.date.localeCompare(b.date));
+              // YoY: compare to same quarter last year (4 periods back)
+              const yoyData=sorted.slice(4).map((q,i)=>{
+                const prev=sorted[i]; // 4 quarters back
+                const revYoY=q.revenue&&prev.revenue&&prev.revenue>0?(q.revenue-prev.revenue)/prev.revenue*100:null;
+                const gmYoY=q.gross_margin_pct!=null&&prev.gross_margin_pct!=null?q.gross_margin_pct-prev.gross_margin_pct:null;
+                return{date:q.date?.slice(0,7)??"",revYoY,gmYoY};
+              });
+              const allRevYoY=yoyData.map(d=>d.revYoY).filter((v):v is number=>v!=null);
+              const isAccelerating=allRevYoY.length>=2&&allRevYoY[allRevYoY.length-1]>allRevYoY[allRevYoY.length-2];
+              const W=320, H=110;
+              const vals=yoyData.map(d=>d.revYoY);
+              const validVals=vals.filter((v):v is number=>v!=null);
+              if(validVals.length<2) return null;
+              const minV=Math.min(...validVals), maxV=Math.max(...validVals);
+              const pad={t:18,b:22,l:30,r:10};
+              const toX=(i:number)=>pad.l+(i/(yoyData.length-1||1))*(W-pad.l-pad.r);
+              const toY=(v:number)=>pad.t+((maxV-v)/(maxV-minV||1))*(H-pad.t-pad.b);
+              const zero=toY(Math.max(0,minV));
+              const pts=yoyData.map((d,i)=>d.revYoY!=null?`${toX(i)},${toY(d.revYoY)}`:"").filter(Boolean).join(" ");
+              return(
+              <Card title="Quarterly YoY Revenue Growth Rate" sub="Same-quarter vs prior year — watch for acceleration/deceleration" badge={isAccelerating?"ACCELERATING ▲":"DECELERATING ▼"}>
+                <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                  {/* Zero line */}
+                  <line x1={pad.l} x2={W-pad.r} y1={zero} y2={zero} stroke={DARK_BORDER} strokeWidth="0.8" strokeDasharray="3,2"/>
+                  {/* Shaded area under curve */}
+                  {validVals.length>=2&&(
+                    <polygon
+                      points={`${pts} ${toX(yoyData.length-1)},${zero} ${toX(0)},${zero}`}
+                      fill={isAccelerating?GREEN:RED} fillOpacity="0.08"
+                    />
+                  )}
+                  {/* Line */}
+                  <polyline points={pts} fill="none" stroke={isAccelerating?GREEN:AMBER} strokeWidth="1.5" strokeLinejoin="round"/>
+                  {/* Data points */}
+                  {yoyData.map((d,i)=>d.revYoY!=null&&(
+                    <g key={i}>
+                      <circle cx={toX(i)} cy={toY(d.revYoY)} r={i===yoyData.length-1?3.5:2} fill={d.revYoY>0?GREEN:RED}/>
+                      {i===yoyData.length-1&&<text x={toX(i)} y={toY(d.revYoY)-5} textAnchor="middle" fontSize="7" fill={AMBER}>{d.revYoY.toFixed(1)}%</text>}
+                    </g>
+                  ))}
+                  {/* X-axis labels */}
+                  {yoyData.filter((_,i)=>i%2===0||i===yoyData.length-1).map((d,_,arr)=>{
+                    const origIdx=yoyData.indexOf(d);
+                    return<text key={origIdx} x={toX(origIdx)} y={H-5} textAnchor="middle" fontSize="5.5" fill="#ffffff25">{d.date}</text>;
+                  })}
+                  {/* Y-axis */}
+                  {[minV,0,maxV].map((v,i)=>(
+                    <text key={i} x={pad.l-3} y={toY(v)+3} textAnchor="end" fontSize="5.5" fill="#ffffff25">{v.toFixed(0)}%</text>
+                  ))}
+                </svg>
+                {/* Gross margin trend overlay note */}
+                {yoyData.some(d=>d.gmYoY!=null)&&(()=>{
+                  const lastGmYoY=yoyData[yoyData.length-1].gmYoY;
+                  return lastGmYoY!=null&&<p className="text-[7px] mt-1" style={{color:lastGmYoY>0?GREEN:RED}}>Gross margin {lastGmYoY>0?"expanded":"contracted"} {Math.abs(lastGmYoY).toFixed(1)}pp YoY in last quarter</p>;
+                })()}
+              </Card>
+              );
+            })()}
+
             {/* ══ LOOP 19: Forward Estimates Bridge ══ */}
             {analystEstimates.length>0&&(()=>{
               const sortedEst=[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date));
@@ -2067,6 +2129,33 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ]}
               />
             </Card>
+            {revYears.some(y=>history.rd_expense?.[y]||history.capex?.[y])&&(
+              <Card title="Total Reinvestment Rate" sub="(CapEx + R&D) / Revenue — growth investment intensity" badge="REINVEST">
+                <LineChart
+                  labels={revYears}
+                  series={[{
+                    name:"CapEx+R&D %",
+                    values:revYears.map(y=>{
+                      const capex=Math.abs(history.capex?.[y]??0);
+                      const rd=history.rd_expense?.[y]??0;
+                      const rev=history.revenue?.[y];
+                      return rev&&rev>0?(capex+rd)/rev*100:null;
+                    }),
+                    color:PURPLE
+                  }]}
+                  pct
+                />
+              </Card>
+            )}
+            {revYears.some(y=>history.sbc_expense?.[y])&&(
+              <Card title="SBC Dilution Cost" sub="Stock-based comp as % of revenue — shareholder value transfer" badge="DILUTION">
+                <LineChart
+                  labels={revYears}
+                  series={[{name:"SBC %",values:sbcPct,color:ORANGE}]}
+                  pct
+                />
+              </Card>
+            )}
           </div>
           </div>
         )}
@@ -2175,6 +2264,30 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 })()}
               </div>
             </Card>
+            {/* Share count dilution history */}
+            {revYears.some(y=>history.shares_diluted_wtd?.[y])&&(()=>{
+              const shYears=revYears.filter(y=>history.shares_diluted_wtd?.[y]);
+              const shVals=shYears.map(y=>history.shares_diluted_wtd![y]!);
+              const baseShares=shVals[0];
+              const latestShares=shVals[shVals.length-1];
+              const totalDilution=baseShares>0?(latestShares-baseShares)/baseShares*100:null;
+              return(
+              <Card title="Share Count History" sub="Diluted share count — net dilution from SBC & issuances vs buybacks" badge={totalDilution!=null?totalDilution<0?"NET BUYBACK":"NET DILUTION":"SHARES"}>
+                <BarChart
+                  data={shYears.map(y=>({label:y.slice(0,4),value:history.shares_diluted_wtd![y]!}))}
+                  color={totalDilution!=null&&totalDilution<0?GREEN:RED}
+                />
+                {totalDilution!=null&&(
+                  <p className="text-[7px] mt-1.5" style={{color:totalDilution<0?GREEN:RED}}>
+                    {totalDilution<0
+                      ?`Net buyback: share count reduced ${Math.abs(totalDilution).toFixed(1)}% since ${shYears[0].slice(0,4)} — EPS accretive`
+                      :`Net dilution: share count expanded ${totalDilution.toFixed(1)}% since ${shYears[0].slice(0,4)} — EPS headwind`
+                    }
+                  </p>
+                )}
+              </Card>
+              );
+            })()}
           </div>
         )}
 
