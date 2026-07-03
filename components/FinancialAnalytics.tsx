@@ -2132,6 +2132,89 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               </Card>
               );
             })()}
+
+            {/* ══ LOOP 22: Revenue Seasonality Heatmap ══ */}
+            {quarterlyTrends.length>=8&&(()=>{
+              const sorted=[...quarterlyTrends].sort((a,b)=>a.date.localeCompare(b.date));
+              // Group by fiscal year: detect quarter number from date (Q1=Mar, Q2=Jun, Q3=Sep, Q4=Dec)
+              type YearData={[q:string]:number|null};
+              const byYear:Record<string,YearData>={};
+              for(const q of sorted){
+                const d=q.date??"";const month=parseInt(d.slice(5,7)||"0");
+                const qLabel=month<=3?"Q1":month<=6?"Q2":month<=9?"Q3":"Q4";
+                const yr=d.slice(0,4)??"";
+                if(!byYear[yr])byYear[yr]={Q1:null,Q2:null,Q3:null,Q4:null};
+                byYear[yr][qLabel]=q.revenue??null;
+              }
+              const years=Object.keys(byYear).sort().slice(-5);
+              if(years.length<2)return null;
+              const quarters=["Q1","Q2","Q3","Q4"];
+              // For each year, compute avg revenue to calc deviation
+              const yearAvgs:Record<string,number>={};
+              for(const yr of years){const vals=quarters.map(q=>byYear[yr][q]??0).filter(v=>v>0);yearAvgs[yr]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;}
+              // Find absolute max for bar sizing
+              const allVals=years.flatMap(yr=>quarters.map(q=>byYear[yr][q]??0)).filter(v=>v>0);
+              const maxVal=Math.max(...allVals,1);
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Revenue Seasonality — Quarterly Heatmap</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Q1–Q4 revenue by fiscal year · Color = above (green) / below (red) that year's avg · Sets seasonal expectations before earnings</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(20,184,166,0.15)",color:TEAL,border:"1px solid rgba(20,184,166,0.25)"}}>SEASONALITY</span>
+                </div>
+                <div className="px-3 py-3 overflow-x-auto">
+                  <table className="w-full border-collapse" style={{minWidth:340}}>
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff25",width:48}}>Year</th>
+                        {quarters.map(q=>(
+                          <th key={q} className="px-2 py-1.5 text-center text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff35"}}>{q}</th>
+                        ))}
+                        <th className="px-2 py-1.5 text-right text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff25"}}>Annual</th>
+                        <th className="px-2 py-1.5 text-right text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff25"}}>Peak Q</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {years.map((yr,yi)=>{
+                        const avg=yearAvgs[yr];
+                        const annualRev=quarters.map(q=>byYear[yr][q]??0).reduce((a,b)=>a+b,0);
+                        const peakQ=quarters.reduce((best,q)=>(byYear[yr][q]??0)>(byYear[yr][best]??0)?q:best,"Q1");
+                        return(
+                          <tr key={yr} style={{borderTop:`1px solid ${DARK_BORDER}`}}>
+                            <td className="px-2 py-1.5 text-[8px] font-bold" style={{color:"#ffffff50"}}>{yr}</td>
+                            {quarters.map(q=>{
+                              const v=byYear[yr][q];
+                              const dev=v!=null&&avg>0?(v-avg)/avg:null;
+                              const intensity=dev!=null?Math.min(0.6,Math.abs(dev)*2):0;
+                              const bg=dev==null?"transparent":dev>0.05?`rgba(16,185,129,${intensity})`:dev<-0.05?`rgba(239,68,68,${intensity})`:"rgba(245,158,11,0.05)";
+                              const col=dev==null?"#ffffff20":dev>0.05?GREEN:dev<-0.05?RED:AMBER;
+                              const barW=v!=null?Math.round(v/maxVal*100):0;
+                              return(
+                                <td key={q} className="px-1.5 py-1" style={{background:bg,border:`1px solid rgba(255,255,255,0.04)`}}>
+                                  <div className="text-center">
+                                    <p className="text-[8px] font-bold tabular-nums" style={{color:col}}>{v!=null?v>=1e9?`$${(v/1e9).toFixed(1)}B`:v>=1e6?`$${(v/1e6).toFixed(0)}M`:"—":"—"}</p>
+                                    {dev!=null&&<p className="text-[6px] tabular-nums" style={{color:col}}>{dev>0?"+":""}{(dev*100).toFixed(0)}%</p>}
+                                    <div className="mt-0.5 h-0.5 rounded overflow-hidden mx-1" style={{background:"rgba(255,255,255,0.06)"}}>
+                                      <div style={{width:`${barW}%`,height:"100%",background:col,opacity:0.5}}/>
+                                    </div>
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-2 py-1.5 text-right text-[8px] font-bold tabular-nums" style={{color:"#ffffff45"}}>{annualRev>0?annualRev>=1e9?`$${(annualRev/1e9).toFixed(1)}B`:`$${(annualRev/1e6).toFixed(0)}M`:"—"}</td>
+                            <td className="px-2 py-1.5 text-right text-[7.5px] font-bold" style={{color:AMBER}}>{peakQ}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                  <p className="text-[7px] mt-2" style={{color:"#ffffff15"}}>Deviation is vs that year's quarterly average — use to set seasonal bar before each report · Consistent Q4 beats = holiday/year-end pattern</p>
+                </div>
+              </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2378,6 +2461,94 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               </Card>
               );
             })()}
+
+            {/* ══ LOOP 22: EBIT Margin Bridge (YoY decomposition) ══ */}
+            {revYears.length>=2&&(()=>{
+              const curY=revYears[revYears.length-1];const prY=revYears[revYears.length-2];
+              const curRev=history.revenue?.[curY], prRev=history.revenue?.[prY];
+              const curGP=history.gross_profit?.[curY], prGP=history.gross_profit?.[prY];
+              const curSGA=history.sga_expense?.[curY], prSGA=history.sga_expense?.[prY];
+              const curRD=history.rd_expense?.[curY], prRD=history.rd_expense?.[prY];
+              const curOI=history.operating_income?.[curY], prOI=history.operating_income?.[prY];
+              if(!curRev||!prRev||curRev<=0||prRev<=0)return null;
+              const prOIMarg=prOI!=null?prOI/prRev*100:null;
+              const curOIMarg=curOI!=null?curOI/curRev*100:null;
+              if(prOIMarg==null||curOIMarg==null)return null;
+              const totalChange=curOIMarg-prOIMarg;
+              // Decompose: GM effect, SGA leverage, R&D leverage
+              const curGMMarg=curGP?curGP/curRev*100:null, prGMMarg=prGP?prGP/prRev*100:null;
+              const gmEffect=(curGMMarg!=null&&prGMMarg!=null)?curGMMarg-prGMMarg:null;
+              const curSGAPct=curSGA?curSGA/curRev*100:null, prSGAPct=prSGA?prSGA/prRev*100:null;
+              const sgaEffect=(curSGAPct!=null&&prSGAPct!=null)?prSGAPct-curSGAPct:null; // ↑ means leverage
+              const curRDPct=curRD?curRD/curRev*100:null, prRDPct=prRD?prRD/prRev*100:null;
+              const rdEffect=(curRDPct!=null&&prRDPct!=null)?prRDPct-curRDPct:null;
+              const other=totalChange-(gmEffect??0)-(sgaEffect??0)-(rdEffect??0);
+              type Bridge={label:string;value:number;color:string;running:number};
+              const bridges:Bridge[]=[];
+              let running=prOIMarg;
+              bridges.push({label:`${prY.slice(0,4)} Base`,value:prOIMarg,color:"#ffffff25",running:prOIMarg});
+              if(gmEffect!=null){running+=gmEffect;bridges.push({label:"Gross Margin",value:gmEffect,color:gmEffect>=0?GREEN:RED,running});}
+              if(sgaEffect!=null){running+=sgaEffect;bridges.push({label:"SGA Leverage",value:sgaEffect,color:sgaEffect>=0?TEAL:ORANGE,running});}
+              if(rdEffect!=null){running+=rdEffect;bridges.push({label:"R&D Intensity",value:rdEffect,color:rdEffect>=0?PURPLE:RED,running});}
+              if(Math.abs(other)>0.1){running+=other;bridges.push({label:"Other",value:other,color:other>=0?BLUE:AMBER,running});}
+              bridges.push({label:`${curY.slice(0,4)} Result`,value:curOIMarg,color:totalChange>=0?GREEN:RED,running:curOIMarg});
+              const allVals=bridges.map(b=>b.running);
+              const minV=Math.min(...allVals)-2, maxV=Math.max(...allVals)+2;
+              const W=560, H=140;
+              const bStep=(W-PAD.l-PAD.r)/bridges.length;
+              const bw=bStep*0.55;
+              const toX=(i:number)=>PAD.l+i*bStep+bStep/2;
+              const toY=(v:number)=>PAD.t+(1-(v-minV)/(maxV-minV||1))*(H-PAD.t-PAD.b);
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>EBIT Margin Bridge — YoY Decomposition</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>How operating margin changed {prY.slice(0,4)}→{curY.slice(0,4)} · Gross margin expansion · SGA leverage · R&D intensity</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${totalChange>=0?"16,185,129":"239,68,68"},0.15)`,color:totalChange>=0?GREEN:RED,border:`1px solid ${totalChange>=0?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                    {totalChange>=0?"+":""}{totalChange.toFixed(1)}pp MARGIN {totalChange>=0?"EXPANSION":"CONTRACTION"}
+                  </span>
+                </div>
+                <div className="px-3 py-3">
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                    {/* Zero/baseline grid */}
+                    {Array.from({length:4},(_,i)=>{const v=minV+(maxV-minV)*i/3;const y=toY(v);return(
+                      <g key={i}><line x1={PAD.l} x2={W-PAD.r} y1={y} y2={y} stroke={DARK_BORDER} strokeWidth="0.5"/><text x={PAD.l-3} y={y+3} textAnchor="end" fontSize="7" fill="#ffffff30">{v.toFixed(1)}%</text></g>
+                    );})}
+                    {bridges.map((b,i)=>{
+                      const isBase=i===0, isResult=i===bridges.length-1;
+                      if(isBase||isResult){
+                        // Tall bar from 0
+                        const y=toY(b.value), barH=H-PAD.b-y;
+                        return(
+                          <g key={i}>
+                            <rect x={toX(i)-bw/2} y={y} width={bw} height={Math.max(1,barH)} fill={b.color} opacity={0.5} rx="2"/>
+                            <text x={toX(i)} y={y-3} textAnchor="middle" fontSize="7.5" fill={b.color} fontWeight="bold">{b.value.toFixed(1)}%</text>
+                            <text x={toX(i)} y={H-PAD.b+11} textAnchor="middle" fontSize="7" fill="#ffffff35">{b.label}</text>
+                          </g>
+                        );
+                      }
+                      // Floating bar: from prior running to current running
+                      const prevRunning=bridges[i-1].running;
+                      const y1=toY(Math.max(prevRunning,b.running)), y2=toY(Math.min(prevRunning,b.running));
+                      const barH=Math.max(1,y2-y1);
+                      return(
+                        <g key={i}>
+                          <rect x={toX(i)-bw/2} y={y1} width={bw} height={barH} fill={b.color} opacity={0.75} rx="2"/>
+                          <text x={toX(i)} y={y1-3} textAnchor="middle" fontSize="7" fill={b.color} fontWeight="bold">{b.value>=0?"+":""}{b.value.toFixed(1)}pp</text>
+                          <text x={toX(i)} y={H-PAD.b+11} textAnchor="middle" fontSize="7" fill="#ffffff30">{b.label}</text>
+                          {/* Connector line */}
+                          {i<bridges.length-1&&<line x1={toX(i)+bw/2} x2={toX(i+1)-bw/2} y1={toY(b.running)} y2={toY(b.running)} stroke="#ffffff20" strokeWidth="0.8" strokeDasharray="2,2"/>}
+                        </g>
+                      );
+                    })}
+                  </svg>
+                  <p className="text-[7px] mt-1.5" style={{color:"#ffffff15"}}>Floating bars show incremental contribution to margin change · Use to identify whether margin moves are quality-driven (gross margin) or cost-leveraged (SGA/R&D)</p>
+                </div>
+              </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2601,6 +2772,110 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 </div>
               </div>
             )}
+
+            {/* ══ LOOP 22: FCF Yield vs Risk-Free Rate ══ */}
+            {(()=>{
+              const RF_RATE=3.5; // approximate 10Y treasury
+              const mc=facts.market_cap;
+              if(!mc||mc<=0)return null;
+              // Per-year FCF yield: FCF / market_cap (approximated using current mc as base)
+              const fcfYields=cfYears.map(y=>{
+                const fcf=history.free_cash_flow?.[y];
+                return fcf!=null&&mc>0?fcf/mc*100:null;
+              });
+              const validYields=fcfYields.filter((v):v is number=>v!=null);
+              if(validYields.length<2)return null;
+              const currentFCF=history.free_cash_flow?.[cfYears[cfYears.length-1]]??facts.free_cash_flow;
+              const currentYield=currentFCF!=null&&mc>0?currentFCF/mc*100:null;
+              const erp=currentYield!=null?currentYield-RF_RATE:null;
+              const avgYield=validYields.length?validYields.reduce((a,b)=>a+b,0)/validYields.length:null;
+              const minY=Math.min(0,...validYields,RF_RATE)-1;
+              const maxY=Math.max(...validYields,RF_RATE)+1;
+              const W=560, H=140;
+              const toX=(i:number)=>PAD.l+(i/(cfYears.length-1||1))*(W-PAD.l-PAD.r);
+              const toY=(v:number)=>PAD.t+(1-(v-minY)/(maxY-minY||1))*(H-PAD.t-PAD.b);
+              const rfY=toY(RF_RATE);
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>FCF Yield vs Risk-Free Rate — Equity Risk Premium</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>FCF / Market Cap vs ~3.5% 10Y Treasury · Spread = how much equity pays above bonds · Higher = more value in stock</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {currentYield!=null&&<span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${currentYield>RF_RATE?"16,185,129":"239,68,68"},0.15)`,color:currentYield>RF_RATE?GREEN:RED,border:`1px solid ${currentYield>RF_RATE?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                      FCF YLD {currentYield.toFixed(1)}%
+                    </span>}
+                    {erp!=null&&<span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${erp>0?"59,130,246":"239,68,68"},0.15)`,color:erp>0?BLUE:RED,border:`1px solid ${erp>0?"rgba(59,130,246,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                      ERP {erp>0?"+":""}{erp.toFixed(1)}pp
+                    </span>}
+                  </div>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
+                    <div className="lg:col-span-2">
+                      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                        {/* Spread fill */}
+                        {(()=>{
+                          const points=cfYears.map((y,i)=>{const v=fcfYields[i];return v!=null?`${toX(i)},${toY(v)}`:null;}).filter(Boolean) as string[];
+                          if(points.length<2)return null;
+                          const rfPts=cfYears.map((_,i)=>`${toX(i)},${rfY}`).reverse().join(" ");
+                          return<polygon points={`${points.join(" ")} ${rfPts}`} fill={currentYield!=null&&currentYield>RF_RATE?"rgba(16,185,129,0.1)":"rgba(239,68,68,0.1)"}/>;
+                        })()}
+                        {/* Grid */}
+                        {Array.from({length:5},(_,i)=>{const v=minY+(maxY-minY)*i/4;const y=toY(v);return(
+                          <g key={i}><line x1={PAD.l} x2={W-PAD.r} y1={y} y2={y} stroke={DARK_BORDER} strokeWidth="0.5"/><text x={PAD.l-3} y={y+3} textAnchor="end" fontSize="7" fill="#ffffff30">{v.toFixed(1)}%</text></g>
+                        );})}
+                        {/* RF Rate line */}
+                        <line x1={PAD.l} x2={W-PAD.r} y1={rfY} y2={rfY} stroke={AMBER} strokeWidth="1.2" strokeDasharray="4,3" opacity="0.7"/>
+                        <text x={W-PAD.r+3} y={rfY+3} fontSize="7" fill={AMBER} opacity="0.7">RF {RF_RATE}%</text>
+                        {/* Avg line */}
+                        {avgYield!=null&&(
+                          <line x1={PAD.l} x2={W-PAD.r} y1={toY(avgYield)} y2={toY(avgYield)} stroke={BLUE} strokeWidth="1" strokeDasharray="3,3" opacity="0.4"/>
+                        )}
+                        {/* FCF yield line */}
+                        {cfYears.map((y,i)=>{
+                          if(i===0)return null;
+                          const v1=fcfYields[i-1], v2=fcfYields[i];
+                          if(v1==null||v2==null)return null;
+                          const col=v2>RF_RATE?GREEN:RED;
+                          return<line key={i} x1={toX(i-1)} y1={toY(v1)} x2={toX(i)} y2={toY(v2)} stroke={col} strokeWidth="2" opacity="0.85"/>;
+                        })}
+                        {cfYears.map((y,i)=>{
+                          const v=fcfYields[i];if(v==null)return null;
+                          const col=v>RF_RATE?GREEN:RED;
+                          return(
+                            <g key={i}>
+                              <circle cx={toX(i)} cy={toY(v)} r={i===cfYears.length-1?3.5:2} fill={col} opacity={i===cfYears.length-1?1:0.7}/>
+                              <text x={toX(i)} y={toY(v)-5} textAnchor="middle" fontSize="6.5" fill={col}>{v.toFixed(1)}%</text>
+                              <text x={toX(i)} y={H-PAD.b+11} textAnchor="middle" fontSize="7" fill="#ffffff30">{y.slice(0,4)}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                    <div className="space-y-2">
+                      <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                        <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>FCF Yield (LTM)</p>
+                        <p className="text-[18px] font-bold tabular-nums" style={{color:currentYield!=null&&currentYield>RF_RATE?GREEN:RED}}>{currentYield!=null?`${currentYield.toFixed(1)}%`:"—"}</p>
+                        <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>FCF ÷ Market Cap</p>
+                      </div>
+                      <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                        <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>Equity Risk Premium</p>
+                        <p className="text-[18px] font-bold tabular-nums" style={{color:erp!=null&&erp>0?BLUE:RED}}>{erp!=null?`${erp>0?"+":""}${erp.toFixed(1)}pp`:"—"}</p>
+                        <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>vs {RF_RATE}% risk-free</p>
+                      </div>
+                      <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                        <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>5Y Avg FCF Yield</p>
+                        <p className="text-[18px] font-bold tabular-nums" style={{color:AMBER}}>{avgYield!=null?`${avgYield.toFixed(1)}%`:"—"}</p>
+                        <p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>{currentYield!=null&&avgYield!=null?currentYield>avgYield?"Trading above avg yield (cheaper)":"Trading below avg yield (richer)":""}</p>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2966,6 +3241,109 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 </div>
               </div>
             )}
+
+            {/* ══ LOOP 22: ROIC vs WACC Spread ══ */}
+            {evaHistory.length>=3&&(()=>{
+              const WACC_LINE=9;
+              const allROIC=evaHistory.map(e=>e.roic);
+              const minV=Math.min(0,...allROIC,WACC_LINE)-2;
+              const maxV=Math.max(...allROIC,WACC_LINE)+2;
+              const W=560, H=160;
+              const toX=(i:number)=>PAD.l+(i/(evaHistory.length-1))*(W-PAD.l-PAD.r);
+              const toY=(v:number)=>PAD.t+(1-(v-minV)/(maxV-minV))*(H-PAD.t-PAD.b);
+              const waccY=toY(WACC_LINE);
+              const currentROIC=allROIC[allROIC.length-1];
+              const spread=currentROIC-WACC_LINE;
+              const spreadColor=spread>0?GREEN:RED;
+              const positiveYrs=allROIC.filter(r=>r>WACC_LINE).length;
+              // Build polygon for spread fill between ROIC and WACC
+              const roicPoints=evaHistory.map((e,i)=>`${toX(i)},${toY(e.roic)}`).join(" ");
+              const waccPoints=evaHistory.map((_,i)=>`${toX(i)},${waccY}`).reverse().join(" ");
+              return(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>ROIC vs WACC — Value Creation Spread</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>ROIC above 9% WACC = shareholder wealth creation · Spread × Invested Capital = Economic Profit</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${spread>0?"16,185,129":"239,68,68"},0.15)`,color:spreadColor,border:`1px solid ${spreadColor}40`}}>
+                      {positiveYrs}/{evaHistory.length} YRS VALUE+
+                    </span>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${spread>0?"16,185,129":"239,68,68"},0.15)`,color:spreadColor,border:`1px solid ${spreadColor}40`}}>
+                      SPREAD {spread>0?"+":""}{spread.toFixed(1)}pp
+                    </span>
+                  </div>
+                </div>
+                <div className="px-3 py-3">
+                  <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                    {/* Filled spread area */}
+                    <polygon
+                      points={`${roicPoints} ${waccPoints}`}
+                      fill={currentROIC>WACC_LINE?"rgba(16,185,129,0.12)":"rgba(239,68,68,0.12)"}
+                    />
+                    {/* Grid lines */}
+                    {Array.from({length:5},(_,i)=>{
+                      const v=minV+(maxV-minV)*i/4;
+                      const y=toY(v);
+                      return(
+                        <g key={i}>
+                          <line x1={PAD.l} x2={W-PAD.r} y1={y} y2={y} stroke={DARK_BORDER} strokeWidth="0.5"/>
+                          <text x={PAD.l-3} y={y+3} textAnchor="end" fontSize="7" fill="#ffffff30">{v.toFixed(0)}%</text>
+                        </g>
+                      );
+                    })}
+                    {/* WACC reference line */}
+                    <line x1={PAD.l} x2={W-PAD.r} y1={waccY} y2={waccY} stroke={AMBER} strokeWidth="1.5" strokeDasharray="4,3" opacity="0.7"/>
+                    <text x={W-PAD.r+3} y={waccY+3} fontSize="7" fill={AMBER} opacity="0.7">WACC {WACC_LINE}%</text>
+                    {/* ROIC line */}
+                    {evaHistory.map((e,i)=>{
+                      if(i===0)return null;
+                      const prev=evaHistory[i-1];
+                      const col=e.roic>WACC_LINE?GREEN:RED;
+                      return<line key={i} x1={toX(i-1)} y1={toY(prev.roic)} x2={toX(i)} y2={toY(e.roic)} stroke={col} strokeWidth="2" opacity="0.9"/>;
+                    })}
+                    {/* Data points */}
+                    {evaHistory.map((e,i)=>{
+                      const col=e.roic>WACC_LINE?GREEN:RED;
+                      const x=toX(i), y=toY(e.roic);
+                      return(
+                        <g key={i}>
+                          <circle cx={x} cy={y} r={i===evaHistory.length-1?4:2.5} fill={col} opacity={i===evaHistory.length-1?1:0.75}/>
+                          <text x={x} y={y-(i===evaHistory.length-1?6:5)} textAnchor="middle" fontSize={i===evaHistory.length-1?7.5:6.5} fill={col} fontWeight={i===evaHistory.length-1?"bold":"normal"}>{e.roic.toFixed(1)}%</text>
+                          <text x={x} y={H-PAD.b+11} textAnchor="middle" fontSize="7" fill="#ffffff35">{e.year.slice(0,4)}</text>
+                        </g>
+                      );
+                    })}
+                    {/* "Value Creation" / "Value Destruction" zone labels */}
+                    {(()=>{
+                      const zoneY=waccY-12;
+                      const isAbove=currentROIC>WACC_LINE;
+                      return(
+                        <text x={W/2} y={isAbove?zoneY+24:waccY+20} textAnchor="middle" fontSize="7.5" fill={isAbove?GREEN:RED} fontWeight="bold" opacity="0.5">
+                          {isAbove?"▲ VALUE CREATION ZONE":"▼ VALUE DESTRUCTION ZONE"}
+                        </text>
+                      );
+                    })()}
+                  </svg>
+                  <div className="grid grid-cols-3 gap-3 mt-2 pt-2 border-t" style={{borderColor:DARK_BORDER}}>
+                    <div className="text-center">
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Current ROIC</p>
+                      <p className="text-[14px] font-bold" style={{color:currentROIC>WACC_LINE?GREEN:RED}}>{currentROIC.toFixed(1)}%</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>WACC (est.)</p>
+                      <p className="text-[14px] font-bold" style={{color:AMBER}}>{WACC_LINE.toFixed(0)}%</p>
+                    </div>
+                    <div className="text-center">
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Spread</p>
+                      <p className="text-[14px] font-bold" style={{color:spreadColor}}>{spread>0?"+":""}{spread.toFixed(1)}pp</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
 
             {dcfSensitivity&&(
               <Card title="DCF Sensitivity — Price per Share" sub="WACC (rows) × Terminal Growth Rate (cols) | current highlighted" badge="SENSITIVITY">
@@ -4133,6 +4511,41 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   })}
                   {earningsSurprises.length===0&&<p className="text-[10px] text-center py-2" style={{color:"#ffffff20"}}>No earnings surprise data</p>}
                 </div>
+              </Card>
+
+              {/* ══ LOOP 22: Cash vs Reported Earnings Quality ══ */}
+              <Card title="Cash vs Reported EPS" sub="OCF/share vs diluted EPS — divergence = earnings quality concern" badge="EPS QUALITY">
+                {(()=>{
+                  const sh=facts.shares_diluted_wtd;
+                  if(!sh||sh<=0)return<NoData W={320} H={160}/>;
+                  const years=revYears.filter(y=>history.operating_cf?.[y]&&history.eps_diluted?.[y]!=null);
+                  if(years.length<2)return<NoData W={320} H={160}/>;
+                  const cashEps=years.map(y=>((history.operating_cf?.[y]??0)/sh));
+                  const repEps=years.map(y=>history.eps_diluted?.[y]??null);
+                  const latestCash=cashEps[cashEps.length-1], latestRep=repEps[repEps.length-1];
+                  const gap=latestCash!=null&&latestRep!=null?latestCash-latestRep:null;
+                  const gapPct=gap!=null&&latestRep!=null&&latestRep>0?gap/Math.abs(latestRep)*100:null;
+                  const quality=gapPct!=null?gapPct>-10?"STRONG":gapPct>-25?"MODERATE":"WEAK":"—";
+                  const qColor=gapPct!=null?gapPct>-10?GREEN:gapPct>-25?AMBER:RED:AMBER;
+                  return(
+                    <div>
+                      <div className="flex items-center gap-3 mb-2">
+                        <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{background:qColor+"20",color:qColor,border:`1px solid ${qColor}40`}}>{quality}</span>
+                        {gap!=null&&<span className="text-[8px]" style={{color:"#ffffff35"}}>Cash EPS vs Reported: {gap>=0?"+":""}${gap.toFixed(2)}</span>}
+                      </div>
+                      <LineChart
+                        labels={years}
+                        series={[
+                          {name:"Cash EPS (OCF/sh)",values:cashEps,color:TEAL},
+                          {name:"Diluted EPS",values:repEps,color:AMBER},
+                        ]}
+                      />
+                      <p className="text-[7px] mt-1.5" style={{color:"#ffffff20"}}>
+                        {gapPct!=null&&gapPct<-20?`⚠ Cash EPS ${Math.abs(gapPct).toFixed(0)}% below reported EPS — monitor accruals ratio`:`Cash earnings conversion healthy`}
+                      </p>
+                    </div>
+                  );
+                })()}
               </Card>
 
             </div>
