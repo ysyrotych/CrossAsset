@@ -86,6 +86,40 @@ export async function POST(req: NextRequest) {
   const segStr = buildSegStr(ext.segments);
   const geoStr = buildSegStr(ext.geo_segments);
 
+  // Segment YoY growth rates from segment_history
+  const buildSegGrowthStr = (hist: any[]) => {
+    if (!hist || hist.length < 2) return "N/A";
+    const sorted = [...hist].sort((a, b) => a.date.localeCompare(b.date));
+    const latest = sorted[sorted.length - 1];
+    const prior  = sorted[sorted.length - 2];
+    const segs   = Object.keys(latest.data ?? {});
+    return segs.map(seg => {
+      const cur = latest.data[seg];
+      const prv = prior.data[seg];
+      if (!cur || !prv || prv === 0) return `${seg}: ${fmt(cur)} (prior N/A)`;
+      const growth = ((cur - prv) / Math.abs(prv) * 100).toFixed(1);
+      const arrow  = cur > prv ? "▲" : "▼";
+      return `${seg}: ${fmt(cur)} ${arrow}${growth}% YoY`;
+    }).join(" | ") || "N/A";
+  };
+  const segGrowthStr = buildSegGrowthStr((ext.segment_history as any[]) ?? []);
+  const geoGrowthStr = buildSegGrowthStr((ext.geo_segment_history as any[]) ?? []);
+
+  // Quarterly YoY comparison (current vs same Q prior year)
+  const qtTrends = (ext.quarterly_trends as any[]) ?? [];
+  const qtSorted = [...qtTrends].sort((a:any, b:any) => a.date.localeCompare(b.date));
+  const qtYoYStr = (() => {
+    if (qtSorted.length < 5) return "N/A";
+    const cur  = qtSorted[qtSorted.length - 1];
+    const pryr = qtSorted[qtSorted.length - 5];
+    if (!cur || !pryr) return "N/A";
+    const revYoY  = cur.revenue && pryr.revenue ? ((cur.revenue - pryr.revenue) / Math.abs(pryr.revenue) * 100).toFixed(1) + "%" : "N/A";
+    const gmDelta = cur.gross_margin_pct != null && pryr.gross_margin_pct != null ? ((cur.gross_margin_pct - pryr.gross_margin_pct) > 0 ? "+" : "") + (cur.gross_margin_pct - pryr.gross_margin_pct).toFixed(1) + "pp" : "N/A";
+    const opDelta = cur.operating_margin_pct != null && pryr.operating_margin_pct != null ? ((cur.operating_margin_pct - pryr.operating_margin_pct) > 0 ? "+" : "") + (cur.operating_margin_pct - pryr.operating_margin_pct).toFixed(1) + "pp" : "N/A";
+    const epsYoY  = cur.eps_diluted && pryr.eps_diluted && pryr.eps_diluted !== 0 ? ((cur.eps_diluted - pryr.eps_diluted) / Math.abs(pryr.eps_diluted) * 100).toFixed(1) + "%" : "N/A";
+    return `${cur.date?.slice(0,7)}: Rev ${revYoY} YoY | Gross Margin ${gmDelta} YoY | Op Margin ${opDelta} YoY | EPS ${epsYoY} YoY`;
+  })();
+
   const estStr = (ext.analyst_estimates as any[])?.slice(0,3)
     .map((e:any) => `${e.date?.slice(0,7)}: Rev ${fmt(e.rev_avg)}, EPS $${e.eps_avg?.toFixed(2) ?? "N/A"}, EBITDA ${fmt(e.ebitda_avg)}`)
     .join(" | ") ?? "N/A";
@@ -107,9 +141,9 @@ export async function POST(req: NextRequest) {
   // Peer comparison table
   const peerRows = (ext.peer_comparison as any[]) ?? [];
   const peerTable = peerRows.length > 0
-    ? "| Ticker | P/E | EV/EBITDA | P/FCF | ROIC | Net Margin |\n|--------|-----|-----------|-------|------|------------|\n" +
-      [{ symbol: ticker, pe: f.pe_ratio, ev_ebitda: f.ev_ebitda, p_fcf: f.p_fcf, roic: f.roic, net_margin: f.net_margin_pct }, ...peerRows]
-        .map((p:any) => `| ${p.symbol === ticker ? `**${ticker}**` : p.symbol} | ${p.pe ? p.pe+"x" : "—"} | ${p.ev_ebitda ? p.ev_ebitda+"x" : "—"} | ${p.p_fcf ? p.p_fcf+"x" : "—"} | ${p.roic ? p.roic+"%" : "—"} | ${p.net_margin ? p.net_margin+"%" : "—"} |`)
+    ? "| Ticker | Mkt Cap | Rev Grw | Gross Mgn | P/E | EV/EBITDA | ROIC | Net Margin |\n|--------|---------|---------|-----------|-----|-----------|------|------------|\n" +
+      [{ symbol: ticker, market_cap: f.market_cap, rev_growth: f.revenue_growth_yoy, gross_margin: f.gross_margin_pct, pe: f.pe_ratio, ev_ebitda: f.ev_ebitda, roic: f.roic, net_margin: f.net_margin_pct }, ...peerRows]
+        .map((p:any) => `| ${p.symbol === ticker ? `**${ticker}**` : p.symbol} | ${p.market_cap ? fmt(p.market_cap) : "—"} | ${p.rev_growth != null ? (p.rev_growth > 0 ? "+" : "") + p.rev_growth.toFixed(1) + "%" : "—"} | ${p.gross_margin != null ? p.gross_margin.toFixed(1)+"%" : "—"} | ${p.pe ? p.pe+"x" : "—"} | ${p.ev_ebitda ? p.ev_ebitda+"x" : "—"} | ${p.roic != null ? p.roic+"%" : "—"} | ${p.net_margin != null ? p.net_margin+"%" : "—"} |`)
         .join("\n")
     : "Peer data not available.";
 
@@ -237,6 +271,7 @@ MOST RECENT QUARTER (${quarterlyPeriod})
 ═══════════════════════════════════════════════════════════════
 Revenue: ${fmt(quarterlyFacts.revenue)} | Gross Margin: ${pct(quarterlyFacts.gross_margin_pct)} | Op Margin: ${pct(quarterlyFacts.operating_margin_pct)} | Net Margin: ${pct(quarterlyFacts.net_margin_pct)}
 Net Income: ${fmt(quarterlyFacts.net_income)} | EPS: ${quarterlyFacts.eps_diluted != null ? `$${quarterlyFacts.eps_diluted.toFixed(2)}` : "N/A"} | FCF: ${fmt(quarterlyFacts.free_cash_flow)}
+YoY Change vs Same Quarter Prior Year: ${qtYoYStr}
 
 ═══════════════════════════════════════════════════════════════
 ANALYST CONSENSUS
@@ -246,10 +281,12 @@ Forward Estimates: ${estStr}
 EPS Surprise History (last 6Q): ${surpriseStr}
 
 ═══════════════════════════════════════════════════════════════
-REVENUE SEGMENTS (latest annual)
+REVENUE SEGMENTS (latest annual + YoY growth)
 ═══════════════════════════════════════════════════════════════
-Business Segments: ${segStr}
-Geographic Breakdown: ${geoStr}
+Business Segments (latest): ${segStr}
+Business Segments (YoY growth): ${segGrowthStr}
+Geographic Breakdown (latest): ${geoStr}
+Geographic Breakdown (YoY growth): ${geoGrowthStr}
 
 ═══════════════════════════════════════════════════════════════
 PEER COMPARISON

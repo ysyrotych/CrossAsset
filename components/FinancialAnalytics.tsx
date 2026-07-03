@@ -1828,6 +1828,96 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         })}
       </div>
 
+      {/* ── Tab Summary Pill Row ─────────────────────────────────────── */}
+      {(()=>{
+        type Pill={label:string;value:string;color:string};
+        let pills:Pill[]=[];
+        if(tab==="growth"){
+          const revCAGR5=(()=>{const v=Object.values(history.revenue||{});return v.length>=2?(Math.pow(v[v.length-1]/Math.max(v[0],1),1/Math.max(v.length-1,1))-1)*100:null;})();
+          const epsCAGR5=(()=>{const v=Object.values(history.eps_diluted||{}).filter(x=>x>0);return v.length>=2?(Math.pow(v[v.length-1]/Math.max(v[0],0.001),1/Math.max(v.length-1,1))-1)*100:null;})();
+          pills=[
+            {label:"5Y Rev CAGR",value:revCAGR5!=null?`${revCAGR5>0?"+":""}${revCAGR5.toFixed(1)}%`:"—",color:revCAGR5!=null&&revCAGR5>10?GREEN:AMBER},
+            {label:"Rev YoY",value:facts.revenue_growth_yoy!=null?`${facts.revenue_growth_yoy>0?"+":""}${facts.revenue_growth_yoy.toFixed(1)}%`:"—",color:facts.revenue_growth_yoy!=null&&facts.revenue_growth_yoy>10?GREEN:facts.revenue_growth_yoy!=null&&facts.revenue_growth_yoy>0?AMBER:RED},
+            {label:"5Y EPS CAGR",value:epsCAGR5!=null?`${epsCAGR5.toFixed(1)}%`:"—",color:epsCAGR5!=null&&epsCAGR5>10?GREEN:AMBER},
+            {label:"Beat Rate",value:earningsStreak.total>0?`${earningsStreak.beats}/${earningsStreak.total}Q`:"—",color:earningsStreak.total>0&&earningsStreak.beats/earningsStreak.total>=0.75?GREEN:AMBER},
+            {label:"Streak",value:earningsStreak.streak>0?`${earningsStreak.streak}× beat`:"—",color:earningsStreak.streak>=3?GREEN:earningsStreak.streak>=1?AMBER:"#ffffff30"},
+          ];
+        } else if(tab==="margins"){
+          const peerGM=peers.length>0?(peers.map(p=>p.gross_margin??null).filter((v):v is number=>v!=null).sort((a,b)=>a-b)[Math.floor(peers.length/2)]??null):null;
+          pills=[
+            {label:"Gross Margin",value:facts.gross_margin_pct!=null?`${facts.gross_margin_pct.toFixed(1)}%`:"—",color:facts.gross_margin_pct!=null&&facts.gross_margin_pct>50?GREEN:facts.gross_margin_pct!=null&&facts.gross_margin_pct>30?AMBER:RED},
+            {label:"vs Peers",value:peerGM!=null&&facts.gross_margin_pct!=null?`${facts.gross_margin_pct-peerGM>0?"+":""}${(facts.gross_margin_pct-peerGM).toFixed(1)}pp`:"—",color:peerGM!=null&&facts.gross_margin_pct!=null&&facts.gross_margin_pct>peerGM?GREEN:RED},
+            {label:"Op Margin",value:facts.operating_margin_pct!=null?`${facts.operating_margin_pct.toFixed(1)}%`:"—",color:facts.operating_margin_pct!=null&&facts.operating_margin_pct>20?GREEN:facts.operating_margin_pct!=null&&facts.operating_margin_pct>0?AMBER:RED},
+            {label:"EBITDA Margin",value:facts.ebitda&&facts.revenue?`${(facts.ebitda/facts.revenue*100).toFixed(1)}%`:"—",color:AMBER},
+            {label:"SBC Dilution",value:facts.sbc_expense&&facts.revenue?`${(facts.sbc_expense/facts.revenue*100).toFixed(1)}%`:"—",color:facts.sbc_expense&&facts.revenue&&facts.sbc_expense/facts.revenue>0.10?RED:AMBER},
+          ];
+        } else if(tab==="cashflow"){
+          const fcfMargin=facts.free_cash_flow&&facts.revenue?facts.free_cash_flow/facts.revenue*100:null;
+          const fcfYield=facts.free_cash_flow&&facts.market_cap?facts.free_cash_flow/facts.market_cap*100:null;
+          const ocfNI=facts.operating_cf&&facts.net_income&&facts.net_income>0?facts.operating_cf/facts.net_income:null;
+          pills=[
+            {label:"FCF Margin",value:fcfMargin!=null?`${fcfMargin.toFixed(1)}%`:"—",color:fcfMargin!=null&&fcfMargin>15?GREEN:fcfMargin!=null&&fcfMargin>5?AMBER:RED},
+            {label:"FCF Yield",value:fcfYield!=null?`${fcfYield.toFixed(1)}%`:"—",color:fcfYield!=null&&fcfYield>4?GREEN:AMBER},
+            {label:"OCF/NI",value:ocfNI!=null?`${ocfNI.toFixed(2)}x`:"—",color:ocfNI!=null&&ocfNI>=0.9?GREEN:ocfNI!=null&&ocfNI>=0.6?AMBER:RED},
+            {label:"CapEx %",value:facts.capex&&facts.revenue?`${(Math.abs(facts.capex)/facts.revenue*100).toFixed(1)}%`:"—",color:BLUE},
+            {label:"SH Yield",value:capitalReturns.totalYield>0?`${capitalReturns.totalYield.toFixed(1)}%`:"—",color:capitalReturns.totalYield>4?GREEN:capitalReturns.totalYield>2?TEAL:AMBER},
+          ];
+        } else if(tab==="balance"){
+          const netDebtB=(facts.long_term_debt??0)-(facts.cash??0);
+          const ndEbitda=facts.ebitda&&facts.ebitda>0?netDebtB/facts.ebitda:null;
+          const cr=facts.current_assets&&facts.current_liabilities&&facts.current_liabilities>0?facts.current_assets/facts.current_liabilities:null;
+          pills=[
+            {label:"Net Debt",value:netDebtB>=0?abbr(netDebtB,"$"):`Net Cash ${abbr(-netDebtB,"$")}`,color:netDebtB<0?GREEN:netDebtB>facts.ebitda*3?RED:AMBER},
+            {label:"ND/EBITDA",value:ndEbitda!=null?`${ndEbitda.toFixed(1)}x`:"—",color:ndEbitda!=null&&ndEbitda<2?GREEN:ndEbitda!=null&&ndEbitda<4?AMBER:RED},
+            {label:"Current Ratio",value:cr!=null?`${cr.toFixed(2)}x`:"—",color:cr!=null&&cr>2?GREEN:cr!=null&&cr>1?AMBER:RED},
+            {label:"Altman Z",value:altmanZ?`${altmanZ.z} (${altmanZ.zone})`:"—",color:altmanZ?.color??AMBER},
+          ];
+        } else if(tab==="multiples"){
+          pills=[
+            {label:"P/E",value:facts.pe_ratio!=null?`${facts.pe_ratio.toFixed(1)}x`:"—",color:"#ffffff70"},
+            {label:"EV/EBITDA",value:facts.ev_ebitda!=null?`${facts.ev_ebitda.toFixed(1)}x`:"—",color:"#ffffff70"},
+            {label:"FCF Yield",value:facts.free_cash_flow&&facts.market_cap?`${(facts.free_cash_flow/facts.market_cap*100).toFixed(1)}%`:"—",color:facts.free_cash_flow&&facts.market_cap&&facts.free_cash_flow/facts.market_cap>0.04?GREEN:AMBER},
+            {label:"PEG",value:relativeValue.peg!=null?`${relativeValue.peg.toFixed(2)}x`:"—",color:relativeValue.peg!=null&&relativeValue.peg<1?GREEN:relativeValue.peg!=null&&relativeValue.peg<2?AMBER:RED},
+            {label:"Implied Growth",value:reverseDCF?`${reverseDCF.impliedGrowth}%`:"—",color:BLUE},
+          ];
+        } else if(tab==="quality"){
+          pills=[
+            {label:"Quality Score",value:`${qualityScore}/100`,color:qualityScore>=70?GREEN:qualityScore>=40?AMBER:RED},
+            {label:"Piotroski",value:`${piotroski.score}/${piotroski.maxScore}`,color:piotroski.score>=7?GREEN:piotroski.score>=4?AMBER:RED},
+            {label:"ROIC",value:facts.roic!=null?`${facts.roic.toFixed(1)}%`:"—",color:facts.roic!=null&&facts.roic>15?GREEN:facts.roic!=null&&facts.roic>9?AMBER:RED},
+            {label:"Avg Beat",value:earningsStreak.avgBeatMag!=null?`+${earningsStreak.avgBeatMag.toFixed(1)}%`:"—",color:earningsStreak.avgBeatMag!=null&&earningsStreak.avgBeatMag>3?GREEN:AMBER},
+          ];
+        } else if(tab==="quant"){
+          const monteP=monteCarloResults.pUp!=null?monteCarloResults.pUp:null;
+          pills=[
+            {label:"Factor Score",value:`${factorScores.overall}/100`,color:factorScores.overall>=70?GREEN:factorScores.overall>=40?AMBER:RED},
+            {label:"Mkt-Implied Rev CAGR",value:reverseDCF?`${reverseDCF.impliedGrowth}%`:"—",color:BLUE},
+            {label:"Monte Carlo P(Up)",value:monteP!=null?`${monteP.toFixed(0)}%`:"—",color:monteP!=null&&monteP>60?GREEN:monteP!=null&&monteP>40?AMBER:RED},
+            {label:"Beneish M",value:beneishMScore?`${beneishMScore.score.toFixed(2)}`:"—",color:beneishMScore?.color??AMBER},
+          ];
+        } else if(tab==="signals"){
+          const tripwireGreen=8-[...Array(8)].filter((_,i)=>false).length; // computed inline below
+          const insidNetBuys=(insiderTrading.filter(t=>/purchase|buy/i.test(t.transaction||"")).length)-(insiderTrading.filter(t=>/sale|sell/i.test(t.transaction||"")).length);
+          pills=[
+            {label:"Verdict",value:investmentThesis.verdict,color:investmentThesis.verdictColor},
+            {label:"Factor Score",value:`${investmentThesis.score}/100`,color:investmentThesis.verdictColor},
+            {label:"Beat Streak",value:earningsStreak.streak>0?`${earningsStreak.streak}× consec`:"0×",color:earningsStreak.streak>=3?GREEN:earningsStreak.streak>=1?TEAL:RED},
+            {label:"Insider",value:insiderTrading.length>0?(insidNetBuys>0?`+${insidNetBuys} net buy`:insidNetBuys<0?`${insidNetBuys} net sell`:"neutral"):"—",color:insidNetBuys>1?GREEN:insidNetBuys<-1?RED:AMBER},
+          ];
+        }
+        if(!pills.length) return null;
+        return(
+          <div className="flex items-center gap-0 overflow-x-auto border-b px-4 py-1.5" style={{background:"rgba(4,13,28,0.9)",borderColor:DARK_BORDER}}>
+            {pills.map((p,i)=>(
+              <div key={i} className="flex items-center gap-2 shrink-0 pr-4 mr-4 border-r last:border-r-0" style={{borderColor:DARK_BORDER}}>
+                <span className="text-[7px] uppercase font-bold tracking-widest" style={{color:"#ffffff20"}}>{p.label}</span>
+                <span className="text-[9px] font-bold tabular-nums" style={{color:p.color}}>{p.value}</span>
+              </div>
+            ))}
+          </div>
+        );
+      })()}
+
       {/* Charts */}
       <div className="p-4" style={{background:DARK_BG}}>
 
