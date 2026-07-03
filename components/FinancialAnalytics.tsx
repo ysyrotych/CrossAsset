@@ -586,7 +586,7 @@ function QuarterlyHeatTable({ data }:{ data:QuarterlyTrend }) {
 
 // ── LOOP 15: Transcript Intelligence Parser ───────────────────────────────────
 
-function parseTranscript(text:string):{guidance:string[];questions:string[];keyNumbers:string[];totalLength:number;hasQA:boolean}|null {
+function parseTranscript(text:string):{guidance:string[];questions:string[];keyNumbers:string[];totalLength:number;hasQA:boolean;sentiment:{bulls:number;bears:number;score:number;topBull:string;topBear:string}}|null {
   if(!text||text.length<500) return null;
   const upper=text.toUpperCase();
   // Find Q&A section start (handles both FMP "Operator: we will now begin..." and formatted Q: markers)
@@ -629,7 +629,23 @@ function parseTranscript(text:string):{guidance:string[];questions:string[];keyN
   }
   const numRe=/\$[\d,.]+\s*(?:billion|million|trillion|B|M|T)?\b|\b\d+(?:\.\d+)?%/gi;
   const keyNumbers=[...new Set(text.match(numRe)??[])].slice(0,12);
-  return{guidance,questions:questions.slice(0,4),keyNumbers,totalLength:text.length,hasQA:qa.length>100};
+  // Sentiment keyword analysis
+  const BULL_KW=[
+    ["accelerat",4],["expand",3],["opportunity",3],["outperform",4],["strong demand",5],
+    ["record",3],["growth",2],["confident",3],["favorable",2],["momentum",3],
+    ["improve",2],["ahead of",3],["exceed",3],["rais.*guid",4],["beat",2],
+  ] as [string,number][];
+  const BEAR_KW=[
+    ["headwind",5],["challeng",4],["pressure",3],["uncertain",4],["decline",3],
+    ["below expect",5],["disapp",4],["concern",3],["difficult",3],["softness",4],
+    ["slower",3],["compet.*intens",4],["miss",3],["lower.*guid",5],["macro",2],
+  ] as [string,number][];
+  const lc=text.toLowerCase();
+  const countKw=(kws:[string,number][])=>{let score=0;const hits:string[]=[];for(const[pat,w]of kws){const re=new RegExp(pat,"gi");const m=lc.match(re);if(m){score+=m.length*w;if(hits.length<3)hits.push(pat.replace(/\.\*/g," ").replace(/\*/g,""));}};return{score,hits};};
+  const bullResult=countKw(BULL_KW), bearResult=countKw(BEAR_KW);
+  const sentimentScore=Math.round(Math.min(100,Math.max(0,50+(bullResult.score-bearResult.score)/Math.max(bullResult.score+bearResult.score,1)*60)));
+  return{guidance,questions:questions.slice(0,4),keyNumbers,totalLength:text.length,hasQA:qa.length>100,
+    sentiment:{bulls:bullResult.score,bears:bearResult.score,score:sentimentScore,topBull:bullResult.hits[0]??"",topBear:bearResult.hits[0]??""}};
 }
 
 // Donut / pie chart
@@ -1047,6 +1063,21 @@ export default function FinancialAnalytics({
         const fg = fcf&&rev&&rev>0 ? fcf/rev*100 : 0;
         return { label:y.slice(0,4), x:rg, y:fg };
       });
+
+  // ── Incremental EBIT Margin & Degree of Operating Leverage ───────────────
+  const dolData = useMemo(() => {
+    return revYears.slice(1).map((y, i) => {
+      const prevY = revYears[i];
+      const curRev = history.revenue?.[y], prevRev = history.revenue?.[prevY];
+      const curOI  = history.operating_income?.[y], prevOI = history.operating_income?.[prevY];
+      if (!curRev || !prevRev || curOI == null || prevOI == null || prevRev <= 0) return null;
+      const deltaRev = curRev - prevRev, deltaOI = curOI - prevOI;
+      const revPct = deltaRev / prevRev, oiPct = Math.abs(prevOI) > 0 ? deltaOI / Math.abs(prevOI) : null;
+      const dol = oiPct != null && Math.abs(revPct) > 0.005 ? oiPct / revPct : null;
+      const incrMargin = Math.abs(deltaRev) > 0 ? deltaOI / deltaRev * 100 : null;
+      return { year: y.slice(0,4), dol, incrMargin, revPct: revPct*100, oiPct: oiPct != null ? oiPct*100 : null };
+    }).filter(Boolean) as { year:string; dol:number|null; incrMargin:number|null; revPct:number; oiPct:number|null }[];
+  }, [history, revYears]);
 
   // DuPont decomposition history
   const dupontHist = asYears.map(y=>({
@@ -1980,16 +2011,46 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             <Card title="Net Income" sub="Absolute | YoY growth">
               <BarChart data={H("net_income",niYears)} color={GREEN} showGrowth/>
             </Card>
-            <Card title="Operating Leverage" sub="Revenue vs EBITDA growth %">
-              <GroupedBar
-                groups={revYears.slice(1)}
-                series={[
-                  {name:"Rev %",values:revGrowth,color:BLUE},
-                  {name:"EBITDA %",values:revYears.slice(1).map((y,i)=>{const c=history.ebitda?.[y];const p=history.ebitda?.[revYears[i]];return c&&p&&p>0?(c-p)/p*100:0;}),color:AMBER},
-                ]}
-                pct
-              />
-            </Card>
+            {dolData.length>=2?(()=>{
+              const validDOL=dolData.filter(d=>d.dol!=null&&isFinite(d.dol!)&&Math.abs(d.dol!)<20);
+              const validIM=dolData.filter(d=>d.incrMargin!=null&&isFinite(d.incrMargin!));
+              return(
+              <Card title="Operating Leverage" sub="Incremental EBIT margin & Degree of Operating Leverage per year" badge="OPEX LEVERAGE">
+                {validIM.length>=2&&(
+                  <div className="mb-3">
+                    <p className="text-[7px] font-bold uppercase tracking-widest mb-1.5" style={{color:"#ffffff25"}}>Incremental EBIT Margin (ΔProfit / ΔRevenue)</p>
+                    <div className="flex items-end gap-1" style={{height:60}}>
+                      {validIM.map((d,i)=>{
+                        const pct=d.incrMargin!;const maxAbs=Math.max(...validIM.map(x=>Math.abs(x.incrMargin!)),1);
+                        const barH=Math.max(2,Math.abs(pct)/maxAbs*52);
+                        return(
+                          <div key={i} className="flex-1 flex flex-col items-center justify-end gap-0.5">
+                            <span className="text-[6px] tabular-nums font-bold" style={{color:pct>50?GREEN:pct>0?TEAL:RED}}>{pct>0?"+":""}{pct.toFixed(0)}%</span>
+                            <div style={{height:barH,width:"100%",background:pct>50?GREEN:pct>0?TEAL:RED,borderRadius:2,opacity:0.8}}/>
+                            <span className="text-[6px]" style={{color:"#ffffff25"}}>{d.year}</span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
+                {validDOL.length>=2&&(
+                  <div>
+                    <p className="text-[7px] font-bold uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>Degree of Operating Leverage (DOL = ΔOI% / ΔRev%)</p>
+                    <div className="flex flex-wrap gap-x-3 gap-y-1">
+                      {validDOL.map((d,i)=>(
+                        <div key={i} className="text-center">
+                          <span className="text-[9px] font-bold tabular-nums" style={{color:d.dol!>2?GREEN:d.dol!>1?TEAL:d.dol!>0?AMBER:RED}}>{d.dol!.toFixed(1)}x</span>
+                          <p className="text-[6px]" style={{color:"#ffffff25"}}>{d.year}</p>
+                        </div>
+                      ))}
+                    </div>
+                    <p className="text-[6.5px] mt-1.5" style={{color:"#ffffff20"}}>{"DOL >2x = high operating leverage (fixed-cost business scales well)"}</p>
+                  </div>
+                )}
+              </Card>
+              );
+            })():null}
             <Card title="Effective Tax Rate" sub="Income tax / pre-tax income (%)">
               <LineChart
                 labels={revYears}
@@ -2232,6 +2293,11 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             <Card title="D/E History" sub="Financial leverage trend">
               <LineChart labels={kmDates} series={[{name:"D/E",values:kmDE,color:RED}]}/>
             </Card>
+            {kmPFCF.some(v=>v!=null)&&(
+              <Card title="P/FCF Multiple History" sub="Price / Free Cash Flow — cash-based valuation trend">
+                <LineChart labels={kmDates} series={[{name:"P/FCF",values:kmPFCF,color:TEAL}]}/>
+              </Card>
+            )}
             <Card title="EPS Surprise %" sub="Beat/miss vs consensus — streak and magnitude">
               {earningsSurprises.length>0
                 ?<BeatMiss data={earningsSurprises}/>
@@ -3146,6 +3212,73 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               );
             })()}
 
+            {/* ══ Beat Magnitude Trend ══ */}
+            {earningsSurprises.filter(e=>e.surprise_pct!=null).length>=3&&(()=>{
+              const sorted8=[...earningsSurprises].sort((a,b)=>a.date.localeCompare(b.date)).slice(-8);
+              const vals=sorted8.map(e=>e.surprise_pct??null);
+              const maxAbs=Math.max(...vals.filter((v):v is number=>v!=null).map(Math.abs),1);
+              const firstHalf=vals.slice(0,Math.floor(vals.length/2)).filter((v):v is number=>v!=null);
+              const secondHalf=vals.slice(Math.floor(vals.length/2)).filter((v):v is number=>v!=null);
+              const avgFirst=firstHalf.length?firstHalf.reduce((a,b)=>a+b,0)/firstHalf.length:null;
+              const avgSecond=secondHalf.length?secondHalf.reduce((a,b)=>a+b,0)/secondHalf.length:null;
+              const trend=avgFirst!=null&&avgSecond!=null?avgSecond-avgFirst:null;
+              return(
+              <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>EPS Beat Magnitude Trend</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Surprise % per quarter — shrinking beats signal estimate catch-up risk</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{
+                    background:trend!=null?trend>0?"rgba(16,185,129,0.15)":trend<-1?"rgba(239,68,68,0.15)":"rgba(245,158,11,0.15)":"rgba(255,255,255,0.06)",
+                    color:trend!=null?trend>0?GREEN:trend<-1?RED:AMBER:"#ffffff40",
+                    border:`1px solid ${trend!=null?trend>0?"rgba(16,185,129,0.3)":trend<-1?"rgba(239,68,68,0.3)":"rgba(245,158,11,0.3)":"rgba(255,255,255,0.1)"}`
+                  }}>{trend!=null?trend>1?"BEATS EXPANDING ▲":trend<-1?"BEATS SHRINKING ▼":"BEATS STABLE →":"EPS SURPRISE"}</span>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="flex items-center gap-1 mb-2" style={{height:70}}>
+                    {sorted8.map((e,i)=>{
+                      const v=e.surprise_pct;
+                      const isPos=v!=null&&v>0;
+                      const barH=v!=null?Math.max(4,Math.abs(v)/maxAbs*58):4;
+                      return(
+                        <div key={i} className="flex-1 flex flex-col items-center" style={{gap:0}}>
+                          {/* Positive bar goes up from midpoint */}
+                          <div style={{height:34,display:"flex",flexDirection:"column",justifyContent:"flex-end"}}>
+                            {isPos&&<div style={{height:barH,width:"100%",background:GREEN,borderRadius:"2px 2px 0 0",opacity:i===sorted8.length-1?1:0.65}}/>}
+                          </div>
+                          {/* Baseline */}
+                          <div style={{height:1,width:"100%",background:DARK_BORDER}}/>
+                          {/* Negative bar goes down */}
+                          <div style={{height:34,display:"flex",flexDirection:"column",justifyContent:"flex-start"}}>
+                            {!isPos&&v!=null&&<div style={{height:barH,width:"100%",background:RED,borderRadius:"0 0 2px 2px",opacity:i===sorted8.length-1?1:0.65}}/>}
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <div className="flex gap-1">
+                    {sorted8.map((e,i)=>(
+                      <div key={i} className="flex-1 text-center">
+                        <div className="text-[7px] font-bold tabular-nums" style={{color:(e.surprise_pct??0)>0?GREEN:RED}}>
+                          {e.surprise_pct!=null?`${e.surprise_pct>0?"+":""}${e.surprise_pct.toFixed(1)}%`:"—"}
+                        </div>
+                        <div className="text-[5.5px] truncate" style={{color:"#ffffff20"}}>{e.date?.slice(0,7)??"" }</div>
+                      </div>
+                    ))}
+                  </div>
+                  {trend!=null&&(
+                    <p className="text-[7px] mt-2" style={{color:trend>0?GREEN:trend<-1?RED:AMBER}}>
+                      {trend>0?`Beat magnitude expanding: more recent beats average ${avgSecond?.toFixed(1)}% vs ${avgFirst?.toFixed(1)}% earlier — positive estimate revision signal`
+                      :trend<-1?`Beat magnitude shrinking: recent beats only ${avgSecond?.toFixed(1)}% vs ${avgFirst?.toFixed(1)}% earlier — estimates may be catching up to reality`
+                      :`Beat magnitude stable around ${earningsStreak.avgBeatMag?.toFixed(1)??"—"}% avg`}
+                    </p>
+                  )}
+                </div>
+              </div>
+              );
+            })()}
+
             {/* ══ LOOP 9: Multi-Factor Score Engine ══ */}
             <div className="rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
               <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
@@ -3536,6 +3669,27 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                     </div>
                     <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(167,139,250,0.15)",color:PURPLE,border:`1px solid rgba(167,139,250,0.25)`}}>TRANSCRIPT</span>
                   </div>
+                  {/* Sentiment Score Row */}
+                  {transcriptData.sentiment&&(
+                    <div className="px-3 py-2 border-b flex items-center gap-4" style={{borderColor:DARK_BORDER,background:"rgba(255,255,255,0.02)"}}>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[7px] uppercase font-bold tracking-widest" style={{color:"#ffffff25"}}>Tone Score</span>
+                        <span className="text-[13px] font-bold tabular-nums" style={{color:transcriptData.sentiment.score>=60?GREEN:transcriptData.sentiment.score>=40?AMBER:RED}}>
+                          {transcriptData.sentiment.score}/100
+                        </span>
+                        <span className="text-[7px] font-bold px-1.5 py-0.5 rounded" style={{background:transcriptData.sentiment.score>=60?"rgba(16,185,129,0.12)":transcriptData.sentiment.score>=40?"rgba(245,158,11,0.12)":"rgba(239,68,68,0.12)",color:transcriptData.sentiment.score>=60?GREEN:transcriptData.sentiment.score>=40?AMBER:RED,border:`1px solid ${transcriptData.sentiment.score>=60?"rgba(16,185,129,0.25)":transcriptData.sentiment.score>=40?"rgba(245,158,11,0.25)":"rgba(239,68,68,0.25)"}`}}>
+                          {transcriptData.sentiment.score>=60?"BULLISH TONE":transcriptData.sentiment.score>=40?"NEUTRAL":"CAUTIOUS TONE"}
+                        </span>
+                      </div>
+                      <div className="flex-1 h-2 rounded overflow-hidden" style={{background:"rgba(255,255,255,0.06)"}}>
+                        <div style={{width:`${transcriptData.sentiment.score}%`,height:"100%",background:`linear-gradient(90deg,${transcriptData.sentiment.score>=60?GREEN:transcriptData.sentiment.score>=40?AMBER:RED},${GREEN})`,borderRadius:999,transition:"width 0.3s"}}/>
+                      </div>
+                      <div className="flex items-center gap-3 text-[7px]" style={{color:"#ffffff25"}}>
+                        {transcriptData.sentiment.topBull&&<span style={{color:GREEN}}>▲ {transcriptData.sentiment.topBull}</span>}
+                        {transcriptData.sentiment.topBear&&<span style={{color:RED}}>▼ {transcriptData.sentiment.topBear}</span>}
+                      </div>
+                    </div>
+                  )}
                   <div className="px-3 py-3 grid grid-cols-1 lg:grid-cols-2 gap-4">
                     {/* Guidance */}
                     <div>
