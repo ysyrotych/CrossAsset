@@ -2215,6 +2215,90 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
               </div>
               );
             })()}
+
+            {/* ══ LOOP 23: EPS Seasonality Heatmap ══ */}
+            {quarterlyTrends.filter(q=>q.eps_diluted!=null).length>=8&&(()=>{
+              const sorted=[...quarterlyTrends].sort((a,b)=>a.date.localeCompare(b.date));
+              type YearEps={[q:string]:number|null};
+              const byYearEps:Record<string,YearEps>={};
+              for(const q of sorted){
+                const d=q.date??"";const month=parseInt(d.slice(5,7)||"0");
+                const qLabel=month<=3?"Q1":month<=6?"Q2":month<=9?"Q3":"Q4";
+                const yr=d.slice(0,4)??"";
+                if(!byYearEps[yr])byYearEps[yr]={Q1:null,Q2:null,Q3:null,Q4:null};
+                if(q.eps_diluted!=null)byYearEps[yr][qLabel]=q.eps_diluted;
+              }
+              const epsYrs=Object.keys(byYearEps).filter(yr=>Object.values(byYearEps[yr]).some(v=>v!=null)).sort().slice(-5);
+              if(epsYrs.length<2)return null;
+              const quarters=["Q1","Q2","Q3","Q4"];
+              const epsYearAvgs:Record<string,number>={};
+              for(const yr of epsYrs){const vals=quarters.map(q=>byYearEps[yr][q]??null).filter((v):v is number=>v!=null);epsYearAvgs[yr]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;}
+              // Quarter averages across years — which quarter is typically strongest
+              const qAvgs:Record<string,number>={};
+              for(const q of quarters){const vals=epsYrs.map(yr=>byYearEps[yr][q]??null).filter((v):v is number=>v!=null);qAvgs[q]=vals.length?vals.reduce((a,b)=>a+b,0)/vals.length:0;}
+              const peakQAvg=quarters.reduce((best,q)=>qAvgs[q]>qAvgs[best]?q:best,"Q1");
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>EPS Seasonality — Quarterly Heatmap</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>EPS per quarter vs that year's average · Identifies the strongest reporting quarter · Peak quarter: <span style={{color:AMBER}}>{peakQAvg} (${qAvgs[peakQAvg].toFixed(2)} avg)</span></p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(245,158,11,0.15)",color:AMBER,border:"1px solid rgba(245,158,11,0.25)"}}>EPS SEASON</span>
+                </div>
+                <div className="px-3 py-3 overflow-x-auto">
+                  <table className="w-full border-collapse" style={{minWidth:340}}>
+                    <thead>
+                      <tr>
+                        <th className="px-2 py-1.5 text-left text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff25",width:48}}>Year</th>
+                        {quarters.map(q=>(
+                          <th key={q} className="px-2 py-1.5 text-center text-[7px] font-bold uppercase tracking-widest" style={{color:q===peakQAvg?AMBER:"#ffffff35"}}>{q}{q===peakQAvg?" ⭑":""}</th>
+                        ))}
+                        <th className="px-2 py-1.5 text-right text-[7px] font-bold uppercase tracking-widest" style={{color:"#ffffff25"}}>FY EPS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {epsYrs.map(yr=>{
+                        const avg=epsYearAvgs[yr];
+                        const annualEPS=quarters.map(q=>byYearEps[yr][q]??0).reduce((a,b)=>a+b,0);
+                        return(
+                          <tr key={yr} style={{borderTop:`1px solid ${DARK_BORDER}`}}>
+                            <td className="px-2 py-1.5 text-[8px] font-bold" style={{color:"#ffffff50"}}>{yr}</td>
+                            {quarters.map(q=>{
+                              const v=byYearEps[yr][q];
+                              const dev=v!=null&&avg>0?(v-avg)/avg:null;
+                              const intensity=dev!=null?Math.min(0.55,Math.abs(dev)*2):0;
+                              const bg=dev==null?"transparent":dev>0.1?`rgba(16,185,129,${intensity})`:dev<-0.1?`rgba(239,68,68,${intensity})`:"rgba(245,158,11,0.04)";
+                              const col=dev==null?"#ffffff20":dev>0.1?GREEN:dev<-0.1?RED:AMBER;
+                              return(
+                                <td key={q} className="px-1.5 py-1.5" style={{background:bg,border:`1px solid rgba(255,255,255,0.04)`}}>
+                                  <div className="text-center">
+                                    <p className="text-[8px] font-bold tabular-nums" style={{color:col}}>{v!=null?`$${v.toFixed(2)}`:"—"}</p>
+                                    {dev!=null&&<p className="text-[6px] tabular-nums" style={{color:col}}>{dev>0?"+":""}{(dev*100).toFixed(0)}%</p>}
+                                  </div>
+                                </td>
+                              );
+                            })}
+                            <td className="px-2 py-1.5 text-right text-[8px] font-bold tabular-nums" style={{color:"#ffffff45"}}>${annualEPS.toFixed(2)}</td>
+                          </tr>
+                        );
+                      })}
+                      {/* Quarter averages row */}
+                      <tr style={{borderTop:`2px solid ${DARK_BORDER}`}}>
+                        <td className="px-2 py-1.5 text-[7px] font-bold uppercase tracking-wider" style={{color:"#ffffff25"}}>Avg</td>
+                        {quarters.map(q=>(
+                          <td key={q} className="px-1.5 py-1.5 text-center" style={{background:q===peakQAvg?"rgba(245,158,11,0.08)":"transparent"}}>
+                            <p className="text-[8px] font-bold tabular-nums" style={{color:q===peakQAvg?AMBER:"#ffffff40"}}>${qAvgs[q].toFixed(2)}</p>
+                          </td>
+                        ))}
+                        <td/>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2437,6 +2521,74 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 })()}
               </div>
             </Card>
+            {/* ══ LOOP 23: FCF Conversion Chain ══ */}
+            {revYears.length>=2&&(()=>{
+              const latestYear=revYears[revYears.length-1];
+              const rev=history.revenue?.[latestYear], gp=history.gross_profit?.[latestYear];
+              const ebitda=history.ebitda?.[latestYear]??((history.operating_income?.[latestYear]??0)+(history.depreciation?.[latestYear]??0));
+              const ebit=history.operating_income?.[latestYear];
+              const ni=history.net_income?.[latestYear];
+              const ocf=history.operating_cf?.[latestYear];
+              const fcf=history.free_cash_flow?.[latestYear];
+              if(!rev||rev<=0)return null;
+              type Chain={label:string;value:number|null;pct:number|null;color:string;detail:string};
+              const chain:Chain[]=[
+                {label:"Revenue",value:rev,pct:100,color:BLUE,detail:"Top line"},
+                {label:"Gross Profit",value:gp??null,pct:gp?gp/rev*100:null,color:TEAL,detail:"After COGS"},
+                {label:"EBITDA",value:ebitda||null,pct:ebitda?(ebitda/rev*100):null,color:GREEN,detail:"Before D&A"},
+                {label:"EBIT",value:ebit??null,pct:ebit?ebit/rev*100:null,color:AMBER,detail:"After D&A"},
+                {label:"Net Income",value:ni??null,pct:ni?ni/rev*100:null,color:PURPLE,detail:"After tax & interest"},
+                {label:"Op. Cash Flow",value:ocf??null,pct:ocf?ocf/rev*100:null,color:TEAL,detail:"After WC changes"},
+                {label:"Free Cash Flow",value:fcf??null,pct:fcf?fcf/rev*100:null,color:fcf&&fcf>0?GREEN:RED,detail:"After CapEx"},
+              ].filter(c=>c.value!=null&&c.pct!=null);
+              if(chain.length<4)return null;
+              const maxPct=Math.max(...chain.map(c=>c.pct!));
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>P&L to FCF Conversion Chain ({latestYear.slice(0,4)})</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Revenue → Gross Profit → EBITDA → EBIT → Net Income → OCF → FCF · Spot where cash leaks</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:"rgba(20,184,166,0.15)",color:TEAL,border:"1px solid rgba(20,184,166,0.25)"}}>CONVERSION CHAIN</span>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="space-y-1.5">
+                    {chain.map((c,i)=>{
+                      const barW=Math.max(2,c.pct!/maxPct*100);
+                      const prevPct=i>0?chain[i-1].pct!:100;
+                      const leakage=prevPct-c.pct!;
+                      return(
+                        <div key={i} className="flex items-center gap-3">
+                          <div className="shrink-0 text-right" style={{width:80}}>
+                            <p className="text-[8px] font-bold uppercase tracking-wider" style={{color:c.color}}>{c.label}</p>
+                            <p className="text-[6.5px]" style={{color:"#ffffff20"}}>{c.detail}</p>
+                          </div>
+                          <div className="flex-1">
+                            <div className="h-5 rounded flex items-center" style={{background:"rgba(255,255,255,0.04)"}}>
+                              <div style={{width:`${barW}%`,height:"100%",background:c.color,opacity:0.75,borderRadius:3,transition:"width 0.3s"}}/>
+                            </div>
+                          </div>
+                          <div className="shrink-0 tabular-nums text-right" style={{width:90}}>
+                            <span className="text-[9px] font-bold" style={{color:c.color}}>{c.pct!.toFixed(1)}%</span>
+                            <span className="text-[7.5px] ml-1" style={{color:"#ffffff35"}}>{abbr(c.value!,"$")}</span>
+                          </div>
+                          {i>0&&leakage>2&&(
+                            <div className="shrink-0" style={{width:50}}>
+                              <span className="text-[6.5px] px-1 py-0.5 rounded" style={{background:"rgba(239,68,68,0.1)",color:RED}}>-{leakage.toFixed(1)}pp</span>
+                            </div>
+                          )}
+                          {i===0&&<div style={{width:50}}/>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <p className="text-[7px] mt-2" style={{color:"#ffffff15"}}>Large gap between NI and OCF = accrual earnings · Large gap between OCF and FCF = high capital intensity · FCF margin {">"} 15% = premium cash generative business</p>
+                </div>
+              </div>
+              );
+            })()}
+
             {/* Share count dilution history */}
             {revYears.some(y=>history.shares_diluted_wtd?.[y])&&(()=>{
               const shYears=revYears.filter(y=>history.shares_diluted_wtd?.[y]);
@@ -2545,6 +2697,104 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                     })}
                   </svg>
                   <p className="text-[7px] mt-1.5" style={{color:"#ffffff15"}}>Floating bars show incremental contribution to margin change · Use to identify whether margin moves are quality-driven (gross margin) or cost-leveraged (SGA/R&D)</p>
+                </div>
+              </div>
+              );
+            })()}
+
+            {/* ══ LOOP 23: OpEx Leverage Scorecard ══ */}
+            {revYears.length>=3&&(()=>{
+              // For each year, compute SGA%, RD%, total opex% of revenue and show vs revenue growth
+              type OLRow={year:string;revGrowth:number|null;sgaPct:number|null;rdPct:number|null;opexPct:number|null;leverage:number|null};
+              const olRows:OLRow[]=revYears.slice(1).map((y,i)=>{
+                const prY=revYears[i];
+                const curRev=history.revenue?.[y], prRev=history.revenue?.[prY];
+                const revGrowth=curRev&&prRev&&prRev>0?(curRev-prRev)/prRev*100:null;
+                const sgaPct=history.sga_expense?.[y]&&curRev?history.sga_expense[y]!/curRev*100:null;
+                const rdPct=history.rd_expense?.[y]&&curRev?history.rd_expense[y]!/curRev*100:null;
+                const opexPct=((history.sga_expense?.[y]??0)+(history.rd_expense?.[y]??0))/((curRev||1))*100;
+                const prOpexPct=((history.sga_expense?.[prY]??0)+(history.rd_expense?.[prY]??0))/(prRev||1)*100;
+                const leverage=opexPct&&prOpexPct?prOpexPct-opexPct:null; // positive = leverage (opex shrinking as % rev)
+                return{year:y.slice(0,4),revGrowth,sgaPct,rdPct,opexPct,leverage};
+              }).filter(r=>r.revGrowth!=null);
+              if(olRows.length<2)return null;
+              const latestRow=olRows[olRows.length-1];
+              const leveragingYrs=olRows.filter(r=>(r.leverage??0)>0.5).length;
+              const W=560, H=130;
+              const toX=(i:number)=>PAD.l+(i/(olRows.length-1||1))*(W-PAD.l-PAD.r);
+              const opexVals=olRows.map(r=>r.opexPct??0);
+              const minV=Math.min(...opexVals)-2, maxV=Math.max(...opexVals)+2;
+              const toY=(v:number)=>PAD.t+(1-(v-minV)/(maxV-minV||1))*(H-PAD.t-PAD.b);
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Operating Expense Leverage Scorecard</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>SGA% + R&D% declining as revenue grows = operating leverage materializing · {leveragingYrs}/{olRows.length} years show leverage</p>
+                  </div>
+                  <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${leveragingYrs>olRows.length/2?"16,185,129":"245,158,11"},0.15)`,color:leveragingYrs>olRows.length/2?GREEN:AMBER,border:`1px solid ${leveragingYrs>olRows.length/2?"rgba(16,185,129,0.3)":"rgba(245,158,11,0.3)"}`}}>
+                    {leveragingYrs}/{olRows.length} YRS LEVERAGE
+                  </span>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    {/* OpEx% trend line */}
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>Total OpEx (SGA+R&D) as % Revenue — falling = operating leverage</p>
+                      <svg viewBox={`0 0 ${W} ${H}`} style={{width:"100%",height:"auto"}}>
+                        {Array.from({length:4},(_,i)=>{const v=minV+(maxV-minV)*i/3;const y=toY(v);return(
+                          <g key={i}><line x1={PAD.l} x2={W-PAD.r} y1={y} y2={y} stroke={DARK_BORDER} strokeWidth="0.5"/><text x={PAD.l-3} y={y+3} textAnchor="end" fontSize="7" fill="#ffffff30">{v.toFixed(0)}%</text></g>
+                        );})}
+                        {olRows.map((r,i)=>{
+                          if(i===0||r.opexPct==null)return null;
+                          const prev=olRows[i-1];if(prev.opexPct==null)return null;
+                          const col=(r.leverage??0)>0.5?GREEN:RED;
+                          return<line key={i} x1={toX(i-1)} y1={toY(prev.opexPct)} x2={toX(i)} y2={toY(r.opexPct)} stroke={col} strokeWidth="2" opacity="0.85"/>;
+                        })}
+                        {olRows.map((r,i)=>{
+                          if(r.opexPct==null)return null;
+                          const col=(r.leverage??0)>0.5?GREEN:RED;
+                          return(
+                            <g key={i}>
+                              <circle cx={toX(i)} cy={toY(r.opexPct)} r={i===olRows.length-1?3.5:2} fill={col} opacity={i===olRows.length-1?1:0.7}/>
+                              <text x={toX(i)} y={toY(r.opexPct)-5} textAnchor="middle" fontSize="6.5" fill={col}>{r.opexPct.toFixed(1)}%</text>
+                              <text x={toX(i)} y={H-PAD.b+11} textAnchor="middle" fontSize="7" fill="#ffffff30">{r.year}</text>
+                            </g>
+                          );
+                        })}
+                      </svg>
+                    </div>
+                    {/* Table breakdown */}
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse text-[8px]">
+                        <thead>
+                          <tr style={{borderBottom:`1px solid ${DARK_BORDER}`}}>
+                            {["Year","Rev Growth","SGA%","R&D%","OpEx%","Leverage"].map(h=>(
+                              <th key={h} className="px-2 py-1 text-right first:text-left font-bold uppercase" style={{color:"#ffffff25",fontSize:6.5}}>{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {olRows.slice(-5).map((r,i)=>{
+                            const isLeveraging=(r.leverage??0)>0.5;
+                            return(
+                              <tr key={i} style={{borderTop:`1px solid ${DARK_BORDER}`,background:i===olRows.slice(-5).length-1?"rgba(255,255,255,0.03)":"transparent"}}>
+                                <td className="px-2 py-1 font-bold" style={{color:"#ffffff50"}}>{r.year}</td>
+                                <td className="px-2 py-1 text-right" style={{color:r.revGrowth!=null&&r.revGrowth>0?GREEN:RED}}>{r.revGrowth!=null?`${r.revGrowth>0?"+":""}${r.revGrowth.toFixed(1)}%`:"—"}</td>
+                                <td className="px-2 py-1 text-right" style={{color:"#ffffff40"}}>{r.sgaPct!=null?`${r.sgaPct.toFixed(1)}%`:"—"}</td>
+                                <td className="px-2 py-1 text-right" style={{color:"#ffffff40"}}>{r.rdPct!=null?`${r.rdPct.toFixed(1)}%`:"—"}</td>
+                                <td className="px-2 py-1 text-right font-bold" style={{color:"#ffffff55"}}>{r.opexPct!=null?`${r.opexPct.toFixed(1)}%`:"—"}</td>
+                                <td className="px-2 py-1 text-right font-bold" style={{color:isLeveraging?GREEN:RED}}>
+                                  {r.leverage!=null?(isLeveraging?"+":"")+r.leverage.toFixed(1)+"pp":"—"}
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      <p className="text-[7px] mt-2" style={{color:"#ffffff15"}}>Leverage = how much OpEx% shrank vs prior year · Positive = costs scaling slower than revenue → margin expansion</p>
+                    </div>
+                  </div>
                 </div>
               </div>
               );
@@ -2700,6 +2950,97 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 )}
               </div>
             </Card>
+
+            {/* ══ LOOP 23: Net Debt Paydown Timeline ══ */}
+            {(()=>{
+              const ltDebt=facts.long_term_debt, cash=facts.cash;
+              const netDebtVal=ltDebt!=null&&cash!=null?ltDebt-cash:null;
+              const ebitdaVal=facts.ebitda, fcfVal=facts.free_cash_flow;
+              if(netDebtVal==null||ebitdaVal==null||ebitdaVal<=0)return null;
+              const ndEbitda=netDebtVal/ebitdaVal;
+              const yrsToZero=fcfVal&&fcfVal>0&&netDebtVal>0?netDebtVal/fcfVal:null;
+              // EBITDA/Interest coverage history
+              const covHistory=asYears.map(y=>{
+                const ei=history.operating_income?.[y], ie=history.interest_expense?.[y];
+                const eb=history.ebitda?.[y];
+                return{year:y.slice(0,4),ebitCov:ei&&ie&&ie>0?ei/ie:null,ebitdaCov:eb&&ie&&ie>0?eb/ie:null};
+              });
+              const currentCov=covHistory[covHistory.length-1];
+              const covColor=currentCov.ebitdaCov!=null?currentCov.ebitdaCov>5?GREEN:currentCov.ebitdaCov>3?AMBER:RED:AMBER;
+              // Net Debt / EBITDA per year
+              const ndEbitdaHist=asYears.map(y=>{
+                const ld=history.long_term_debt?.[y]??0, ca=history.cash?.[y]??0, eb=history.ebitda?.[y];
+                return eb&&eb>0?(ld-ca)/eb:null;
+              });
+              return(
+              <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                  <div>
+                    <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Leverage & Debt Servicing Dashboard</p>
+                    <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Net Debt/EBITDA trend · EBITDA/Interest coverage · FCF-based paydown timeline</p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${ndEbitda<2?"16,185,129":ndEbitda<4?"245,158,11":"239,68,68"},0.15)`,color:ndEbitda<2?GREEN:ndEbitda<4?AMBER:RED,border:`1px solid ${ndEbitda<2?"rgba(16,185,129,0.3)":ndEbitda<4?"rgba(245,158,11,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                      ND/EBITDA {ndEbitda.toFixed(1)}x
+                    </span>
+                    {currentCov.ebitdaCov!=null&&<span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${currentCov.ebitdaCov>5?"16,185,129":currentCov.ebitdaCov>3?"245,158,11":"239,68,68"},0.15)`,color:covColor,border:`1px solid ${covColor}40`}}>
+                      COVERAGE {currentCov.ebitdaCov.toFixed(1)}x
+                    </span>}
+                  </div>
+                </div>
+                <div className="px-3 py-3">
+                  <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+                    {/* ND/EBITDA history */}
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-widest mb-1.5" style={{color:"#ffffff25"}}>Net Debt / EBITDA History</p>
+                      <BarChart
+                        data={asYears.map((y,i)=>({label:y.slice(0,4),value:ndEbitdaHist[i]??0,highlight:i===asYears.length-1}))}
+                        color={ndEbitda<2?GREEN:ndEbitda<4?AMBER:RED}
+                      />
+                      {/* Warning line at 4x */}
+                      <p className="text-[7px] mt-1" style={{color:ndEbitda>4?RED:"#ffffff20"}}>
+                        {ndEbitda>4?"⚠ Leverage >4x — credit risk threshold":ndEbitda>2?"Moderate leverage — monitor trajectory":"Low leverage — balance sheet strength"}
+                      </p>
+                    </div>
+                    {/* Coverage history */}
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-widest mb-1.5" style={{color:"#ffffff25"}}>EBITDA/Interest Coverage</p>
+                      <LineChart
+                        labels={covHistory.filter(c=>c.ebitdaCov!=null).map(c=>c.year)}
+                        series={[{name:"EBITDA/Int",values:covHistory.map(c=>c.ebitdaCov),color:TEAL}]}
+                      />
+                      <p className="text-[7px] mt-1" style={{color:currentCov.ebitdaCov!=null&&currentCov.ebitdaCov<3?RED:"#ffffff20"}}>
+                        {currentCov.ebitdaCov!=null&&currentCov.ebitdaCov<3?"⚠ Coverage <3x — tight debt service margin":currentCov.ebitdaCov!=null&&currentCov.ebitdaCov>7?"Strong coverage — well within covenants":"Coverage adequate — typical IG threshold is 3-4x"}
+                      </p>
+                    </div>
+                    {/* Paydown timeline */}
+                    <div>
+                      <p className="text-[7px] font-bold uppercase tracking-widest mb-1.5" style={{color:"#ffffff25"}}>FCF-Based Paydown Timeline</p>
+                      <div className="space-y-2">
+                        <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                          <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>Net Debt</p>
+                          <p className="text-[16px] font-bold tabular-nums" style={{color:netDebtVal>0?RED:GREEN}}>{netDebtVal>0?abbr(netDebtVal,"$"):`Net Cash ${abbr(Math.abs(netDebtVal),"$")}`}</p>
+                        </div>
+                        <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                          <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>Yrs to Debt-Free @ LTM FCF</p>
+                          <p className="text-[16px] font-bold tabular-nums" style={{color:yrsToZero!=null?yrsToZero<3?GREEN:yrsToZero<6?AMBER:RED:netDebtVal<=0?GREEN:AMBER}}>
+                            {netDebtVal<=0?"Net Cash":yrsToZero!=null?`${yrsToZero.toFixed(1)}Y`:"No FCF"}
+                          </p>
+                          {fcfVal&&fcfVal>0&&<p className="text-[7px] mt-0.5" style={{color:"#ffffff25"}}>at {abbr(fcfVal,"$")} LTM FCF</p>}
+                        </div>
+                        <div className="rounded p-2.5" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                          <p className="text-[7px] uppercase tracking-widest mb-1" style={{color:"#ffffff25"}}>ND / EBITDA Target Range</p>
+                          <p className="text-[11px] font-bold" style={{color:ndEbitda<2?GREEN:ndEbitda<3?AMBER:RED}}>
+                            {ndEbitda<2?"0–2x (investment grade)":ndEbitda<3?"2–3x (BB territory)":ndEbitda<4?"3–4x (speculative)":">4x (distressed)"}
+                          </p>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              );
+            })()}
           </div>
         )}
 
@@ -4547,6 +4888,57 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                   );
                 })()}
               </Card>
+
+              {/* ══ LOOP 23: Segment Growth Rate Scorecard ══ */}
+              {segmentHistory.length>=2&&(()=>{
+                const sorted=[...segmentHistory].sort((a,b)=>a.date.localeCompare(b.date));
+                const latest=sorted[sorted.length-1];
+                const prior=sorted[sorted.length-2];
+                const segs=Object.keys(latest.data).filter(k=>latest.data[k]>0);
+                if(!segs.length)return null;
+                const totalLatest=segs.reduce((s,k)=>s+(latest.data[k]??0),0);
+                type SegRow={seg:string;cur:number;prv:number|null;growth:number|null;share:number};
+                const segRows:SegRow[]=segs.map(seg=>({
+                  seg,cur:latest.data[seg]??0,prv:prior.data[seg]??null,
+                  growth:prior.data[seg]&&prior.data[seg]>0?(latest.data[seg]-prior.data[seg])/prior.data[seg]*100:null,
+                  share:totalLatest>0?(latest.data[seg]??0)/totalLatest*100:0,
+                })).sort((a,b)=>b.cur-a.cur);
+                const growingSegs=segRows.filter(r=>(r.growth??0)>5).length;
+                return(
+                <div className="col-span-2 lg:col-span-3 rounded-lg overflow-hidden border" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+                  <div className="px-3 py-2 border-b flex items-center justify-between" style={{borderColor:DARK_BORDER}}>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>Segment Growth Rate Scorecard</p>
+                      <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff20"}}>Revenue by segment · YoY growth · Mix shift analysis · {latest.date.slice(0,7)} vs {prior.date.slice(0,7)}</p>
+                    </div>
+                    <span className="text-[7px] px-1.5 py-0.5 rounded font-bold" style={{background:`rgba(${growingSegs>=segRows.length/2?"16,185,129":"239,68,68"},0.15)`,color:growingSegs>=segRows.length/2?GREEN:RED,border:`1px solid ${growingSegs>=segRows.length/2?"rgba(16,185,129,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                      {growingSegs}/{segRows.length} SEGS GROWING
+                    </span>
+                  </div>
+                  <div className="px-3 py-2">
+                    <div className="space-y-2">
+                      {segRows.map((r,i)=>{
+                        const gCol=(r.growth??0)>10?GREEN:(r.growth??0)>0?TEAL:(r.growth??0)>-5?AMBER:RED;
+                        return(
+                          <div key={i}>
+                            <div className="flex items-center gap-3 mb-0.5">
+                              <span className="text-[8px] font-bold" style={{color:"#ffffff60",minWidth:0,flex:1,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>{r.seg.length>35?r.seg.slice(0,35)+"…":r.seg}</span>
+                              <span className="text-[7.5px] font-bold tabular-nums shrink-0" style={{color:gCol}}>{r.growth!=null?(r.growth>0?"+":"")+r.growth.toFixed(1)+"%":"—"}</span>
+                              <span className="text-[7.5px] tabular-nums shrink-0" style={{color:"#ffffff35",width:44,textAlign:"right"}}>{abbr(r.cur,"$")}</span>
+                              <span className="text-[7px] tabular-nums shrink-0" style={{color:"#ffffff25",width:32,textAlign:"right"}}>{r.share.toFixed(1)}%</span>
+                            </div>
+                            <div className="h-1 rounded overflow-hidden" style={{background:"rgba(255,255,255,0.05)"}}>
+                              <div style={{width:`${Math.min(100,r.share)}%`,height:"100%",background:PALETTE[i%PALETTE.length],opacity:0.65}}/>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                    <p className="text-[7px] mt-2" style={{color:"#ffffff15"}}>Mix shift: watch if high-margin segments are gaining or losing share vs lower-margin segments — this drives gross margin direction</p>
+                  </div>
+                </div>
+                );
+              })()}
 
             </div>
           </div>
