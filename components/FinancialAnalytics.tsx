@@ -2423,6 +2423,64 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
                 ]}
               />
             </Card>
+            {/* Goodwill & Intangibles Analysis */}
+            {(facts.goodwill||facts.intangibles)&&facts.total_assets&&(()=>{
+              const gw=facts.goodwill??0, intg=facts.intangibles??0, ta=facts.total_assets;
+              const gwPct=gw/ta*100, intgPct=intg/ta*100, totalIntPct=(gw+intg)/ta*100;
+              const tangibleBV=(facts.equity??0)-gw-intg;
+              const gwHistory=asYears.map(y=>({label:y.slice(0,4),value:history.goodwill?.[y]??0}));
+              return(
+              <Card title="Goodwill & Intangibles" sub="Acquisition-driven asset inflation — impairment risk" badge={totalIntPct>40?"HIGH INTANGIBLES":"INTANGIBLES"}>
+                <div className="py-1 space-y-3">
+                  <div className="grid grid-cols-3 gap-2">
+                    <div className="rounded p-2 text-center" style={{background:"rgba(239,68,68,0.06)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Goodwill / TA</p>
+                      <p className="text-[14px] font-bold" style={{color:gwPct>30?RED:gwPct>15?AMBER:GREEN}}>{gwPct.toFixed(1)}%</p>
+                      <p className="text-[7px]" style={{color:"#ffffff20"}}>{abbr(gw,"$")}</p>
+                    </div>
+                    <div className="rounded p-2 text-center" style={{background:"rgba(167,139,250,0.06)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Intangibles / TA</p>
+                      <p className="text-[14px] font-bold" style={{color:intgPct>20?RED:intgPct>10?AMBER:GREEN}}>{intgPct.toFixed(1)}%</p>
+                      <p className="text-[7px]" style={{color:"#ffffff20"}}>{abbr(intg,"$")}</p>
+                    </div>
+                    <div className="rounded p-2 text-center" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${DARK_BORDER}`}}>
+                      <p className="text-[7px] uppercase tracking-widest" style={{color:"#ffffff25"}}>Tangible BV</p>
+                      <p className="text-[14px] font-bold" style={{color:tangibleBV<0?RED:GREEN}}>{abbr(tangibleBV,"$")}</p>
+                      <p className="text-[7px]" style={{color:"#ffffff20"}}>{tangibleBV<0?"Negative":"Equity − Intangibles"}</p>
+                    </div>
+                  </div>
+                  {gwHistory.some(d=>d.value>0)&&<BarChart data={gwHistory} color={RED}/>}
+                  {totalIntPct>40&&<p className="text-[7.5px] mt-1" style={{color:RED}}>⚠ High intangible intensity ({totalIntPct.toFixed(0)}% of assets) — acquisitions create impairment risk; monitor for goodwill write-downs</p>}
+                  {totalIntPct<10&&<p className="text-[7.5px] mt-1" style={{color:GREEN}}>Low intangible intensity ({totalIntPct.toFixed(0)}% of assets) — predominantly tangible asset base</p>}
+                </div>
+              </Card>
+              );
+            })()}
+
+            {/* Quick Ratio */}
+            {facts.current_assets&&facts.inventory&&facts.current_liabilities&&(()=>{
+              const quickAssets=(facts.current_assets-(facts.inventory??0));
+              const qr=quickAssets/facts.current_liabilities;
+              const qrHistory=asYears.map(y=>{
+                const ca=history.current_assets?.[y], inv=history.inventory?.[y]??0, cl=history.current_liabilities?.[y];
+                return{label:y.slice(0,4),value:ca&&cl&&cl>0?(ca-inv)/cl:null};
+              });
+              return(
+              <Card title="Quick Ratio (Acid Test)" sub="(Current Assets − Inventory) / Current Liabilities — stringent liquidity" badge={qr>=1?"LIQUID":qr>=0.7?"CAUTION":"TIGHT"}>
+                <div className="mb-2">
+                  <div className="flex items-center gap-3 mb-2">
+                    <p className="text-[32px] font-bold tabular-nums" style={{color:qr>=1.5?GREEN:qr>=1?TEAL:qr>=0.7?AMBER:RED}}>{qr.toFixed(2)}x</p>
+                    <div>
+                      <p className="text-[8px]" style={{color:qr>=1?GREEN:qr>=0.7?AMBER:RED}}>{qr>=1.5?"Strong liquidity — well-buffered":qr>=1?"Adequate liquidity":qr>=0.7?"Watch closely — limited quick liquidity":"Critical — may need external funding"}</p>
+                      <p className="text-[7px] mt-0.5" style={{color:"#ffffff20"}}>{">1x = safe · <0.7x = concern"}</p>
+                    </div>
+                  </div>
+                  <LineChart labels={qrHistory.map(d=>d.label)} series={[{name:"Quick Ratio",values:qrHistory.map(d=>d.value),color:TEAL}]}/>
+                </div>
+              </Card>
+              );
+            })()}
+
             {/* ══ LOOP 12: WC multi-year trend ══ */}
             <Card title="Cash Conversion Cycle Trend" sub="DSO · DIO · DPO over time — working capital velocity" badge="WC TREND">
               {wcTrend.some(w=>w.ccc!=null)?(
@@ -3020,6 +3078,58 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
         {/* ── Signals & Scores ──────────────────────────────────── */}
         {tab==="signals"&&(
           <div className="space-y-4">
+
+            {/* ══ Pre-Earnings Checklist (shown when earnings ≤30d away) ══ */}
+            {facts.next_earnings_ts&&(()=>{
+              const daysAway=Math.ceil((facts.next_earnings_ts*1000-Date.now())/(864e5));
+              if(daysAway<=0||daysAway>30) return null;
+              const fwdEst=analystEstimates.length>0?[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date))[0]:null;
+              const lastSurp=earningsSurprises.length>0?earningsSurprises[0]:null;
+              const revSorted=[...analystEstimates].sort((a,b)=>a.date.localeCompare(b.date));
+              const estRevDir=revSorted.length>=2&&revSorted[revSorted.length-1].eps_avg!=null&&revSorted[revSorted.length-2].eps_avg!=null
+                ?(revSorted[revSorted.length-1].eps_avg!>revSorted[revSorted.length-2].eps_avg!?"RAISED ▲":"LOWERED ▼"):"STABLE →";
+              const checklist=[
+                {label:"Consensus EPS Est.",value:fwdEst?.eps_avg!=null?`$${fwdEst.eps_avg.toFixed(2)}`:lastSurp?.eps_est!=null?`$${lastSurp.eps_est.toFixed(2)} (last Q est)`:"—",ok:true},
+                {label:"Consensus Rev Est.",value:fwdEst?.rev_avg!=null?abbr(fwdEst.rev_avg,"$"):"—",ok:true},
+                {label:"Estimate Revision",value:estRevDir,ok:estRevDir.includes("▲")},
+                {label:"Beat Rate (8Q)",value:earningsStreak.total>0?`${earningsStreak.beats}/${earningsStreak.total} (${(earningsStreak.beats/earningsStreak.total*100).toFixed(0)}%)` :"—",ok:earningsStreak.total>0&&earningsStreak.beats/earningsStreak.total>=0.75},
+                {label:"Avg Beat Magnitude",value:earningsStreak.avgBeatMag!=null?`+${earningsStreak.avgBeatMag.toFixed(1)}%`:"—",ok:earningsStreak.avgBeatMag!=null&&earningsStreak.avgBeatMag>2},
+                {label:"Last Quarter Surprise",value:lastSurp?.surprise_pct!=null?`${lastSurp.surprise_pct>0?"+":""}${lastSurp.surprise_pct.toFixed(1)}% (${lastSurp.date?.slice(0,7)})` :"—",ok:(lastSurp?.surprise_pct??0)>0},
+                {label:"Consecutive Beats",value:earningsStreak.streak>0?`${earningsStreak.streak}× in a row`:"0×",ok:earningsStreak.streak>=3},
+                {label:"Price vs 52W High",value:facts.week52_high&&facts.stock_price?`${((facts.stock_price/facts.week52_high-1)*100).toFixed(1)}% from high`:"—",ok:facts.stock_price&&facts.week52_high&&facts.stock_price>facts.week52_high*0.9},
+                {label:"Short Interest",value:facts.short_float_pct!=null?`${facts.short_float_pct.toFixed(1)}% of float`:"—",ok:facts.short_float_pct!=null&&facts.short_float_pct<10},
+                {label:"Analyst PT Upside",value:facts.pt_consensus&&facts.stock_price?`${((facts.pt_consensus/facts.stock_price-1)*100).toFixed(1)}% (${abbr(facts.pt_consensus,"$")} PT)` :"—",ok:facts.pt_consensus!=null&&facts.stock_price!=null&&facts.pt_consensus>facts.stock_price},
+              ];
+              const bullCount=checklist.filter(c=>c.ok).length;
+              return(
+              <div className="rounded-lg overflow-hidden border-2" style={{background:"rgba(245,158,11,0.05)",borderColor:"rgba(245,158,11,0.4)"}}>
+                <div className="px-4 py-3 border-b flex items-center justify-between" style={{borderColor:"rgba(245,158,11,0.3)",background:"rgba(245,158,11,0.08)"}}>
+                  <div className="flex items-center gap-3">
+                    <span className="text-[11px] font-black tracking-widest" style={{color:AMBER}}>⚡ EARNINGS IN {daysAway}D</span>
+                    <span className="text-[8px]" style={{color:"rgba(245,158,11,0.6)"}}>·</span>
+                    <span className="text-[8.5px] font-bold" style={{color:"rgba(245,158,11,0.7)"}}>{companyName} ({ticker}) Pre-Earnings Checklist</span>
+                  </div>
+                  <span className="text-[7px] px-2 py-0.5 rounded font-bold" style={{background:`rgba(${bullCount>=7?"16,185,129":bullCount>=5?"245,158,11":"239,68,68"},0.15)`,color:bullCount>=7?GREEN:bullCount>=5?AMBER:RED,border:`1px solid ${bullCount>=7?"rgba(16,185,129,0.3)":bullCount>=5?"rgba(245,158,11,0.3)":"rgba(239,68,68,0.3)"}`}}>
+                    {bullCount}/{checklist.length} SIGNALS POSITIVE
+                  </span>
+                </div>
+                <div className="px-4 py-3 grid grid-cols-2 lg:grid-cols-5 gap-2">
+                  {checklist.map((c,i)=>(
+                    <div key={i} className="rounded p-2" style={{background:"rgba(255,255,255,0.03)",border:`1px solid ${c.ok?"rgba(16,185,129,0.15)":"rgba(255,255,255,0.06)"}`}}>
+                      <p className="text-[6.5px] font-bold uppercase tracking-wider mb-1" style={{color:"#ffffff25"}}>{c.label}</p>
+                      <div className="flex items-center gap-1">
+                        <span style={{color:c.ok?GREEN:RED,fontSize:8}}>{c.ok?"✓":"✗"}</span>
+                        <p className="text-[8.5px] font-bold tabular-nums" style={{color:c.ok?GREEN:RED}}>{c.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+                <div className="px-4 py-2 border-t text-[7.5px]" style={{borderColor:"rgba(245,158,11,0.2)",color:"rgba(245,158,11,0.5)"}}>
+                  Pre-earnings checklist · Beat rate, estimate revision, short interest, PT upside — auto-generated from live data
+                </div>
+              </div>
+              );
+            })()}
 
             {/* ══ LOOP 20: Financial Health Tripwires ══ */}
             {(()=>{
