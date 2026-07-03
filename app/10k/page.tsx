@@ -2366,6 +2366,7 @@ export default function TenKPage() {
                         content={primerText}
                         history={data.history ?? {}}
                         facts={data.xbrl_facts}
+                        sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
                       />
                     </div>
                   </div>

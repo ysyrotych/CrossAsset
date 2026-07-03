@@ -182,6 +182,197 @@ export async function POST(req: NextRequest) {
   const epsBeats = epsSurprises.filter((e:any) => (e.surprise_pct ?? 0) > 0).length;
   const epsTotal = epsSurprises.length;
 
+  // ── Advanced computed metrics ──────────────────────────────────────────────
+
+  const roicWaccStr = (() => {
+    const rows: string[] = [];
+    let sumSpread = 0, count = 0;
+    for (const yr of revYears) {
+      const oi  = history.operating_income?.[yr];
+      const ta  = history.total_assets?.[yr];
+      const cl  = history.current_liabilities?.[yr];
+      const ca  = history.cash?.[yr];
+      if (!oi || !ta) continue;
+      const nopat = oi * (1 - 0.21);
+      const ic = ta - (cl ?? 0) - (ca ?? 0);
+      if (!ic || ic <= 0) continue;
+      const roicVal = (nopat / ic) * 100;
+      const spread  = roicVal - 9;
+      sumSpread += spread; count++;
+      rows.push(`FY${yr.slice(0,4)}: ROIC ${roicVal.toFixed(1)}% | Spread ${spread >= 0 ? "+" : ""}${spread.toFixed(1)}pp (${spread >= 0 ? "VALUE CREATION" : "VALUE DESTRUCTION"})`);
+    }
+    const avgSpread = count > 0 ? sumSpread / count : null;
+    if (rows.length === 0) return "Insufficient data";
+    return rows.join("\n") + (avgSpread != null ? `\nAverage Spread: ${avgSpread >= 0 ? "+" : ""}${avgSpread.toFixed(1)}pp` : "");
+  })();
+
+  const wcStr = (() => {
+    const ar  = f.accounts_receivable;
+    const inv = f.inventory;
+    const ap  = f.accounts_payable;
+    const rev = f.revenue;
+    const cogs = f.revenue && f.gross_profit ? f.revenue - f.gross_profit : null;
+    const dso = ar && rev ? ar / rev * 365 : null;
+    const dio = inv && cogs ? inv / cogs * 365 : null;
+    const dpo = ap && cogs ? ap / cogs * 365 : null;
+    const ccc = dso != null && dio != null && dpo != null ? dso + dio - dpo : null;
+    return `DSO: ${dso != null ? dso.toFixed(0)+"d" : "N/A"} | DIO: ${dio != null ? dio.toFixed(0)+"d" : "N/A"} | DPO: ${dpo != null ? dpo.toFixed(0)+"d" : "N/A"} | CCC: ${ccc != null ? ccc.toFixed(0)+"d" : "N/A"}`;
+  })();
+
+  const earningsQualityStr = (() => {
+    const ni = f.net_income, ocf = f.operating_cf, ta = f.total_assets;
+    const shares = f.shares_diluted_wtd;
+    const accrual = ni != null && ocf != null && ta ? ((ni - ocf) / ta * 100) : null;
+    const cashEps = ocf && shares ? ocf / shares : null;
+    const repEps  = f.eps_diluted;
+    const gap = cashEps && repEps ? (cashEps - repEps) / Math.abs(repEps) * 100 : null;
+    const quality = accrual != null ? (Math.abs(accrual) < 2 ? "HIGH QUALITY" : Math.abs(accrual) < 5 ? "MODERATE" : "ELEVATED ACCRUALS") : "";
+    return [
+      `Accrual Ratio: ${accrual != null ? (accrual >= 0 ? "+" : "") + accrual.toFixed(1) + "% of assets" : "N/A"} ${quality}`,
+      `Cash EPS: ${cashEps != null ? "$"+cashEps.toFixed(2) : "N/A"} vs Reported EPS: ${repEps != null ? "$"+repEps.toFixed(2) : "N/A"}${gap != null ? ` (gap: ${gap >= 0 ? "+" : ""}${gap.toFixed(1)}%)` : ""}`,
+    ].join("\n");
+  })();
+
+  const dolStr = (() => {
+    const sortedYrs = [...revYears].sort();
+    const rows: string[] = [];
+    for (let i = 1; i < sortedYrs.length; i++) {
+      const cy = sortedYrs[i], py = sortedYrs[i-1];
+      const cr = history.revenue?.[cy], pr = history.revenue?.[py];
+      const co = history.operating_income?.[cy], po = history.operating_income?.[py];
+      if (!cr || !pr || !co || !po || pr === 0 || po === 0) continue;
+      const dRev = (cr - pr) / Math.abs(pr) * 100;
+      const dOI  = (co - po) / Math.abs(po) * 100;
+      if (Math.abs(dRev) < 0.1) continue;
+      const dol  = dOI / dRev;
+      const incM = cr - pr !== 0 ? (co - po) / (cr - pr) * 100 : null;
+      rows.push(`FY${cy.slice(0,4)}: DOL ${dol.toFixed(1)}x | Rev ${dRev >= 0 ? "+" : ""}${dRev.toFixed(1)}% → OI ${dOI >= 0 ? "+" : ""}${dOI.toFixed(1)}%${incM != null ? ` | Incr. EBIT Margin: ${incM.toFixed(1)}%` : ""}`);
+    }
+    return rows.length > 0 ? rows.slice(-3).join("\n") : "Insufficient data";
+  })();
+
+  const marginBridgeStr = (() => {
+    const sortedYrs = [...revYears].sort();
+    if (sortedYrs.length < 2) return "Insufficient data";
+    const cy = sortedYrs[sortedYrs.length - 1];
+    const py = sortedYrs[sortedYrs.length - 2];
+    const cr = history.revenue?.[cy], pr = history.revenue?.[py];
+    if (!cr || !pr) return "N/A";
+    const gmEff  = history.gross_profit?.[cy] && history.gross_profit?.[py] ? ((history.gross_profit[cy]!/cr - history.gross_profit[py]!/pr) * 100) : null;
+    const sgaEff = history.sga_expense?.[cy] && history.sga_expense?.[py] ? ((history.sga_expense[py]!/pr - history.sga_expense[cy]!/cr) * 100) : null;
+    const rdEff  = history.rd_expense?.[cy] && history.rd_expense?.[py] ? ((history.rd_expense[py]!/pr - history.rd_expense[cy]!/cr) * 100) : null;
+    const oiEff  = history.operating_income?.[cy] && history.operating_income?.[py] ? ((history.operating_income[cy]!/cr - history.operating_income[py]!/pr) * 100) : null;
+    const parts: string[] = [`FY${py.slice(0,4)}→FY${cy.slice(0,4)}:`];
+    if (gmEff  != null) parts.push(`GM effect ${gmEff  >= 0 ? "+" : ""}${gmEff.toFixed(1)}pp`);
+    if (sgaEff != null) parts.push(`SGA leverage ${sgaEff >= 0 ? "+" : ""}${sgaEff.toFixed(1)}pp`);
+    if (rdEff  != null) parts.push(`R&D effect ${rdEff >= 0 ? "+" : ""}${rdEff.toFixed(1)}pp`);
+    if (oiEff  != null) parts.push(`= Total op. margin ${oiEff >= 0 ? "+" : ""}${oiEff.toFixed(1)}pp`);
+    return parts.join(" | ");
+  })();
+
+  const fcfYieldVsRfStr = (() => {
+    const fcv = f.free_cash_flow, mc = f.market_cap;
+    if (!fcv || !mc || mc === 0) return "N/A";
+    const yld = fcv / mc * 100;
+    const erp = yld - 3.5;
+    return `FCF Yield: ${yld.toFixed(1)}% vs 3.5% Risk-Free → Equity Risk Premium: ${erp >= 0 ? "+" : ""}${erp.toFixed(1)}pp (${erp > 3 ? "ATTRACTIVE" : erp > 0 ? "FAIR VALUE" : "EXPENSIVE vs RISK-FREE"})`;
+  })();
+
+  const beatAnalysisStr = (() => {
+    const surp = (ext.earnings_surprises as any[]) ?? [];
+    if (surp.length === 0) return "N/A";
+    const sorted2 = [...surp].sort((a,b) => (a.date ?? "").localeCompare(b.date ?? ""));
+    const beats2  = sorted2.filter((e:any) => (e.surprise_pct ?? 0) > 0);
+    const beatRate2 = beats2.length / sorted2.length * 100;
+    const avgMag2   = beats2.length > 0 ? beats2.reduce((s:number,e:any) => s + (e.surprise_pct ?? 0), 0) / beats2.length : 0;
+    const mid2 = Math.floor(sorted2.length / 2);
+    const firstAvg2  = sorted2.slice(0, mid2).reduce((s:number,e:any) => s + (e.surprise_pct ?? 0), 0) / Math.max(mid2, 1);
+    const secondAvg2 = sorted2.slice(mid2).reduce((s:number,e:any) => s + (e.surprise_pct ?? 0), 0) / Math.max(sorted2.length - mid2, 1);
+    const trend2 = secondAvg2 > firstAvg2 + 1 ? "EXPANDING" : secondAvg2 < firstAvg2 - 1 ? "SHRINKING" : "STABLE";
+    const rev3 = [...sorted2].reverse();
+    const lastDir2 = (rev3[0]?.surprise_pct ?? 0) > 0 ? "beat" : "miss";
+    let streak2 = 0;
+    for (const e of rev3) { if (lastDir2 === "beat" && (e.surprise_pct ?? 0) > 0) streak2++; else if (lastDir2 === "miss" && (e.surprise_pct ?? 0) <= 0) streak2++; else break; }
+    return `Beat Rate: ${beats2.length}/${sorted2.length} (${beatRate2.toFixed(0)}%) | Avg Magnitude: +${avgMag2.toFixed(1)}% | ${streak2}-quarter ${lastDir2} streak | Trend: ${trend2} (early avg ${firstAvg2.toFixed(1)}% → recent avg ${secondAvg2.toFixed(1)}%)`;
+  })();
+
+  const piotroskiStr = (() => {
+    const sortedYrs3 = [...revYears].sort();
+    if (sortedYrs3.length < 2) return "Insufficient data";
+    const cy = sortedYrs3[sortedYrs3.length - 1];
+    const py = sortedYrs3[sortedYrs3.length - 2];
+    let score = 0; const factors: string[] = [];
+    const curTA3 = history.total_assets?.[cy], prvTA3 = history.total_assets?.[py];
+    const curNI3 = history.net_income?.[cy],   prvNI3 = history.net_income?.[py];
+    const curOCF3 = history.operating_cf?.[cy];
+    const curRev3 = history.revenue?.[cy],    prvRev3 = history.revenue?.[py];
+    const curGP3 = history.gross_profit?.[cy], prvGP3 = history.gross_profit?.[py];
+    const curLTD3 = history.long_term_debt?.[cy], prvLTD3 = history.long_term_debt?.[py];
+    const curCA3 = history.current_assets?.[cy],  prvCA3 = history.current_assets?.[py];
+    const curCL3 = history.current_liabilities?.[cy], prvCL3 = history.current_liabilities?.[py];
+    if (curNI3 != null && curTA3 && curTA3 > 0) { curNI3/curTA3 > 0 ? (score++, factors.push("ROA+ ✓")) : factors.push("ROA+ ✗"); }
+    if (curOCF3 != null) { curOCF3 > 0 ? (score++, factors.push("OCF+ ✓")) : factors.push("OCF+ ✗"); }
+    if (curNI3 != null && curTA3 && prvNI3 != null && prvTA3) { curNI3/curTA3 > prvNI3/prvTA3 ? (score++, factors.push("ΔROA+ ✓")) : factors.push("ΔROA+ ✗"); }
+    if (curOCF3 != null && curNI3 && curNI3 > 0) { curOCF3/curNI3 > 1 ? (score++, factors.push("OCF>NI ✓")) : factors.push("OCF>NI ✗"); }
+    if (curLTD3 != null && prvLTD3 != null && curTA3 && prvTA3) { curLTD3/curTA3 < prvLTD3/prvTA3 ? (score++, factors.push("Lev↓ ✓")) : factors.push("Lev↓ ✗"); }
+    if (curCA3 != null && curCL3 && prvCA3 != null && prvCL3) { curCA3/curCL3 > prvCA3/prvCL3 ? (score++, factors.push("CurrRatio↑ ✓")) : factors.push("CurrRatio↑ ✗"); }
+    if (curGP3 != null && curRev3 && prvGP3 != null && prvRev3) { curGP3/curRev3 > prvGP3/prvRev3 ? (score++, factors.push("GrossM↑ ✓")) : factors.push("GrossM↑ ✗"); }
+    if (curRev3 != null && curTA3 && prvRev3 != null && prvTA3) { curRev3/curTA3 > prvRev3/prvTA3 ? (score++, factors.push("AssetTurn↑ ✓")) : factors.push("AssetTurn↑ ✗"); }
+    const label3 = score >= 7 ? "STRONG" : score >= 5 ? "MODERATE" : score >= 3 ? "WEAK" : "DISTRESSED SIGNALS";
+    return `Score: ${score}/8 (${label3}) | ${factors.join(", ")}`;
+  })();
+
+  const seasonalityStr = (() => {
+    const qt3 = (ext.quarterly_trends as any[]) ?? [];
+    if (qt3.length < 4) return "N/A";
+    const byQ2: Record<string, number[]> = { Q1: [], Q2: [], Q3: [], Q4: [] };
+    for (const q of qt3) {
+      const month3 = parseInt((q.date ?? "").slice(5,7) || "0");
+      const qL = month3 <= 3 ? "Q1" : month3 <= 6 ? "Q2" : month3 <= 9 ? "Q3" : "Q4";
+      if (q.revenue != null) byQ2[qL].push(q.revenue);
+    }
+    const avgQ2: Record<string, number | null> = {};
+    for (const [q, vals] of Object.entries(byQ2)) avgQ2[q] = vals.length > 0 ? vals.reduce((s,v) => s+v,0)/vals.length : null;
+    const validQ2 = Object.entries(avgQ2).filter(([,v]) => v != null) as [string,number][];
+    if (validQ2.length === 0) return "N/A";
+    validQ2.sort(([,a],[,b]) => b-a);
+    const fs = (v: number) => Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+    return `Peak: ${validQ2[0][0]} (avg ${fs(validQ2[0][1])}) | Trough: ${validQ2[validQ2.length-1][0]} (avg ${fs(validQ2[validQ2.length-1][1])})\n` +
+      ["Q1","Q2","Q3","Q4"].map(q => avgQ2[q] != null ? `${q}: ${fs(avgQ2[q]!)}` : `${q}: N/A`).join(" | ");
+  })();
+
+  const debtPaydownStr = (() => {
+    const fcv2 = f.free_cash_flow;
+    if (netDebt == null || fcv2 == null) return "N/A";
+    if (netDebt <= 0) return `Net Cash Position: ${fmt(Math.abs(netDebt))} — balance sheet fortress`;
+    if (fcv2 <= 0) return `Net Debt: ${fmt(netDebt)} — negative FCF, leverage rising`;
+    const yrs = netDebt / fcv2;
+    return `Net Debt: ${fmt(netDebt)} | FCF: ${fmt(fcv2)}/yr → Full paydown in ${yrs.toFixed(1)} years${yrs < 2 ? " (AGGRESSIVE)" : yrs < 4 ? " (MANAGEABLE)" : " (ELEVATED)"}`;
+  })();
+
+  const rule40Str = (() => {
+    const rg = f.revenue_growth_yoy;
+    const fm = f.free_cash_flow && f.revenue ? f.free_cash_flow / f.revenue * 100 : null;
+    if (rg == null && fm == null) return "N/A";
+    const r40 = (rg ?? 0) + (fm ?? 0);
+    return `Rule of 40: ${(rg ?? 0).toFixed(1)}% + ${(fm ?? 0).toFixed(1)}% FCF margin = ${r40.toFixed(1)}${r40 >= 40 ? " ✓ (ELITE)" : r40 >= 30 ? " (APPROACHING)" : " ✗ (BELOW 40)"}`;
+  })();
+
+  const sectorCtxStr = (() => {
+    const s = (ext.sector ?? "").toLowerCase();
+    if (s.includes("tech") || s.includes("software") || s.includes("semi"))
+      return `Technology sector frame. Key metrics: R&D% of revenue (${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"}), SBC dilution (${sbcPct ? pct(sbcPct) : "N/A"}), ${rule40Str}. Use ARR/NRR/churn vocabulary. Emphasize durable revenue quality over near-term EPS.`;
+    if (s.includes("health") || s.includes("pharma") || s.includes("bio"))
+      return `Healthcare sector frame. Key metrics: gross margin vs peers (${pct(f.gross_margin_pct)}), R&D pipeline economics (R&D ${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev), regulatory/reimbursement risk. Use clinical stage/approval/net pricing vocabulary.`;
+    if (s.includes("consumer") || s.includes("retail"))
+      return `Consumer sector frame. Key metrics: same-store sales equivalent, gross margin (${pct(f.gross_margin_pct)}), SGA leverage (${f.sga_expense && f.revenue ? (f.sga_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev). Use comp/traffic/ticket/loyalty vocabulary.`;
+    if (s.includes("financ") || s.includes("bank") || s.includes("insur"))
+      return `Financial sector frame. Key metrics: ROE vs cost of equity (ROE: ${roe != null ? pct(roe) : "N/A"}), credit quality, fee income diversification. Use NIM/credit loss/capital ratio vocabulary.`;
+    if (s.includes("energy") || s.includes("oil") || s.includes("gas"))
+      return `Energy sector frame. Key metrics: reserve replacement, cash breakeven, capex intensity (${capexPct ? pct(capexPct) : "N/A"} of rev). Analyze FCF at multiple commodity price scenarios. Use reserves/production/breakeven/NAV vocabulary.`;
+    return `Cross-sector frame. Focus on ROIC vs cost of capital (ROIC: ${f.roic != null ? pct(f.roic) : "N/A"} vs WACC ~9%), FCF conversion quality (OCF/NI: ${ocfNiRatio ? ocfNiRatio.toFixed(2)+"x" : "N/A"}), and capital allocation discipline.`;
+  })();
+
   const prompt = `You are a senior equity research analyst at Edgewood Management, an elite institutional asset manager. You are writing an institutional-grade company primer for ${companyName} (${ticker}). This document will be read by portfolio managers, CIOs, and institutional investors. It must match Goldman Sachs / Morgan Stanley research quality.
 
 ═══════════════════════════════════════════════════════════════
@@ -324,8 +515,59 @@ ${risksText}
 ${mdaText}
 
 ═══════════════════════════════════════════════════════════════
+COMPUTED ADVANCED METRICS (incorporate these directly in analysis)
+═══════════════════════════════════════════════════════════════
+
+ROIC vs WACC (9% assumed) — 5-Year History:
+${roicWaccStr}
+
+WORKING CAPITAL EFFICIENCY:
+${wcStr}
+
+EARNINGS QUALITY:
+${earningsQualityStr}
+
+DEGREE OF OPERATING LEVERAGE:
+${dolStr}
+
+MARGIN BRIDGE (latest YoY):
+${marginBridgeStr}
+
+FCF YIELD vs RISK-FREE (3.5%):
+${fcfYieldVsRfStr}
+
+EPS BEAT ANALYSIS:
+${beatAnalysisStr}
+
+PIOTROSKI F-SCORE:
+${piotroskiStr}
+
+REVENUE SEASONALITY:
+${seasonalityStr}
+
+NET DEBT PAYDOWN:
+${debtPaydownStr}
+
+═══════════════════════════════════════════════════════════════
+SECTOR-SPECIFIC CONTEXT: ${ext.sector ?? industry}
+═══════════════════════════════════════════════════════════════
+${sectorCtxStr}
+
+═══════════════════════════════════════════════════════════════
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
+
+CRITICAL WRITING RULES — NON-NEGOTIABLE:
+1. NEVER open any paragraph with "The company" — use the actual company name or a specific descriptor (e.g. "Duolingo's core language app", "${companyName}'s subscription tier")
+2. USE specific product/segment names from the data — reference actual segment names, geographies, and KPIs by name, not "the premium segment" or "the main product"
+3. OPEN the Executive Summary with a one-sentence hook about what makes ${companyName} uniquely compelling or uniquely risky RIGHT NOW — not a definition of what they do
+4. EVERY valuation claim must show the arithmetic: not "trades at a premium" but "P/E of ${f.pe_ratio != null ? f.pe_ratio.toFixed(0) : "?"}x vs sector median — X% premium"
+5. SCENARIOS must include explicit price math: "Base case: $[X] = [EBITDA × multiple] + net cash ÷ shares"
+6. SECTOR FRAME: Write with the vocabulary and metrics that ${ext.sector ?? industry} analysts actually use — use the sector-specific context provided above
+7. TONE by section: Executive Summary = punchy and decisive; Financial Analysis = precise and technical; Risks = direct and unhedged
+8. BANNED PHRASES — never use: "it is worth noting", "importantly", "as mentioned", "going forward", "in conclusion", "significant" without a number, "notable"
+9. USE the Piotroski score, ROIC-WACC spread, earnings beat trend, and FCF yield vs risk-free in your analysis — they appear in the Computed Metrics section above
+10. The KEY METRICS DASHBOARD must reflect the sector frame — for tech, include Rule of 40 and SBC dilution; for consumer, include gross margin and SGA%; for banks, include ROE and credit quality
 
 Write a complete institutional equity research primer using EXACTLY these section headers (## for main sections, ### for subsections). DO NOT add any text before "## EXECUTIVE SUMMARY".
 
@@ -333,7 +575,9 @@ Write a complete institutional equity research primer using EXACTLY these sectio
 Write 6-8 bullet points (• prefix). Cover: (1) what the company does and why it matters, (2) the core investment question right now, (3) the most compelling financial characteristic with exact numbers, (4) the growth trajectory in concrete numbers, (5) key valuation context vs peers, (6) the single biggest risk that could derail the thesis, (7) the bottom line verdict for a long-term institutional investor.
 
 ## COMPANY SNAPSHOT
-Pipe-delimited table:
+Pipe-delimited table. FIRST ROW must be:
+Investment Frame | [One crisp sentence: the single most important question an investor must answer to own this stock]
+Then continue with:
 Ticker | ${ticker}
 Exchange | [exchange]
 Sector | [sector]
@@ -461,7 +705,7 @@ RULES:
 - Every claim must be grounded in the data provided. Never fabricate numbers.
 - Be institutional: direct, no hedging, no "it is worth noting," no preamble
 - Use exact figures throughout — no vague language like "significant" without a number
-- Target 3,500-4,000 words total
+- Target 4,500-5,000 words total
 - Do NOT add any text before "## EXECUTIVE SUMMARY"
 - When transcript data is "Not available", synthesize from the MD&A and financial trends instead`;
 

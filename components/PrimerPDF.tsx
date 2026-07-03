@@ -16,6 +16,26 @@ const LGRAY = "#f5f6f8";
 const DGRAY = "#333333";
 const BORDER= "#dde1e8";
 const BLUE  = "#2563eb";
+const AMBER = "#b45309";
+
+function getSectorAccent(sector?: string): { primary: string; light: string; muted: string } {
+  const s = (sector ?? "").toLowerCase();
+  if (s.includes("tech") || s.includes("software") || s.includes("semi") || s.includes("internet"))
+    return { primary: "#1a56db", light: "#e8f0fe", muted: "#93c5fd" };
+  if (s.includes("health") || s.includes("pharma") || s.includes("bio") || s.includes("medic"))
+    return { primary: "#0d6b45", light: "#d1fae5", muted: "#6ee7b7" };
+  if (s.includes("consumer") || s.includes("retail") || s.includes("food") || s.includes("beverage"))
+    return { primary: "#b45309", light: "#fef3c7", muted: "#fcd34d" };
+  if (s.includes("financ") || s.includes("bank") || s.includes("insur") || s.includes("invest"))
+    return { primary: "#1e40af", light: "#dbeafe", muted: "#93c5fd" };
+  if (s.includes("energy") || s.includes("oil") || s.includes("gas") || s.includes("util"))
+    return { primary: "#92400e", light: "#fef3c7", muted: "#fcd34d" };
+  if (s.includes("communic") || s.includes("media") || s.includes("entertain") || s.includes("telecom"))
+    return { primary: "#6d28d9", light: "#ede9fe", muted: "#c4b5fd" };
+  if (s.includes("industr") || s.includes("manufactur") || s.includes("aerospace"))
+    return { primary: "#374151", light: "#f3f4f6", muted: "#9ca3af" };
+  return { primary: "#1e3a5f", light: "#e8f0f8", muted: "#93b4cc" };
+}
 
 // ── Styles ────────────────────────────────────────────────────────────────────
 
@@ -98,6 +118,32 @@ const S = StyleSheet.create({
   legendDot:  { width: 7, height: 7, borderRadius: 3.5, marginRight: 3 },
   legendItem: { flexDirection: "row", alignItems: "center" },
   legendText: { fontSize: 6.5, color: GRAY },
+
+  // Positioning card (4-box row)
+  positioningRow:  { flexDirection: "row", gap: 6, marginBottom: 14 },
+  posCard:         { flex: 1, borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 7, backgroundColor: LGRAY },
+  posCardLabel:    { fontSize: 6, color: GRAY, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 2 },
+  posCardValue:    { fontSize: 12, fontFamily: "Helvetica-Bold", color: NAVY, marginBottom: 1 },
+  posCardSub:      { fontSize: 6.5, color: GRAY, lineHeight: 1.4 },
+
+  // Cover stat chips
+  coverChips:      { flexDirection: "row", gap: 8, marginTop: 10 },
+  coverChip:       { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 3 },
+  coverChipLabel:  { fontSize: 6, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 1 },
+  coverChipValue:  { fontSize: 10, fontFamily: "Helvetica-Bold" },
+
+  // Scenario range
+  scenarioRow:     { flexDirection: "row", alignItems: "center", marginVertical: 8 },
+  scenarioDot:     { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
+  scenarioLabel:   { fontSize: 7, color: DGRAY, flex: 1 },
+
+  // Capital alloc bar
+  capAllocRow:     { marginVertical: 8 },
+  capAllocBar:     { flexDirection: "row", height: 14, borderRadius: 2, overflow: "hidden", marginBottom: 3 },
+  capAllocLeg:     { flexDirection: "row", gap: 10 },
+  capAllocLegItem: { flexDirection: "row", alignItems: "center", gap: 3 },
+  capAllocLegDot:  { width: 8, height: 8, borderRadius: 2 },
+  capAllocLegText: { fontSize: 6.5, color: GRAY },
 });
 
 // ── Parse helpers ─────────────────────────────────────────────────────────────
@@ -265,11 +311,70 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
   );
 }
 
+function EpsBarChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const epsData = history.eps_diluted ?? {};
+  const years   = Object.keys(epsData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const vals = years.map(y => epsData[y] ?? 0);
+  const maxAbs = Math.max(...vals.map(Math.abs), 0.01);
+  const BAR_W  = 44;
+  const GAP    = (CHART_W - years.length * BAR_W) / (years.length + 1);
+  const MID_Y  = CHART_H / 2;
+  const fmtEps = (v: number) => `$${v.toFixed(2)}`;
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
+      <Svg width={CHART_W} height={CHART_H + 2}>
+        <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />
+        {years.map((yr, i) => {
+          const v    = epsData[yr] ?? 0;
+          const barH = Math.max(2, (Math.abs(v) / maxAbs) * MID_Y);
+          const x0   = GAP + i * (BAR_W + GAP);
+          const y0   = v >= 0 ? MID_Y - barH : MID_Y;
+          return (
+            <G key={yr}>
+              <Rect x={x0} y={y0} width={BAR_W} height={barH} fill={v >= 0 ? AMBER : RED} rx={1} />
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2 }}>
+        {years.map(yr => (
+          <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center", width: BAR_W + GAP }}>
+            FY{yr.slice(0,4)}{"\n"}{fmtEps(epsData[yr] ?? 0)}
+          </Text>
+        ))}
+      </View>
+    </View>
+  );
+}
+
+function StockRangeBar({ facts }: { facts: Record<string, number> }) {
+  const lo = facts.week52_low, hi = facts.week52_high, cur = facts.stock_price;
+  if (!lo || !hi || !cur || hi <= lo) return null;
+  const pct52 = Math.round(((cur - lo) / (hi - lo)) * 100);
+  const dotX  = ((cur - lo) / (hi - lo)) * 220;
+  return (
+    <View style={{ marginTop: 8, marginBottom: 4 }}>
+      <Svg width={260} height={18}>
+        <Rect x={0} y={6} width={220} height={6} fill={BORDER} rx={3} />
+        <Rect x={0} y={6} width={dotX} height={6} fill={NAVY2} rx={3} />
+        <Rect x={dotX - 3} y={3} width={6} height={12} fill={NAVY} rx={3} />
+        <Text x={0}   y={18} style={{ fontSize: 6, fill: GRAY, fontFamily: "Helvetica" }}>${lo.toFixed(0)}</Text>
+        <Text x={200} y={18} style={{ fontSize: 6, fill: GRAY, fontFamily: "Helvetica" }}>${hi.toFixed(0)}</Text>
+        <Text x={dotX - 10} y={2} style={{ fontSize: 6, fill: NAVY, fontFamily: "Helvetica-Bold" }}>${cur.toFixed(0)}</Text>
+      </Svg>
+      <Text style={{ fontSize: 6.5, color: GRAY, marginTop: 1 }}>52W Range: ${lo.toFixed(2)} – ${hi.toFixed(2)} | Current ${pct52}th percentile</Text>
+    </View>
+  );
+}
+
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SectionHdr({ title }: { title: string }) {
-  return <View><Text style={S.sectionHeader}>{title}</Text></View>;
+function SectionHdr({ title, accentColor }: { title: string; accentColor?: string }) {
+  return <View><Text style={[S.sectionHeader, accentColor ? { backgroundColor: accentColor } : {}]}>{title}</Text></View>;
 }
+
 function SubSectionHdr({ title }: { title: string }) {
   return <Text style={S.subsectionHeader}>{title}</Text>;
 }
@@ -323,9 +428,10 @@ interface PrimerPDFProps {
   generatedDate: string;
   history: Record<string, Record<string, number>>;
   facts: Record<string, number>;
+  sector?: string;
 }
 
-export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts }: PrimerPDFProps) {
+export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector }: PrimerPDFProps) {
   const secs = parsePrimerSections(content);
 
   const execBullets  = parseBullets(secs["EXECUTIVE_SUMMARY"] ?? "");
@@ -385,6 +491,27 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const allFY    = Array.from(new Set([...revYears, ...niYears, ...cfYears])).sort().slice(-5);
 
   const headerDate = generatedDate || new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
+  const ACCENT = getSectorAccent(sector ?? industry);
+
+  // Helper: format numbers for cover chips
+  const fmtCover = (v?: number) =>
+    v == null ? "N/A"
+    : Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T`
+    : Math.abs(v) >= 1e9  ? `$${(v/1e9).toFixed(1)}B`
+    : Math.abs(v) >= 1e6  ? `$${(v/1e6).toFixed(0)}M`
+    : `$${v.toFixed(2)}`;
+
+  // Pull first exec bullet as cover tagline (trim to ~120 chars)
+  const execTagline = (() => {
+    const raw = execBullets[0] ?? "";
+    const clean = raw.replace(/\*\*([^*]+)\*\*/g, "$1");
+    return clean.length > 130 ? clean.slice(0, 127) + "…" : clean;
+  })();
+
+  // Investment Frame from snapshot
+  const investmentFrame = snapshotRows.find(r => r.label.toLowerCase().includes("investment frame"))?.value ?? "";
+
+  const fcfMarginCover = facts.free_cash_flow && facts.revenue ? (facts.free_cash_flow / facts.revenue * 100) : null;
 
   return (
     <Document title={`${companyName} (${ticker}) — Equity Research Primer`} author="Edgewood Management">
@@ -396,32 +523,117 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           <Text style={S.headerRight}>Edgewood Management | {headerDate}</Text>
         </View>
 
-        {/* Cover block */}
-        <View style={S.coverBlock}>
-          <Text style={S.coverName}>{companyName}</Text>
-          <Text style={S.coverSub}>{ticker} · {industry}</Text>
+        {/* Cover block — company-specific with accent strip */}
+        <View style={{ flexDirection: "row", backgroundColor: NAVY }}>
+          {/* Accent strip */}
+          <View style={{ width: 5, backgroundColor: ACCENT.primary }} />
+          <View style={{ flex: 1, paddingHorizontal: 31, paddingVertical: 24 }}>
+            {/* Sector tag */}
+            <Text style={{ color: ACCENT.muted, fontSize: 7, letterSpacing: 1.2, textTransform: "uppercase", fontFamily: "Helvetica-Bold", marginBottom: 6 }}>
+              {sector ?? industry}
+            </Text>
+            {/* Company name */}
+            <Text style={{ color: "white", fontSize: 26, fontFamily: "Helvetica-Bold", marginBottom: 4 }}>{companyName}</Text>
+            <Text style={{ color: "rgba(255,255,255,0.55)", fontSize: 9, letterSpacing: 0.4, marginBottom: 10 }}>{ticker} · Equity Research Primer</Text>
+            {/* Tagline from exec summary */}
+            {execTagline.length > 0 && (
+              <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 8.5, lineHeight: 1.5, borderLeftWidth: 2, borderLeftColor: ACCENT.primary, paddingLeft: 8, marginBottom: 10 }}>
+                {execTagline}
+              </Text>
+            )}
+            {/* Key stat chips */}
+            <View style={S.coverChips}>
+              {[
+                { label: "Market Cap", value: fmtCover(facts.market_cap) },
+                { label: "Revenue (FY)", value: fmtCover(facts.revenue) },
+                { label: "FCF Margin", value: fcfMarginCover != null ? `${fcfMarginCover.toFixed(1)}%` : "N/A" },
+                { label: "ROIC", value: facts.roic != null ? `${facts.roic.toFixed(1)}%` : "N/A" },
+              ].map(chip => (
+                <View key={chip.label} style={[S.coverChip, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
+                  <Text style={[S.coverChipLabel, { color: "rgba(255,255,255,0.5)" }]}>{chip.label}</Text>
+                  <Text style={[S.coverChipValue, { color: "white" }]}>{chip.value}</Text>
+                </View>
+              ))}
+            </View>
+            {/* 52W range bar */}
+            <StockRangeBar facts={facts} />
+            {/* Investment frame */}
+            {investmentFrame.length > 0 && (
+              <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)" }}>
+                <Text style={{ fontSize: 6.5, color: ACCENT.muted, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>Key Question</Text>
+                <Text style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>{investmentFrame}</Text>
+              </View>
+            )}
+            {/* Date */}
+            <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 6.5, marginTop: 12, textAlign: "right" }}>{headerDate} · Edgewood Management · For institutional use only</Text>
+          </View>
         </View>
 
         <View style={S.body}>
 
           {/* I. Executive Summary */}
-          <SectionHdr title="I. Executive Summary" />
+          <SectionHdr title="I. Executive Summary" accentColor={ACCENT.primary} />
           {execBullets.length > 0
-            ? <Bullets items={execBullets} />
+            ? <Bullets items={execBullets} color={ACCENT.primary} />
             : <Para text={secs["EXECUTIVE_SUMMARY"] ?? ""} />}
 
           {/* II. Company Snapshot */}
-          <SectionHdr title="II. Company Snapshot" />
+          <SectionHdr title="II. Company Snapshot" accentColor={ACCENT.primary} />
           {snapshotRows.length > 0 && <SnapshotTable rows={snapshotRows} />}
 
-          {/* Charts */}
+          {/* Financial Positioning Card (4 boxes) */}
+          {(() => {
+            const roic = facts.roic;
+            const roicSpread = roic != null ? roic - 9 : null;
+            const fcfYld = facts.free_cash_flow && facts.market_cap ? (facts.free_cash_flow / facts.market_cap * 100) : null;
+            const erp = fcfYld != null ? fcfYld - 3.5 : null;
+            const ocfNi = facts.operating_cf && facts.net_income ? facts.operating_cf / facts.net_income : null;
+            const qLabel = ocfNi == null ? "N/A" : ocfNi > 1.1 ? "STRONG" : ocfNi > 0.8 ? "MODERATE" : "WEAK";
+            return (
+              <View style={S.positioningRow}>
+                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: roicSpread != null && roicSpread >= 0 ? GREEN : RED }]}>
+                  <Text style={S.posCardLabel}>ROIC vs WACC</Text>
+                  <Text style={[S.posCardValue, { color: roicSpread != null && roicSpread >= 0 ? GREEN : RED }]}>
+                    {roic != null ? `${roic.toFixed(1)}%` : "N/A"}
+                  </Text>
+                  <Text style={S.posCardSub}>vs 9% WACC{roicSpread != null ? ` | ${roicSpread >= 0 ? "+" : ""}${roicSpread.toFixed(1)}pp spread` : ""}</Text>
+                </View>
+                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: erp != null && erp > 0 ? GREEN : AMBER }]}>
+                  <Text style={S.posCardLabel}>FCF Yield</Text>
+                  <Text style={[S.posCardValue, { color: NAVY }]}>{fcfYld != null ? `${fcfYld.toFixed(1)}%` : "N/A"}</Text>
+                  <Text style={S.posCardSub}>vs 3.5% RF{erp != null ? ` | ERP ${erp >= 0 ? "+" : ""}${erp.toFixed(1)}pp` : ""}</Text>
+                </View>
+                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: ocfNi != null && ocfNi > 1 ? GREEN : ocfNi != null && ocfNi > 0.8 ? AMBER : RED }]}>
+                  <Text style={S.posCardLabel}>Earnings Quality</Text>
+                  <Text style={[S.posCardValue, { color: NAVY }]}>{ocfNi != null ? `${ocfNi.toFixed(2)}x` : "N/A"}</Text>
+                  <Text style={S.posCardSub}>OCF/Net Income | {qLabel}</Text>
+                </View>
+                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: ACCENT.primary }]}>
+                  <Text style={S.posCardLabel}>Stock vs 52W Range</Text>
+                  <Text style={[S.posCardValue, { color: NAVY }]}>
+                    {facts.stock_price != null && facts.week52_low != null && facts.week52_high != null && facts.week52_high > facts.week52_low
+                      ? `${Math.round(((facts.stock_price - facts.week52_low) / (facts.week52_high - facts.week52_low)) * 100)}th %ile`
+                      : "N/A"}
+                  </Text>
+                  <Text style={S.posCardSub}>{facts.stock_price != null ? `$${facts.stock_price.toFixed(2)} current` : ""}</Text>
+                </View>
+              </View>
+            );
+          })()}
+
+          {/* Charts — Revenue+FCF and EPS side by side */}
           {Object.keys(history.revenue ?? {}).length >= 2 && (
             <>
               <SubSectionHdr title="Financial Trends" />
-              <View style={{ flexDirection: "row", gap: 12, marginBottom: 8 }}>
-                <View style={{ flex: 1 }}>
+              <View style={{ flexDirection: "row", gap: 16, marginBottom: 8 }}>
+                <View style={{ flex: 3 }}>
                   <RevenueBarChart history={history} />
                 </View>
+                {Object.keys(history.eps_diluted ?? {}).length >= 2 && (
+                  <View style={{ flex: 2 }}>
+                    <EpsBarChart history={history} />
+                  </View>
+                )}
               </View>
               <MarginLineChart history={history} />
             </>
@@ -474,19 +686,19 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           )}
 
           {/* III. Business Overview */}
-          <SectionHdr title="III. Business Overview" />
+          <SectionHdr title="III. Business Overview" accentColor={ACCENT.primary} />
           {bg.length > 0 && <><SubSectionHdr title="Company Background" />{bg.map((p,i) => <Para key={i} text={p} />)}</>}
           {pp.length > 0 && <><SubSectionHdr title="Product Portfolio & Revenue Mix" />{pp.map((p,i) => <Para key={i} text={p} />)}</>}
           {cust.length > 0 && <><SubSectionHdr title="Customers, End Markets & Geographic Exposure" />{cust.map((p,i) => <Para key={i} text={p} />)}</>}
 
           {/* IV. Industry Analysis */}
-          <SectionHdr title="IV. Industry Analysis" />
+          <SectionHdr title="IV. Industry Analysis" accentColor={ACCENT.primary} />
           {mkt.length > 0 && <><SubSectionHdr title="Market Structure & Competitive Dynamics" />{mkt.map((p,i) => <Para key={i} text={p} />)}</>}
           {drv.length > 0 && <><SubSectionHdr title="Key Industry Drivers & Cycle" />{drv.map((p,i) => <Para key={i} text={p} />)}</>}
           {comp.length > 0 && <><SubSectionHdr title="Competitive Position" />{comp.map((p,i) => <Para key={i} text={p} />)}</>}
 
           {/* V. Financial Analysis */}
-          <SectionHdr title="V. Financial Analysis" />
+          <SectionHdr title="V. Financial Analysis" accentColor={ACCENT.primary} />
           {rev.length > 0 && <><SubSectionHdr title="Revenue & Profitability Trends" />{rev.map((p,i) => <Para key={i} text={p} />)}</>}
           {bal.length > 0 && <><SubSectionHdr title="Balance Sheet & Capital Allocation" />{bal.map((p,i) => <Para key={i} text={p} />)}</>}
           {fcf.length > 0 && <><SubSectionHdr title="Free Cash Flow & CapEx" />{fcf.map((p,i) => <Para key={i} text={p} />)}</>}
@@ -495,17 +707,68 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* VI. Valuation Framework */}
           {(valCurrHist.length > 0 || valPeer.length > 0 || valScen.length > 0) && (
             <>
-              <SectionHdr title="VI. Valuation Framework" />
+              <SectionHdr title="VI. Valuation Framework" accentColor={ACCENT.primary} />
               {valCurrHist.length > 0 && <><SubSectionHdr title="Current Valuation vs. Historical Range" />{valCurrHist.map((p,i) => <Para key={i} text={p} />)}</>}
               {valPeer.length > 0 && <><SubSectionHdr title="Peer Valuation Context" />{valPeer.map((p,i) => <Para key={i} text={p} />)}</>}
-              {valScen.length > 0 && <><SubSectionHdr title="Implied Scenarios" />{valScen.map((p,i) => <Para key={i} text={p} />)}</>}
+              {valScen.length > 0 && (
+                <>
+                  <SubSectionHdr title="Implied Scenarios" />
+                  {valScen.map((p,i) => <Para key={i} text={p} />)}
+                  {/* Scenario price range visual */}
+                  {(() => {
+                    const allText = valScen.join(" ");
+                    const prices = [...allText.matchAll(/\$(\d{1,4}(?:\.\d{1,2})?)/g)].map(m => parseFloat(m[1])).filter(v => v > 0 && v < 100000);
+                    const cur = facts.stock_price;
+                    if (prices.length >= 2 && cur) {
+                      const sorted3 = [...new Set(prices)].sort((a,b) => a-b);
+                      const bear3 = sorted3[0];
+                      const bull3 = sorted3[sorted3.length - 1];
+                      const base3 = sorted3[Math.floor(sorted3.length / 2)] ?? cur;
+                      const allP = [bear3, cur, base3, bull3];
+                      const minP = Math.min(...allP) * 0.9;
+                      const maxP = Math.max(...allP) * 1.1;
+                      const BAR_W3 = 300;
+                      const toX3 = (v: number) => ((v - minP) / (maxP - minP)) * BAR_W3;
+                      const pts: { label: string; price: number; color: string }[] = [
+                        { label: "Bear", price: bear3, color: RED },
+                        { label: "Current", price: cur, color: AMBER },
+                        { label: "Base", price: base3, color: ACCENT.primary },
+                        { label: "Bull", price: bull3, color: GREEN },
+                      ];
+                      return (
+                        <View style={{ marginVertical: 8, padding: 8, backgroundColor: LGRAY, borderRadius: 3 }}>
+                          <Text style={{ fontSize: 6.5, color: GRAY, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Price Range Visual</Text>
+                          <Svg width={BAR_W3 + 30} height={36}>
+                            <Line x1={0} y1={16} x2={BAR_W3} y2={16} stroke={BORDER} strokeWidth={2} />
+                            {pts.map(p => (
+                              <G key={p.label}>
+                                <Rect x={toX3(p.price) - 3} y={10} width={6} height={12} fill={p.color} rx={3} />
+                                <Line x1={toX3(p.price)} y1={22} x2={toX3(p.price)} y2={28} stroke={p.color} strokeWidth={0.5} />
+                              </G>
+                            ))}
+                          </Svg>
+                          <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
+                            {pts.map(p => (
+                              <View key={p.label} style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                                <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color }} />
+                                <Text style={{ fontSize: 6.5, color: DGRAY }}>{p.label}: ${p.price.toFixed(0)}{cur && p.price !== cur ? ` (${((p.price/cur-1)*100).toFixed(0)}%)` : ""}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    }
+                    return null;
+                  })()}
+                </>
+              )}
             </>
           )}
 
           {/* VII. Management Commentary & Guidance */}
           {(callHighlights.length > 0 || fwdGuidance.length > 0) && (
             <>
-              <SectionHdr title="VII. Management Commentary & Guidance" />
+              <SectionHdr title="VII. Management Commentary & Guidance" accentColor={ACCENT.primary} />
               {callHighlights.length > 0 && <><SubSectionHdr title="Earnings Call Highlights" />{callHighlights.map((p,i) => <Para key={i} text={p} />)}</>}
               {fwdGuidance.length > 0 && <><SubSectionHdr title="Forward Guidance & Outlook" />{fwdGuidance.map((p,i) => <Para key={i} text={p} />)}</>}
             </>
@@ -514,22 +777,71 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* VIII. Management & Governance */}
           {(leadership.length > 0 || capAlloc.length > 0) && (
             <>
-              <SectionHdr title="VIII. Management & Governance" />
+              <SectionHdr title="VIII. Management & Governance" accentColor={ACCENT.primary} />
               {leadership.length > 0 && <><SubSectionHdr title="Leadership & Track Record" />{leadership.map((p,i) => <Para key={i} text={p} />)}</>}
-              {capAlloc.length > 0 && <><SubSectionHdr title="Capital Allocation Discipline" />{capAlloc.map((p,i) => <Para key={i} text={p} />)}</>}
+              {capAlloc.length > 0 && (
+                <>
+                  <SubSectionHdr title="Capital Allocation Discipline" />
+                  {capAlloc.map((p,i) => <Para key={i} text={p} />)}
+                  {/* Capital Allocation waterfall */}
+                  {(() => {
+                    const capex  = facts.capex != null ? Math.abs(facts.capex) : null;
+                    const buybk  = facts.buybacks != null ? Math.abs(facts.buybacks) : null;
+                    const divs   = facts.dividends_paid != null ? Math.abs(facts.dividends_paid) : null;
+                    const fcvCA  = facts.free_cash_flow;
+                    if (!fcvCA || fcvCA <= 0) return null;
+                    const reinv  = capex ?? 0;
+                    const buy2   = buybk ?? 0;
+                    const div2   = divs ?? 0;
+                    const cashBuild = Math.max(0, fcvCA - reinv - buy2 - div2);
+                    const total4 = reinv + buy2 + div2 + cashBuild;
+                    if (total4 <= 0) return null;
+                    const segs4 = [
+                      { label: "CapEx", value: reinv, color: ACCENT.primary },
+                      { label: "Buybacks", value: buy2, color: BLUE },
+                      { label: "Dividends", value: div2, color: GREEN },
+                      { label: "Cash Build", value: cashBuild, color: AMBER },
+                    ].filter(s => s.value > 0);
+                    const fmtS = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+                    const BAR_W4 = 300;
+                    let x4 = 0;
+                    return (
+                      <View style={S.capAllocRow}>
+                        <Text style={[S.posCardLabel, { marginBottom: 4 }]}>FCF Deployment ({fmtS(fcvCA)} FCF)</Text>
+                        <Svg width={BAR_W4} height={14}>
+                          {segs4.map(seg => {
+                            const w4 = (seg.value / total4) * BAR_W4;
+                            const rx = x4;
+                            x4 += w4;
+                            return <Rect key={seg.label} x={rx} y={0} width={w4} height={14} fill={seg.color} />;
+                          })}
+                        </Svg>
+                        <View style={S.capAllocLeg}>
+                          {segs4.map(seg => (
+                            <View key={seg.label} style={S.capAllocLegItem}>
+                              <View style={[S.capAllocLegDot, { backgroundColor: seg.color }]} />
+                              <Text style={S.capAllocLegText}>{seg.label} {fmtS(seg.value)} ({((seg.value/total4)*100).toFixed(0)}%)</Text>
+                            </View>
+                          ))}
+                        </View>
+                      </View>
+                    );
+                  })()}
+                </>
+              )}
             </>
           )}
 
           {/* IX. Key Risks */}
           {risks.length > 0 && (
             <>
-              <SectionHdr title="IX. Key Risks" />
+              <SectionHdr title="IX. Key Risks" accentColor={RED} />
               <Bullets items={risks} color={RED} />
             </>
           )}
 
           {/* X. Investment Thesis */}
-          <SectionHdr title="X. Investment Thesis" />
+          <SectionHdr title="X. Investment Thesis" accentColor={ACCENT.primary} />
           <View style={S.twoCols}>
             <View style={S.col}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
@@ -550,9 +862,9 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* XI. Key Metrics Dashboard */}
           {kpiRows.length > 0 && (
             <>
-              <SectionHdr title="XI. Key Metrics Dashboard" />
+              <SectionHdr title="XI. Key Metrics Dashboard" accentColor={ACCENT.primary} />
               <View style={S.table}>
-                <View style={S.tableHeader}>
+                <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                   {["KPI", "Current", "Watch Threshold", "Why It Matters"].map((h, i) => (
                     <Text key={h} style={[S.tableHeaderCell, { flex: i === 3 ? 2 : 1 }]}>{h}</Text>
                   ))}
@@ -572,7 +884,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* XII. Earnings Call Questions */}
           {qaItems.length > 0 && (
             <>
-              <SectionHdr title="XII. Earnings Call Questions" />
+              <SectionHdr title="XII. Earnings Call Questions" accentColor={ACCENT.primary} />
               <Text style={[S.para, { color: GRAY, marginBottom: 8 }]}>Institutional-grade questions for the upcoming earnings call:</Text>
               {qaItems.map((q, i) => (
                 <View key={i} style={[S.bullet, { marginBottom: 7 }]}>

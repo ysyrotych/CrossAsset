@@ -10,9 +10,10 @@ interface Props {
   content: string;
   history: Record<string, Record<string, number>>;
   facts: Record<string, number>;
+  sector?: string;
 }
 
-export function PrimerDownloadButton({ ticker, companyName, industry, content, history, facts }: Props) {
+export function PrimerDownloadButton({ ticker, companyName, industry, content, history, facts, sector }: Props) {
   const date = new Date().toLocaleDateString("en-US", { month: "long", year: "numeric" });
   return (
     <PDFDownloadLink
@@ -25,6 +26,7 @@ export function PrimerDownloadButton({ ticker, companyName, industry, content, h
           generatedDate={date}
           history={history}
           facts={facts}
+          sector={sector}
         />
       }
       fileName={`${ticker}_Primer_${new Date().toISOString().slice(0, 10)}.pdf`}
