@@ -14,6 +14,11 @@ const FinancialAnalytics = dynamic(
   { ssr: false }
 );
 
+const NewsAnalyst = dynamic(
+  () => import("@/components/NewsAnalyst"),
+  { ssr: false }
+);
+
 // ── Types ─────────────────────────────────────────────────────────────────────
 
 type FilingSection = { item: string; title: string; text: string; char_count: number };
@@ -2055,6 +2060,17 @@ export default function TenKPage() {
               newsItems={data.fmp_extended?.news_combined ?? data.fmp_extended?.recent_news ?? []}
             />
           </div>
+
+          {/* AI News Analyst */}
+          {((data.fmp_extended?.news_combined ?? []).length > 0 || (data.fmp_extended?.recent_news ?? []).length > 0) && (
+            <NewsAnalyst
+              ticker={data.company.ticker}
+              companyName={data.company.name ?? data.company.ticker}
+              sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
+              newsItems={data.fmp_extended?.news_combined ?? data.fmp_extended?.recent_news ?? []}
+              facts={data.xbrl_facts ?? {}}
+            />
+          )}
 
           {/* Valuation & Returns */}
           {Object.keys(data.xbrl_facts).length > 0 && (() => {
