@@ -462,8 +462,13 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const capAlloc   = parseParas(secs["CAPITAL_ALLOCATION_DISCIPLINE"] ?? "");
 
   const risks = parseBullets(secs["KEY_RISKS"] ?? "");
-  const bull  = parseBullets(secs["BULL_CASE"] ?? "");
-  const bear  = parseBullets(secs["BEAR_CASE"] ?? "");
+  const itText = secs["INVESTMENT_THESIS"] ?? "";
+  const bull  = parseBullets(secs["BULL_CASE"] ?? "").length > 0
+    ? parseBullets(secs["BULL_CASE"] ?? "")
+    : parseBullets(itText.split(/bear\s+case/i)[0] ?? "");
+  const bear  = parseBullets(secs["BEAR_CASE"] ?? "").length > 0
+    ? parseBullets(secs["BEAR_CASE"] ?? "")
+    : parseBullets(itText.split(/bear\s+case/i)[1] ?? "");
   const note  = parseParas(secs["ANALYST_NOTE"] ?? "");
 
   // New sections
@@ -717,14 +722,17 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   {/* Scenario price range visual */}
                   {(() => {
                     const allText = valScen.join(" ");
-                    const prices = [...allText.matchAll(/\$(\d{1,4}(?:\.\d{1,2})?)/g)].map(m => parseFloat(m[1])).filter(v => v > 0 && v < 100000);
+                    // Extract scenario prices from the labeled format: "Bear Case ($42):", "Base Case ($105):", "Bull Case ($155):"
+                    const bearMatch = allText.match(/bear\s+case\s*[\(\[\{]?\$\s*(\d{1,5}(?:\.\d{1,2})?)/i);
+                    const baseMatch = allText.match(/base\s+case\s*[\(\[\{]?\$\s*(\d{1,5}(?:\.\d{1,2})?)/i);
+                    const bullMatch = allText.match(/bull\s+case\s*[\(\[\{]?\$\s*(\d{1,5}(?:\.\d{1,2})?)/i);
+                    const bear3 = bearMatch ? parseFloat(bearMatch[1]) : null;
+                    const base3 = baseMatch ? parseFloat(baseMatch[1]) : null;
+                    const bull3 = bullMatch ? parseFloat(bullMatch[1]) : null;
                     const cur = facts.stock_price;
-                    if (prices.length >= 2 && cur) {
-                      const sorted3 = [...new Set(prices)].sort((a,b) => a-b);
-                      const bear3 = sorted3[0];
-                      const bull3 = sorted3[sorted3.length - 1];
-                      const base3 = sorted3[Math.floor(sorted3.length / 2)] ?? cur;
-                      const allP = [bear3, cur, base3, bull3];
+                    if (bear3 && bull3 && cur) {
+                      const resolvedBase = base3 ?? cur;
+                      const allP = [bear3, cur, resolvedBase, bull3];
                       const minP = Math.min(...allP) * 0.9;
                       const maxP = Math.max(...allP) * 1.1;
                       const BAR_W3 = 300;
@@ -732,7 +740,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       const pts: { label: string; price: number; color: string }[] = [
                         { label: "Bear", price: bear3, color: RED },
                         { label: "Current", price: cur, color: AMBER },
-                        { label: "Base", price: base3, color: ACCENT.primary },
+                        { label: "Base", price: resolvedBase, color: ACCENT.primary },
                         { label: "Bull", price: bull3, color: GREEN },
                       ];
                       return (

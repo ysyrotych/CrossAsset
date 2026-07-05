@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useMemo, useCallback } from "react";
-import { Sparkles, BarChart2, TrendingUp, Activity, Shield, Users, Zap, Calculator } from "lucide-react";
+import { Sparkles, BarChart2, TrendingUp, Activity, Shield, Users, Zap, Calculator, Newspaper } from "lucide-react";
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -37,6 +37,15 @@ export type FinancialAnalyticsProps = {
   earningsTranscript?: string;
   insiderTrading?: InsiderTrade[];
   analystRec?: { strong_buy: number; buy: number; hold: number; sell: number; strong_sell: number; total: number; date?: string };
+  newsItems?: Array<{
+    date: string;
+    title: string;
+    summary: string;
+    source: string;
+    url?: string;
+    stock_change?: string | null;
+    category?: string;
+  }>;
 };
 
 // ── Design tokens ─────────────────────────────────────────────────────────────
@@ -847,6 +856,7 @@ const CATS = [
   { id:"quality",   label:"Quality & Peers",      icon:Users       },
   { id:"quant",     label:"Quant & Scenarios",    icon:Calculator  },
   { id:"signals",   label:"Signals & Scores",     icon:Sparkles    },
+  { id:"news",      label:"News & Events",         icon:Newspaper   },
 ] as const;
 type CatId = typeof CATS[number]["id"];
 
@@ -856,9 +866,10 @@ export default function FinancialAnalytics({
   ticker, companyName, facts, history, quarterly, quarterlyPeriod,
   kmHistory=[], growthHistory=[], earningsSurprises=[], peers=[], sector="",
   segments, geoSegments, segmentHistory=[], geoSegmentHistory=[], analystEstimates=[], fmpRating, quarterlyTrends=[],
-  earningsTranscript="", insiderTrading=[], analystRec,
+  earningsTranscript="", insiderTrading=[], analystRec, newsItems=[],
 }:FinancialAnalyticsProps) {
   const [tab, setTab] = useState<CatId>("growth");
+  const [activeCategory, setActiveCategory] = useState<string>("ALL");
   const [aiText, setAiText]     = useState("");
   const [aiRunning, setAiRunning] = useState(false);
   const [scenarios, setScenarios] = useState({
@@ -1903,6 +1914,17 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             {label:"Factor Score",value:`${investmentThesis.score}/100`,color:investmentThesis.verdictColor},
             {label:"Beat Streak",value:earningsStreak.streak>0?`${earningsStreak.streak}× consec`:"0×",color:earningsStreak.streak>=3?GREEN:earningsStreak.streak>=1?TEAL:RED},
             {label:"Insider",value:insiderTrading.length>0?(insidNetBuys>0?`+${insidNetBuys} net buy`:insidNetBuys<0?`${insidNetBuys} net sell`:"neutral"):"—",color:insidNetBuys>1?GREEN:insidNetBuys<-1?RED:AMBER},
+          ];
+        } else if(tab==="news"){
+          const now30=(newsItems??[]).filter(n=>{try{return new Date(n.date)>=new Date(Date.now()-30*24*60*60*1000);}catch{return false;}});
+          const negT=['cut','miss','decline','drop','fall','concern','probe','loss','warn','resign'];
+          const posT=['beat','raise','launch','win','grow','record','exceed','upgrade','initiate'];
+          let sc=0;for(const n of now30){const tl=(n.title??"").toLowerCase();sc+=posT.filter(t=>tl.includes(t)).length;sc-=negT.filter(t=>tl.includes(t)).length;}
+          pills=[
+            {label:"Total Items"   ,value:`${newsItems?.length??0}`,color:BLUE},
+            {label:"Last 30 Days"  ,value:`${now30.length}`,color:TEAL},
+            {label:"30D Sentiment" ,value:sc>3?"POSITIVE":sc<-3?"NEGATIVE":"MIXED",color:sc>3?GREEN:sc<-3?RED:AMBER},
+            {label:"Sources"       ,value:"yfinance · Finviz · SA",color:"#ffffff40"},
           ];
         }
         if(!pills.length) return null;
@@ -4943,6 +4965,122 @@ Be institutional-grade. Use specific numbers. 700-900 words total.`,
             </div>
           </div>
         )}
+
+        {/* ── News & Events ─────────────────────────────────────────── */}
+        {tab==="news"&&(()=>{
+          const CAT_COLORS:Record<string,string>={
+            "EARNINGS":"#1e3560","GUIDANCE":"#78350f","ANALYST ACTION":"#1e40af","M&A":"#4c1d95",
+            "REGULATORY/LEGAL":"#7f1d1d","MANAGEMENT":"#374151","PRODUCT/BUSINESS":"#134e4a",
+            "CAPITAL ALLOCATION":"#14532d","INSIDER ACTIVITY":"#7c2d12","GENERAL":"#1e293b",
+          };
+          const cats=["ALL",...Array.from(new Set((newsItems??[]).map(n=>n.category??"GENERAL"))).sort()];
+          const filtered=activeCategory==="ALL"?(newsItems??[]):(newsItems??[]).filter(n=>(n.category??"GENERAL")===activeCategory);
+          const last30=(newsItems??[]).filter(n=>{try{return new Date(n.date)>=new Date(Date.now()-30*24*60*60*1000);}catch{return false;}});
+          const negT=["cut","miss","decline","drop","fall","concern","probe","loss","warn","resign"];
+          const posT=["beat","raise","launch","win","grow","record","exceed","upgrade","initiate"];
+          let sentScore=0;for(const n of last30){const tl=(n.title??"").toLowerCase();sentScore+=posT.filter(t=>tl.includes(t)).length;sentScore-=negT.filter(t=>tl.includes(t)).length;}
+          const sentLabel=sentScore>3?"POSITIVE":sentScore<-3?"NEGATIVE":"MIXED";
+          const sentClr=sentScore>3?GREEN:sentScore<-3?RED:AMBER;
+          const catCounts=Object.fromEntries(cats.filter(c=>c!=="ALL").map(c=>([c,(newsItems??[]).filter(n=>(n.category??"GENERAL")===c).length])));
+          return(
+          <div className="p-4 space-y-4">
+            {/* Sentiment header */}
+            <div className="rounded-lg border overflow-hidden" style={{background:CARD_BG,borderColor:DARK_BORDER}}>
+              <div className="px-4 py-3 border-b flex items-center justify-between flex-wrap gap-3" style={{borderColor:DARK_BORDER}}>
+                <div>
+                  <p className="text-[9px] font-bold uppercase tracking-widest" style={{color:"#ffffff45"}}>{ticker} · News Intelligence</p>
+                  <p className="text-[7.5px] mt-0.5" style={{color:"#ffffff25"}}>{newsItems?.length??0} items · {last30.length} in last 30 days · Sources: yfinance, Finviz, Seeking Alpha</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-[7px] uppercase font-bold tracking-widest" style={{color:"#ffffff30"}}>30D Sentiment</span>
+                  <span className="text-[9px] font-bold px-2 py-0.5 rounded" style={{background:`${sentClr}20`,color:sentClr,border:`1px solid ${sentClr}40`}}>{sentLabel} ({sentScore>0?"+":""}{sentScore})</span>
+                </div>
+              </div>
+              {/* Category bar chart */}
+              <div className="px-4 py-3 border-b" style={{borderColor:DARK_BORDER}}>
+                <p className="text-[7px] uppercase font-bold tracking-widest mb-2" style={{color:"#ffffff25"}}>By Category</p>
+                <div className="space-y-1.5">
+                  {Object.entries(catCounts).sort((a,b)=>b[1]-a[1]).map(([cat,count])=>(
+                    <div key={cat} className="flex items-center gap-2">
+                      <span className="text-[7px] font-bold" style={{color:"#ffffff40",width:120,flexShrink:0}}>{cat}</span>
+                      <div className="flex-1 h-2 rounded overflow-hidden" style={{background:"rgba(255,255,255,0.04)"}}>
+                        <div style={{width:`${Math.min(100,(count/Math.max(newsItems?.length??1,1))*100*3)}%`,height:"100%",background:CAT_COLORS[cat]??"#1e3560",opacity:0.8}}/>
+                      </div>
+                      <span className="text-[7px] tabular-nums font-bold" style={{color:"#ffffff35",width:16,textAlign:"right"}}>{count}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+              {/* Category filter */}
+              <div className="px-4 py-2 border-b flex flex-wrap gap-1.5" style={{borderColor:DARK_BORDER}}>
+                {cats.map(cat=>{
+                  const isA=activeCategory===cat;
+                  const cnt=cat==="ALL"?(newsItems?.length??0):(catCounts[cat]??0);
+                  return(
+                    <button key={cat} onClick={()=>setActiveCategory(cat)}
+                      className="text-[7px] font-bold px-2 py-0.5 rounded uppercase tracking-wide transition-all"
+                      style={{background:isA?"#1e3560":"rgba(255,255,255,0.04)",color:isA?"#60a5fa":"#ffffff40",border:`1px solid ${isA?"rgba(96,165,250,0.4)":"rgba(255,255,255,0.08)"}`}}>
+                      {cat} ({cnt})
+                    </button>
+                  );
+                })}
+              </div>
+              {/* News list */}
+              <div className="overflow-y-auto" style={{maxHeight:600}}>
+                {filtered.length===0?(
+                  <p className="px-4 py-6 text-center text-[8px]" style={{color:"#ffffff25"}}>No news items found</p>
+                ):(
+                  <div className="divide-y" style={{borderColor:DARK_BORDER+"80"}}>
+                    {filtered.slice(0,60).map((n,i)=>{
+                      const catClr=CAT_COLORS[n.category??"GENERAL"]??"#1e293b";
+                      const hasChange=n.stock_change&&n.stock_change.trim();
+                      const isPos=hasChange&&n.stock_change!.startsWith("+");
+                      const isNeg=hasChange&&n.stock_change!.startsWith("-");
+                      return(
+                        <div key={i} className="px-4 py-2.5 flex items-start gap-3 hover:bg-white/[0.02] transition-colors">
+                          <div className="flex-shrink-0 mt-0.5">
+                            <span className="text-[6.5px] font-bold uppercase px-1.5 py-0.5 rounded" style={{background:catClr,color:"#ffffff90",letterSpacing:"0.04em",whiteSpace:"nowrap"}}>
+                              {n.category??"GENERAL"}
+                            </span>
+                          </div>
+                          <div className="flex-1 min-w-0">
+                            <div className="flex items-start justify-between gap-2">
+                              <div className="flex-1 min-w-0">
+                                {n.url?(
+                                  <a href={n.url} target="_blank" rel="noopener noreferrer"
+                                    className="text-[8.5px] font-bold leading-snug hover:underline"
+                                    style={{color:"#ffffffcc",display:"block"}}>
+                                    {n.title}
+                                  </a>
+                                ):(
+                                  <p className="text-[8.5px] font-bold leading-snug" style={{color:"#ffffffcc"}}>{n.title}</p>
+                                )}
+                                {n.summary&&<p className="text-[7px] mt-0.5 truncate" style={{color:"#ffffff40"}}>{n.summary}</p>}
+                              </div>
+                              <div className="flex items-center gap-1.5 flex-shrink-0">
+                                {hasChange&&(
+                                  <span className="text-[7px] font-bold px-1 py-0.5 rounded tabular-nums" style={{background:isPos?"rgba(16,185,129,0.15)":isNeg?"rgba(239,68,68,0.15)":"rgba(255,255,255,0.08)",color:isPos?GREEN:isNeg?RED:"#ffffff50"}}>
+                                    {n.stock_change}
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-2 mt-0.5">
+                              <span className="text-[6.5px]" style={{color:"#ffffff25"}}>{n.source}</span>
+                              <span className="text-[6.5px]" style={{color:"#ffffff15"}}>·</span>
+                              <span className="text-[6.5px] tabular-nums" style={{color:"#ffffff25"}}>{n.date?.slice(0,10)??"—"}</span>
+                            </div>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+          );
+        })()}
 
       </div>
     </div>

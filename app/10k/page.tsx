@@ -35,6 +35,7 @@ type FmpExtended   = {
   km_history?: KmHistory; growth_history?: GrowthHistory;
   earnings_surprises?: EarningsSurprise; analyst_estimates?: AnalystEstimate;
   peer_comparison?: PeerComp; recent_news?: RecentNews;
+  news_combined?: Array<{ date: string; title: string; summary: string; source: string; url?: string; stock_change?: string|null; category?: string }>;
   quarterly_trends?: QuarterlyTrendItem[];
   insider_trading?: { name: string; title?: string; transaction?: string; shares?: number|null; price?: number|null; value?: number|null; date?: string }[];
   analyst_rec?: { strong_buy: number; buy: number; hold: number; sell: number; strong_sell: number; total: number; date?: string };
@@ -2051,6 +2052,7 @@ export default function TenKPage() {
               earningsTranscript={data.earnings_transcript ?? ""}
               insiderTrading={data.fmp_extended?.insider_trading}
               analystRec={data.fmp_extended?.analyst_rec}
+              newsItems={data.fmp_extended?.news_combined ?? data.fmp_extended?.recent_news ?? []}
             />
           </div>
 
