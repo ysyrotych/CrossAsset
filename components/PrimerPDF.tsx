@@ -840,8 +840,37 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             </>
           )}
 
-          {/* X. Investment Thesis */}
-          <SectionHdr title="X. Investment Thesis" accentColor={ACCENT.primary} />
+          {/* X. News Analysis & Market Intelligence */}
+          {(() => {
+            const newsAnalysisText = secs["NEWS_ANALYSIS_&_MARKET_INTELLIGENCE"] ?? "";
+            if (!newsAnalysisText) return null;
+            const newsParas = parseParas(newsAnalysisText);
+            if (newsParas.length === 0) return null;
+            const sentMatch = newsAnalysisText.match(/\b(Cluster Break|Deterioration|Recovery|Debate|Divergence|Quiet Period|Normal)\b/i);
+            const sentPattern = sentMatch ? sentMatch[1] : null;
+            const sentColor = sentPattern
+              ? (["Cluster Break","Deterioration"].some(s => sentPattern.toLowerCase().includes(s.toLowerCase())) ? RED
+                : sentPattern.toLowerCase() === "recovery" ? GREEN
+                : sentPattern.toLowerCase() === "debate" ? AMBER
+                : GRAY)
+              : GRAY;
+            return (
+              <>
+                <SectionHdr title="X. News Analysis & Market Intelligence" accentColor={ACCENT.primary} />
+                {sentPattern && (
+                  <View style={{ borderLeftWidth: 3, borderLeftColor: sentColor, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 6, marginBottom: 10 }}>
+                    <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: sentColor, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>
+                      Sentiment Pattern: {sentPattern}
+                    </Text>
+                  </View>
+                )}
+                {newsParas.map((p, i) => <Para key={i} text={p} />)}
+              </>
+            );
+          })()}
+
+          {/* XI. Investment Thesis */}
+          <SectionHdr title="XI. Investment Thesis" accentColor={ACCENT.primary} />
           <View style={S.twoCols}>
             <View style={S.col}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
@@ -859,10 +888,10 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             </View>
           )}
 
-          {/* XI. Key Metrics Dashboard */}
+          {/* XII. Key Metrics Dashboard */}
           {kpiRows.length > 0 && (
             <>
-              <SectionHdr title="XI. Key Metrics Dashboard" accentColor={ACCENT.primary} />
+              <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} />
               <View style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                   {["KPI", "Current", "Watch Threshold", "Why It Matters"].map((h, i) => (
@@ -881,10 +910,10 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             </>
           )}
 
-          {/* XII. Earnings Call Questions */}
+          {/* XIII. Earnings Call Questions */}
           {qaItems.length > 0 && (
             <>
-              <SectionHdr title="XII. Earnings Call Questions" accentColor={ACCENT.primary} />
+              <SectionHdr title="XIII. Earnings Call Questions" accentColor={ACCENT.primary} />
               <Text style={[S.para, { color: GRAY, marginBottom: 8 }]}>Institutional-grade questions for the upcoming earnings call:</Text>
               {qaItems.map((q, i) => (
                 <View key={i} style={[S.bullet, { marginBottom: 7 }]}>

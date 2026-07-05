@@ -6,6 +6,7 @@ FastAPI service that exposes 10-K / 10-Q data to the CrossAsset Next.js app.
 import asyncio
 import html as html_module
 import re
+import xml.etree.ElementTree as ET
 import httpx
 from datetime import datetime, date
 from typing import Optional
@@ -72,6 +73,129 @@ KNOWN_PEERS: dict[str, list[str]] = {
     "DUOL":  ["CHGG", "TAL", "EDU", "UDMY", "COURSERA"],
     "CMG":   ["MCD", "SBUX", "YUM", "QSR", "DPZ"],
 }
+
+def _categorize_news(title: str) -> str:
+    t = title.lower()
+    if any(w in t for w in ["earnings", "eps", "q1", "q2", "q3", "q4", "quarterly", "results", "beat", "miss"]):
+        return "EARNINGS"
+    if any(w in t for w in ["guidance", "outlook", "forecast", "raises", "lowers", "reaffirms", "cuts guide"]):
+        return "GUIDANCE"
+    if any(w in t for w in ["upgrade", "downgrade", "overweight", "underweight", "outperform", "target price", "price target"]):
+        return "ANALYST ACTION"
+    if any(w in t for w in ["acqui", "merger", "buyout", "takeover", "divest", "spin-off", "spinoff"]):
+        return "M&A"
+    if any(w in t for w in ["fda", "sec ", "ftc", "doj", "regul", "antitrust", "fine", "probe", "investig", "lawsuit", "legal", "settlement"]):
+        return "REGULATORY/LEGAL"
+    if any(w in t for w in ["ceo", "cfo", "coo", "president", "appoint", "resign", "depart", "hire", "board", "director"]):
+        return "MANAGEMENT"
+    if any(w in t for w in ["buyback", "repurchase", "dividend", "capital return", "share repurchase"]):
+        return "CAPITAL ALLOCATION"
+    if any(w in t for w in ["insider", "sold shares", "purchased shares", "form 4"]):
+        return "INSIDER ACTIVITY"
+    if any(w in t for w in ["launch", "product", "partnership", "contract", "win", "customer", "agreement"]):
+        return "PRODUCT/BUSINESS"
+    return "GENERAL"
+
+
+def get_news_combined(ticker: str) -> list:
+    """Aggregate news from yfinance, Finviz, and Seeking Alpha RSS. Deduplicate by title prefix."""
+    results: dict = {}
+
+    # 1. yfinance — 10 items with real article summaries
+    if YF_AVAILABLE:
+        try:
+            yft = yf.Ticker(ticker)
+            for n in (yft.news or []):
+                c = n.get("content", {})
+                title = (c.get("title") or "").strip()
+                if not title:
+                    continue
+                key = title[:60]
+                results[key] = {
+                    "date":         (c.get("pubDate") or "")[:10],
+                    "title":        title,
+                    "summary":      c.get("summary", "") or "",
+                    "source":       (c.get("provider") or {}).get("displayName", ""),
+                    "url":          (c.get("canonicalUrl") or {}).get("url", ""),
+                    "stock_change": None,
+                    "category":     _categorize_news(title),
+                }
+        except Exception as e:
+            print(f"yfinance news error for {ticker}: {e}")
+
+    # 2. Finviz — up to 100 items with stock-move % labels
+    try:
+        r = httpx.get(
+            f"https://finviz.com/quote.ashx?t={ticker}",
+            timeout=12,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            follow_redirects=True,
+        )
+        idx = r.text.find('id="news-table"')
+        if idx >= 0:
+            table_end = r.text.find("</table>", idx)
+            segment = r.text[idx:table_end] if table_end > idx else r.text[idx:idx + 60000]
+            rows = re.split(r"<tr\b", segment)[1:]
+            cur_date = ""
+            for row in rows:
+                dm = re.search(r"((?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)-\d+-\d+)", row)
+                if dm:
+                    cur_date = dm.group(1)
+                hm = re.search(r'tab-link-news"[^>]*>\s*([^<]+)\s*</a>', row)
+                sm = re.search(r"<span>\(([^)]+)\)</span>", row)
+                cm = re.search(r"(?:is-positive|is-negative)-\d+[^>]*>\s*([\+\-][0-9.]+%)", row)
+                if hm:
+                    title = hm.group(1).strip()
+                    key = title[:60]
+                    if key not in results:
+                        results[key] = {
+                            "date":         cur_date,
+                            "title":        title,
+                            "summary":      "",
+                            "source":       sm.group(1) if sm else "",
+                            "url":          "",
+                            "stock_change": cm.group(1) if cm else None,
+                            "category":     _categorize_news(title),
+                        }
+                    elif cm and not results[key].get("stock_change"):
+                        results[key]["stock_change"] = cm.group(1)
+    except Exception as e:
+        print(f"Finviz news error for {ticker}: {e}")
+
+    # 3. Seeking Alpha RSS — analyst opinion quality
+    try:
+        r = httpx.get(
+            f"https://seekingalpha.com/api/sa/combined/{ticker}.xml",
+            timeout=10,
+            headers={"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"},
+            follow_redirects=True,
+        )
+        if r.status_code == 200:
+            root = ET.fromstring(r.content)
+            channel = root.find("channel")
+            items_xml = channel.findall("item") if channel is not None else root.findall(".//item")
+            for item in items_xml:
+                title = (item.findtext("title") or "").strip()
+                if not title:
+                    continue
+                key = title[:60]
+                if key not in results:
+                    results[key] = {
+                        "date":         (item.findtext("pubDate") or "")[:16],
+                        "title":        title,
+                        "summary":      "",
+                        "source":       "Seeking Alpha",
+                        "url":          item.findtext("link") or "",
+                        "stock_change": None,
+                        "category":     _categorize_news(title),
+                    }
+    except Exception as e:
+        print(f"Seeking Alpha RSS error for {ticker}: {e}")
+
+    items = sorted(results.values(), key=lambda x: x.get("date", ""), reverse=True)
+    print(f"news_combined for {ticker}: {len(items)} items (yf+finviz+sa)")
+    return items[:40]
+
 
 def get_fmp_financials(ticker: str) -> dict:
     """
@@ -2180,6 +2304,13 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
             merged_history["pe_history"] = dict(sorted(pe_hist.items()))
         if ev_ebitda_hist:
             merged_history["ev_ebitda_history"] = dict(sorted(ev_ebitda_hist.items()))
+
+    # ── Combined news from 3 free sources ────────────────────────────────────
+    try:
+        fmp_ext["news_combined"] = get_news_combined(ticker)
+    except Exception as e:
+        print(f"news_combined error for {ticker}: {e}")
+        fmp_ext["news_combined"] = []
 
     return AnalysisPayload(
         company=info,

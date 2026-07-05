@@ -147,10 +147,83 @@ export async function POST(req: NextRequest) {
         .join("\n")
     : "Peer data not available.";
 
-  // Recent news
-  const newsStr = (ext.recent_news as any[])?.slice(0,8)
-    .map((n:any) => `• [${n.date}] ${n.title}${n.summary ? ` — ${n.summary}` : ""}`)
-    .join("\n") ?? "N/A";
+  // ── News aggregation: prefer news_combined (3-source), fall back to FMP ─────
+  const newsItems: Array<{date:string;title:string;summary:string;source:string;stock_change:string|null;category:string}> =
+    (ext.news_combined as any[])?.length
+      ? (ext.news_combined as any[])
+      : ((ext.recent_news as any[])?.map((n:any) => ({
+          date: n.date ?? "", title: n.title ?? "", summary: n.summary ?? "",
+          source: n.source ?? "", stock_change: null, category: "GENERAL",
+        })) ?? []);
+
+  // Group by category
+  const newsByCategory: Record<string, typeof newsItems> = {};
+  for (const item of newsItems) {
+    const cat = (item.category ?? "GENERAL") as string;
+    if (!newsByCategory[cat]) newsByCategory[cat] = [];
+    newsByCategory[cat].push(item);
+  }
+  const catOrder = ["EARNINGS","GUIDANCE","ANALYST ACTION","M&A","REGULATORY/LEGAL","MANAGEMENT","CAPITAL ALLOCATION","PRODUCT/BUSINESS","INSIDER ACTIVITY","GENERAL"];
+
+  // Loop 4: Pre-score impact for EVENTS SCORECARD
+  const highImpactTerms = ["guidance","cut","raised","beat","miss","ceo","acquisition","sec ","fda","downgrade","upgrade","lawsuit","resign","restatement","warning"];
+  const newsWithScores = newsItems.slice(0, 20).map(n => {
+    const tl = (n.title ?? "").toLowerCase();
+    const hasHighTerm = highImpactTerms.some(t => tl.includes(t));
+    const stockStr = n.stock_change ?? "";
+    const stockMoveAbs = stockStr ? Math.abs(parseFloat(stockStr.replace("%",""))) : 0;
+    const hasStockMove = !isNaN(stockMoveAbs) && stockMoveAbs > 2;
+    const impact = hasStockMove ? "HIGH" : hasHighTerm ? "MEDIUM" : "LOW";
+    const dir = stockStr.startsWith("+") ? "+" : stockStr.startsWith("-") ? "-" : "";
+    return `${impact}${dir} | ${n.date} | [${n.category ?? "GENERAL"}] ${n.title}${n.stock_change ? ` (Stock: ${n.stock_change})` : ""}`;
+  });
+  const impactSection = newsWithScores.length > 0
+    ? `═══════════════════════════════════════════════════════════════\nPRE-SCORED NEWS IMPACT (top 20 — use for EVENTS SCORECARD)\n═══════════════════════════════════════════════════════════════\n${newsWithScores.join("\n")}\n\n`
+    : "";
+
+  // 30-day sentiment score
+  const now30 = new Date();
+  const cutoff30 = new Date(now30.getTime() - 30 * 24 * 60 * 60 * 1000);
+  const last30days = newsItems.filter(n => { try { return new Date(n.date) >= cutoff30; } catch { return false; } });
+  const negTerms30 = ["cut","miss","decline","drop","fall","concern","probe","loss","lower","warn","disappoint","weak","below","delay"];
+  const posTerms30 = ["beat","raise","launch","win","grow","record","strong","exceed","upgrade","positive","accelerat","above","outperform"];
+  let sentScore30 = 0;
+  for (const n of last30days) {
+    const tl = (n.title ?? "").toLowerCase();
+    sentScore30 += posTerms30.filter(t => tl.includes(t)).length;
+    sentScore30 -= negTerms30.filter(t => tl.includes(t)).length;
+  }
+  const sentLabel30 = sentScore30 > 3 ? "POSITIVE" : sentScore30 < -3 ? "NEGATIVE" : "MIXED";
+
+  let newsBlock = `═══════════════════════════════════════════════════════════════\nRECENT NEWS & MARKET INTELLIGENCE (${newsItems.length} items | 30-day sentiment: ${sentScore30 > 0 ? "+" : ""}${sentScore30} ${sentLabel30})\n═══════════════════════════════════════════════════════════════\n\n`;
+  for (const cat of catOrder) {
+    const catItems = newsByCategory[cat];
+    if (!catItems?.length) continue;
+    newsBlock += `[${cat}]\n`;
+    for (const n of catItems.slice(0, cat === "GENERAL" ? 4 : 6)) {
+      const change = n.stock_change ? ` | Stock: ${n.stock_change}` : "";
+      newsBlock += `• ${n.date} [${n.source}] ${n.title}${change}\n`;
+      if (n.summary) newsBlock += `  → ${n.summary}\n`;
+    }
+    newsBlock += "\n";
+  }
+  newsBlock += `NEWS ANALYSIS INSTRUCTIONS — MANDATORY (produce in ## NEWS ANALYSIS & MARKET INTELLIGENCE section):
+
+1. EVENTS SCORECARD — Top 5 most material events from pre-scored list above:
+   Format each: [IMPACT] [CATEGORY] [DATE] — Headline
+   OUR TAKE: 1 sentence on what this changes for the investment thesis.
+
+2. SENTIMENT TRAJECTORY — Name exactly ONE pattern: "Cluster Break" / "Divergence" / "Quiet Period" / "Deterioration" / "Recovery" / "Debate" / "Normal". Then 2 sentences on what this implies for near-term price action.
+
+3. ANALYST POSITIONING — Any rating changes, PT revisions, initiations in last 30 days. Note delta from prior PT if visible in the headline. State explicitly if none found.
+
+4. WHAT'S PRICED IN vs NOT — Based on observed stock reactions to news:
+   "The market appears to have priced in: [X]"
+   "What appears NOT yet priced in: [Y]"
+
+5. NEAR-TERM CATALYSTS — 3 specific events/dates to watch in next 30-60 days based on patterns in the news.
+
+Every observation must connect directly to the investment thesis or expected stock reaction. No generic news summaries.`;
 
   // Earnings transcript (truncated) — use more when available from FMP structured transcript
   const transcriptStr = earningsTranscript ? earningsTranscript.slice(0, 8000) : "Not available";
@@ -484,10 +557,7 @@ PEER COMPARISON
 ═══════════════════════════════════════════════════════════════
 ${peerTable}
 
-═══════════════════════════════════════════════════════════════
-RECENT NEWS & CATALYSTS (last 30 days)
-═══════════════════════════════════════════════════════════════
-${newsStr}
+${impactSection}${newsBlock}
 
 ═══════════════════════════════════════════════════════════════
 INSIDER TRADING ACTIVITY (Form 4)
@@ -671,6 +741,9 @@ Use the FCF yield or EV/EBITDA as the anchor for the price targets. Show your ma
 
 ## KEY RISKS
 Write 7 specific, material risks (• prefix). For each: **[Risk Name in Bold]** — explain the mechanism, quantify the exposure where possible, and rate Probability (Low/Medium/High) and Impact (Low/Medium/High). No generic boilerplate. Only risks specific to ${companyName}'s actual business model and financial structure.
+
+## NEWS ANALYSIS & MARKET INTELLIGENCE
+5-part structured analysis following the NEWS ANALYSIS INSTRUCTIONS in the data section above. Include all 5 parts: Events Scorecard, Sentiment Trajectory, Analyst Positioning, What's Priced In vs Not, Near-Term Catalysts. Do not skip or abbreviate.
 
 ## INVESTMENT THESIS
 
