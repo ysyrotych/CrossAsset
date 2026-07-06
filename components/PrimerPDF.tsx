@@ -283,6 +283,36 @@ function parseRisks(text: string): { title: string; body: string }[] {
   return risks;
 }
 
+function parseNewsAnalysis(text: string): { label: string; icon: string; body: string }[] {
+  if (!text) return [];
+  const SECTIONS = [
+    { key: "EVENTS SCORECARD",      label: "Events Scorecard",       icon: "1" },
+    { key: "SENTIMENT TRAJECTORY",  label: "Sentiment Trajectory",   icon: "2" },
+    { key: "ANALYST POSITIONING",   label: "Analyst Positioning",    icon: "3" },
+    { key: "WHAT'S PRICED IN",      label: "What's Priced In vs Not",icon: "4" },
+    { key: "NEAR-TERM CATALYSTS",   label: "Near-Term Catalysts",    icon: "5" },
+  ];
+  const results: { label: string; icon: string; body: string }[] = [];
+  for (let i = 0; i < SECTIONS.length; i++) {
+    const sec = SECTIONS[i];
+    const nextKey = SECTIONS[i + 1]?.key;
+    // Match "1. EVENTS SCORECARD" or "1. **EVENTS SCORECARD**" etc.
+    const startRe = new RegExp(`(^|\\n)${i + 1}\\.\\s+\\*?\\*?${sec.key}`, "i");
+    const startM = text.match(startRe);
+    if (!startM) continue;
+    const startIdx = (startM.index ?? 0) + startM[0].length;
+    let endIdx = text.length;
+    if (nextKey) {
+      const endRe = new RegExp(`(^|\\n)${i + 2}\\.\\s+\\*?\\*?${nextKey}`, "i");
+      const endM = text.slice(startIdx).match(endRe);
+      if (endM) endIdx = startIdx + (endM.index ?? 0);
+    }
+    const body = text.slice(startIdx, endIdx).replace(/^[\s\n—:]+/, "").trim();
+    if (body.length > 5) results.push({ label: sec.label, icon: sec.icon, body });
+  }
+  return results;
+}
+
 // ── SVG Chart Components ──────────────────────────────────────────────────────
 
 const CHART_W  = 460;
@@ -1061,8 +1091,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {(() => {
             const newsAnalysisText = secs["NEWS_ANALYSIS_&_MARKET_INTELLIGENCE"] ?? "";
             if (!newsAnalysisText) return null;
-            const newsParas = parseParas(newsAnalysisText);
-            if (newsParas.length === 0) return null;
+            const subsections = parseNewsAnalysis(newsAnalysisText);
             const sentMatch = newsAnalysisText.match(/\b(Cluster Break|Deterioration|Recovery|Debate|Divergence|Quiet Period|Normal)\b/i);
             const sentPattern = sentMatch ? sentMatch[1] : null;
             const sentColor = sentPattern
@@ -1071,6 +1100,78 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 : sentPattern.toLowerCase() === "debate" ? AMBER
                 : GRAY)
               : GRAY;
+            // Subsection label colors
+            const subColors: Record<string, string> = {
+              "1": BLUE, "2": sentColor, "3": NAVY2, "4": GREEN, "5": AMBER,
+            };
+            if (subsections.length > 0) {
+              return (
+                <>
+                  <SectionHdr title="X. News Analysis & Market Intelligence" accentColor={ACCENT.primary} />
+                  {subsections.map((sub, i) => {
+                    const col = subColors[sub.icon] ?? NAVY;
+                    const lines = sub.body.split("\n").map(l => l.trim()).filter(Boolean);
+                    return (
+                      <View key={i} style={{ marginBottom: 10, borderLeftWidth: 2, borderLeftColor: col }}>
+                        <View style={{ backgroundColor: col, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4 }}>
+                          <Text style={{ color: "white", fontSize: 7, fontFamily: "Helvetica-Bold", letterSpacing: 0.8, textTransform: "uppercase" }}>
+                            {sub.icon}. {sub.label}
+                          </Text>
+                        </View>
+                        <View style={{ paddingHorizontal: 8 }}>
+                          {lines.map((line, j) => {
+                            const isOurTake = line.toUpperCase().startsWith("OUR TAKE:");
+                            const isImpact = line.match(/^\[(HIGH|MEDIUM|LOW)\]/i);
+                            const isPricedIn = line.match(/^"?The market appears/i) || line.match(/^"?What appears NOT/i);
+                            const isCatalyst = line.match(/^\d+[\.\)]/);
+                            if (isOurTake) {
+                              return (
+                                <View key={j} style={{ borderLeftWidth: 1.5, borderLeftColor: AMBER, paddingLeft: 6, marginBottom: 4, marginTop: 2 }}>
+                                  <Text style={{ fontSize: 7.5, color: AMBER, fontFamily: "Helvetica-Bold" }}>
+                                    {line.replace(/^OUR TAKE:\s*/i, "Our Take: ")}
+                                  </Text>
+                                </View>
+                              );
+                            }
+                            if (isPricedIn) {
+                              const isNot = line.match(/NOT/i);
+                              return (
+                                <View key={j} style={{ flexDirection: "row", marginBottom: 3 }}>
+                                  <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: isNot ? RED : GREEN, marginTop: 4, marginRight: 5 }} />
+                                  <Text style={{ flex: 1, fontSize: 8, lineHeight: 1.55, color: DGRAY, fontFamily: isNot ? "Helvetica-Oblique" : "Helvetica" }}>
+                                    {stripMd(line.replace(/^[""]/,"").replace(/[""]/,""))}
+                                  </Text>
+                                </View>
+                              );
+                            }
+                            if (isImpact || line.match(/^\[/)) {
+                              return (
+                                <View key={j} style={{ flexDirection: "row", marginBottom: 4 }}>
+                                  <Text style={{ fontSize: 7, color: GRAY, fontFamily: "Helvetica-Bold", minWidth: 14 }}>•</Text>
+                                  <Text style={{ flex: 1, fontSize: 8, lineHeight: 1.55, color: DGRAY }}>{stripMd(line)}</Text>
+                                </View>
+                              );
+                            }
+                            if (isCatalyst) {
+                              return (
+                                <View key={j} style={{ flexDirection: "row", marginBottom: 3 }}>
+                                  <Text style={{ fontSize: 8, color: AMBER, fontFamily: "Helvetica-Bold", minWidth: 14 }}>{line.match(/^(\d+)/)?.[1]}.</Text>
+                                  <Text style={{ flex: 1, fontSize: 8, lineHeight: 1.55, color: DGRAY }}>{stripMd(line.replace(/^\d+[\.\)]\s*/, ""))}</Text>
+                                </View>
+                              );
+                            }
+                            return <Text key={j} style={{ fontSize: 8, lineHeight: 1.6, color: DGRAY, marginBottom: 3 }}>{stripMd(line)}</Text>;
+                          })}
+                        </View>
+                      </View>
+                    );
+                  })}
+                </>
+              );
+            }
+            // Fallback: render as flat paragraphs if no structured subsections found
+            const newsParas = parseParas(newsAnalysisText);
+            if (newsParas.length === 0) return null;
             return (
               <>
                 <SectionHdr title="X. News Analysis & Market Intelligence" accentColor={ACCENT.primary} />
