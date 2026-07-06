@@ -535,7 +535,7 @@ function ThesisStage({
 function BuildStage({
   ticker, companyName, sections, setSections,
   thesis, tone, length, facts, history, fmpExtended,
-  onNext, onBack,
+  onNext, onBack, initialExpandedId,
 }: {
   ticker: string; companyName: string;
   sections: SectionDef[]; setSections: React.Dispatch<React.SetStateAction<SectionDef[]>>;
@@ -544,11 +544,25 @@ function BuildStage({
   history: Record<string, Record<string, number>>;
   fmpExtended: Record<string, unknown>;
   onNext: () => void; onBack: () => void;
+  initialExpandedId?: string;
 }) {
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [expandedId, setExpandedId] = useState<string | null>(initialExpandedId ?? null);
   const [editingId, setEditingId] = useState<string | null>(null);
+  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
   const [editContent, setEditContent] = useState("");
   const [generatingAll, setGeneratingAll] = useState(false);
+
+  // When arriving from ReviewStage with a target section, expand and scroll to it
+  useEffect(() => {
+    if (!initialExpandedId) return;
+    const target = sections.find(s => s.id === initialExpandedId);
+    if (target?.generated && target.content) {
+      setEditingId(initialExpandedId);
+      setEditContent(target.content);
+    }
+    const el = sectionRefs.current[initialExpandedId];
+    if (el) setTimeout(() => el.scrollIntoView({ behavior: "smooth", block: "center" }), 100);
+  }, [initialExpandedId]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const included = sections.filter(s => s.included);
   const generated = included.filter(s => s.generated).length;
@@ -636,7 +650,8 @@ function BuildStage({
           const wordCount = sec.content ? sec.content.split(/\s+/).filter(Boolean).length : 0;
 
           return (
-            <div key={sec.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: "hidden" }}>
+            <div key={sec.id} ref={el => { sectionRefs.current[sec.id] = el; }}
+              style={{ background: CARD, border: `1px solid ${initialExpandedId === sec.id ? BLUE : BORDER}`, borderRadius: 8, overflow: "hidden" }}>
               {/* Header */}
               <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", cursor: "pointer" }}
                 onClick={() => setExpandedId(isExpanded ? null : sec.id)}>
@@ -730,7 +745,7 @@ function BuildStage({
 
 function ReviewStage({
   ticker, companyName, industry, sections, facts, history, sector, selectedCharts,
-  onBack, onRestart,
+  onBack, onEditSection, onRestart,
 }: {
   ticker: string; companyName: string; industry: string;
   sections: SectionDef[];
@@ -738,7 +753,7 @@ function ReviewStage({
   history: Record<string, Record<string, number>>;
   sector: string;
   selectedCharts?: string[];
-  onBack: () => void; onRestart: () => void;
+  onBack: () => void; onEditSection: (sectionId: string) => void; onRestart: () => void;
 }) {
   const [copied, setCopied] = useState(false);
   const assembled = sections
@@ -808,7 +823,7 @@ function ReviewStage({
                   {sec.title}
                   {sec.userEdited && <span style={{ fontSize: 8, color: AMBER, fontWeight: 600 }}>• edited</span>}
                 </span>
-                <button onClick={onBack} style={{ fontSize: 8, color: MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "2px 7px", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", textTransform: "none" }}>
+                <button onClick={() => onEditSection(sec.id)} style={{ fontSize: 8, color: MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "2px 7px", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", textTransform: "none" }}>
                   ✎ Edit
                 </button>
               </div>
@@ -1059,6 +1074,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
   const [theses, setTheses] = useState<ThesisOption[]>([]);
   const [selectedThesis, setSelectedThesis] = useState("");
   const [selectedCharts, setSelectedCharts] = useState<string[]>(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
+  const [editTargetId, setEditTargetId] = useState<string | undefined>(undefined);
 
   function restart() {
     setSections(DEFAULT_SECTIONS.map(s => ({ ...s, generating: false })));
@@ -1110,7 +1126,9 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               sections={sections} setSections={setSections}
               thesis={selectedThesis} tone={tone} length={length}
               facts={facts} history={history} fmpExtended={fmpExtended}
-              onNext={() => setStage("review")} onBack={() => setStage("thesis")}
+              onNext={() => { setEditTargetId(undefined); setStage("review"); }}
+              onBack={() => { setEditTargetId(undefined); setStage("thesis"); }}
+              initialExpandedId={editTargetId}
             />
           )}
           {stage === "review" && (
@@ -1118,7 +1136,9 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               ticker={ticker} companyName={companyName} industry={industry}
               sections={sections} facts={facts} history={history} sector={sector}
               selectedCharts={selectedCharts}
-              onBack={() => setStage("build")} onRestart={restart}
+              onBack={() => setStage("build")}
+              onEditSection={(sectionId) => { setEditTargetId(sectionId); setStage("build"); }}
+              onRestart={restart}
             />
           )}
         </div>
