@@ -1,11 +1,17 @@
 "use client";
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
+import dynamic from "next/dynamic";
 import {
-  CheckCircle2, Circle, ChevronUp, ChevronDown, Lock, Unlock,
+  CheckCircle2, ChevronUp, ChevronDown, Lock, Unlock,
   Pencil, RefreshCw, Sparkles, Send, Copy, FileDown,
   Plus, Trash2, X, ArrowRight, Wand2, MessageSquare,
   LayoutList, Lightbulb, Hammer, Eye, Check,
 } from "lucide-react";
+
+const PrimerDownloadButton = dynamic(
+  () => import("@/components/PrimerDownloadButton").then(m => m.PrimerDownloadButton),
+  { ssr: false }
+);
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -685,23 +691,37 @@ function ReviewStage({
   sector: string;
   onBack: () => void; onRestart: () => void;
 }) {
+  const [copied, setCopied] = useState(false);
   const assembled = sections
     .filter(s => s.included && s.content)
     .map(s => `## ${s.title.toUpperCase()}\n\n${s.content}`)
     .join("\n\n---\n\n");
 
   function copyMarkdown() {
-    navigator.clipboard.writeText(assembled);
+    navigator.clipboard.writeText(assembled).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
+
+  const wordCount = assembled.split(/\s+/).filter(Boolean).length;
+  const readMin = Math.ceil(wordCount / 250);
 
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 12, marginBottom: 20 }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT, margin: 0, flex: 1 }}>Review & Export</h2>
+        <span style={{ fontSize: 10, color: MUTED }}>{wordCount} words · {readMin} min read</span>
         <button onClick={copyMarkdown}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: MUTED }}>
-          <Copy size={11} /> Copy Markdown
+          style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: copied ? GREEN : MUTED }}>
+          {copied ? <Check size={11} color={GREEN} /> : <Copy size={11} />} {copied ? "Copied!" : "Copy Markdown"}
         </button>
+        <PrimerDownloadButton
+          ticker={ticker}
+          companyName={companyName}
+          industry={industry}
+          content={assembled}
+          history={history}
+          facts={facts as Record<string, number>}
+          sector={sector}
+        />
         <button onClick={onBack}
           style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: MUTED }}>
           ← Edit
@@ -714,23 +734,39 @@ function ReviewStage({
 
       {/* Sections preview */}
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: "hidden" }}>
-        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, background: "#04090f" }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{companyName} ({ticker}) — Equity Research Primer</div>
-          <div style={{ fontSize: 10, color: MUTED, marginTop: 2 }}>
-            {sections.filter(s => s.included && s.content).length} sections · {assembled.split(/\s+/).filter(Boolean).length} words
+        <div style={{ padding: "16px 20px", borderBottom: `1px solid ${BORDER}`, background: "#04090f", display: "flex", alignItems: "center", gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <div style={{ fontSize: 13, fontWeight: 700, color: TEXT }}>{companyName} ({ticker}) — Equity Research Primer</div>
+            <div style={{ fontSize: 10, color: MUTED, marginTop: 2 }}>
+              {sections.filter(s => s.included && s.content).length} sections · {wordCount} words
+            </div>
+          </div>
+          {/* Section progress chips */}
+          <div style={{ display: "flex", gap: 4, flexWrap: "wrap", maxWidth: 360 }}>
+            {sections.filter(s => s.included).map(sec => (
+              <span key={sec.id} style={{ fontSize: 8, padding: "2px 6px", borderRadius: 3, fontWeight: 700, background: sec.content ? (sec.userEdited ? AMBER + "20" : GREEN + "15") : ACCENT, color: sec.content ? (sec.userEdited ? AMBER : GREEN) : MUTED, border: `1px solid ${sec.content ? (sec.userEdited ? AMBER + "40" : GREEN + "30") : BORDER}` }}>
+                {sec.title.split(" ").slice(0, 2).join(" ")}
+              </span>
+            ))}
           </div>
         </div>
         <div style={{ padding: "20px 24px", maxHeight: 600, overflowY: "auto" }}>
           {sections.filter(s => s.included && s.content).map((sec, i) => (
-            <div key={i} style={{ marginBottom: 24 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: BLUE, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}` }}>
+            <div key={i} style={{ marginBottom: 28 }}>
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: BLUE, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 6 }}>
                 {sec.title}
+                {sec.userEdited && <span style={{ fontSize: 8, color: AMBER, fontWeight: 600 }}>• edited</span>}
               </div>
-              <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.7, whiteSpace: "pre-wrap" }}>
+              <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>
                 {sec.content}
               </div>
             </div>
           ))}
+          {sections.filter(s => s.included && !s.content).length > 0 && (
+            <div style={{ background: ACCENT + "30", border: `1px solid ${AMBER}30`, borderRadius: 6, padding: "10px 14px", fontSize: 11, color: AMBER }}>
+              ⚠ {sections.filter(s => s.included && !s.content).length} section(s) have not been generated yet and are excluded from the export.
+            </div>
+          )}
         </div>
       </div>
     </div>
