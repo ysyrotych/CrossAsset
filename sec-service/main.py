@@ -74,6 +74,34 @@ KNOWN_PEERS: dict[str, list[str]] = {
     "CMG":   ["MCD", "SBUX", "YUM", "QSR", "DPZ"],
 }
 
+def _normalize_date(raw: str) -> str:
+    """Convert various date formats to YYYY-MM-DD for consistent sorting."""
+    if not raw:
+        return ""
+    raw = raw.strip()
+    # Already ISO
+    if re.match(r"^\d{4}-\d{2}-\d{2}", raw):
+        return raw[:10]
+    from datetime import datetime
+    # Finviz: Jun-15-25
+    try:
+        return datetime.strptime(raw[:9], "%b-%d-%y").strftime("%Y-%m-%d")
+    except Exception:
+        pass
+    # RFC 2822: Mon, 01 Jan 2024 00:00:00 +0000
+    for fmt in ("%a, %d %b %Y %H:%M:%S %z", "%a, %d %b %Y %H:%M:%S %Z",
+                "%d %b %Y %H:%M:%S %z", "%d %b %Y"):
+        try:
+            return datetime.strptime(raw[:31].strip(), fmt).strftime("%Y-%m-%d")
+        except Exception:
+            pass
+    # ISO with T: 2024-01-15T10:30:00Z
+    try:
+        return raw[:10]
+    except Exception:
+        return ""
+
+
 def _categorize_news(title: str) -> str:
     t = title.lower()
     if any(w in t for w in ["earnings", "eps", "q1", "q2", "q3", "q4", "quarterly", "results", "beat", "miss"]):
@@ -112,7 +140,7 @@ def get_news_combined(ticker: str) -> list:
                     continue
                 key = title[:60]
                 results[key] = {
-                    "date":         (c.get("pubDate") or "")[:10],
+                    "date":         _normalize_date(c.get("pubDate") or ""),
                     "title":        title,
                     "summary":      c.get("summary", "") or "",
                     "source":       (c.get("provider") or {}).get("displayName", ""),
@@ -149,7 +177,7 @@ def get_news_combined(ticker: str) -> list:
                     key = title[:60]
                     if key not in results:
                         results[key] = {
-                            "date":         cur_date,
+                            "date":         _normalize_date(cur_date),
                             "title":        title,
                             "summary":      "",
                             "source":       sm.group(1) if sm else "",
@@ -181,9 +209,9 @@ def get_news_combined(ticker: str) -> list:
                 key = title[:60]
                 if key not in results:
                     results[key] = {
-                        "date":         (item.findtext("pubDate") or "")[:16],
+                        "date":         _normalize_date(item.findtext("pubDate") or ""),
                         "title":        title,
-                        "summary":      "",
+                        "summary":      (item.findtext("description") or item.findtext("{http://purl.org/rss/1.0/modules/content/}encoded") or "")[:300].strip(),
                         "source":       "Seeking Alpha",
                         "url":          item.findtext("link") or "",
                         "stock_change": None,
