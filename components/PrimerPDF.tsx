@@ -577,6 +577,15 @@ function Para({ text }: { text: string }) {
   const clean = text.replace(/\*\*([^*]+)\*\*/g, "$1");
   return <Text style={S.para}>{clean}</Text>;
 }
+function CalloutBox({ label, value, context, color }: { label: string; value: string; context: string; color: string }) {
+  return (
+    <View style={{ borderLeftWidth: 3, borderLeftColor: color, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 7, marginVertical: 6, borderRadius: 2 }}>
+      <Text style={{ fontSize: 6.5, color, fontFamily: "Helvetica-Bold", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>{label}</Text>
+      <Text style={{ fontSize: 12, color: NAVY, fontFamily: "Helvetica-Bold", marginBottom: 2 }}>{value}</Text>
+      <Text style={{ fontSize: 7.5, color: GRAY, lineHeight: 1.4 }}>{context}</Text>
+    </View>
+  );
+}
 function Bullets({ items, color }: { items: string[]; color?: string }) {
   return (
     <>
@@ -780,11 +789,38 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
         <View style={S.body}>
 
+          {/* Table of Contents */}
+          <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 12, marginBottom: 16 }}>
+            <Text style={{ fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>Table of Contents</Text>
+            <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
+              {[
+                "I. Executive Summary", "II. Company Snapshot", "III. Business Overview",
+                "IV. Industry Analysis", "V. Financial Analysis", "VI. Valuation Framework",
+                "VII. Management Commentary & Guidance", "VIII. Management & Governance",
+                "IX. Key Risks", "X. News Analysis & Market Intelligence",
+                "XI. Investment Thesis", "XII. Key Metrics Dashboard", "XIII. Earnings Call Questions",
+              ].map((item, i) => (
+                <View key={i} style={{ width: "50%", paddingRight: 8, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 5 }}>
+                  <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: ACCENT.primary, flexShrink: 0 }} />
+                  <Text style={{ fontSize: 7.5, color: DGRAY }}>{item}</Text>
+                </View>
+              ))}
+            </View>
+          </View>
+
           {/* I. Executive Summary */}
           <SectionHdr title="I. Executive Summary" accentColor={ACCENT.primary} />
           {execBullets.length > 0
             ? <Bullets items={execBullets} color={ACCENT.primary} />
             : parseParas(secs["EXECUTIVE_SUMMARY"] ?? "").map((p, i) => <Para key={i} text={p} />)}
+          {/* Pull quote — most impactful exec bullet */}
+          {execBullets.length > 0 && (
+            <View style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER, paddingVertical: 9, marginVertical: 8 }}>
+              <Text style={{ fontSize: 9.5, color: NAVY, fontFamily: "Helvetica-Bold", lineHeight: 1.65 }}>
+                {`"${(execBullets[0].replace(/\*\*([^*]+)\*\*/g, "$1")).slice(0, 200)}${execBullets[0].length > 200 ? "…" : ""}"`}
+              </Text>
+            </View>
+          )}
 
           {/* II. Company Snapshot */}
           <SectionHdr title="II. Company Snapshot" accentColor={ACCENT.primary} />
@@ -826,6 +862,56 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   </Text>
                   <Text style={S.posCardSub}>{facts.stock_price != null ? `$${facts.stock_price.toFixed(2)} current` : ""}</Text>
                 </View>
+              </View>
+            );
+          })()}
+
+          {/* Investment Signal Cards — Rule of 40 / Leverage / Piotroski */}
+          {(() => {
+            const revGrowth = facts.revenue_growth ?? 0;
+            const fcfMgn = facts.free_cash_flow != null && facts.revenue != null && facts.revenue !== 0
+              ? (facts.free_cash_flow / facts.revenue) * 100 : 0;
+            const ruleOf40 = revGrowth + fcfMgn;
+            const netDebtEbitda = facts.net_debt != null && facts.ebitda != null && facts.ebitda !== 0
+              ? facts.net_debt / facts.ebitda : null;
+            const pRow = snapshotRows.find(r => r.label.toLowerCase().includes("piotroski"));
+            const pScore = pRow ? parseInt(pRow.value.match(/\d+/)?.[0] ?? "") : null;
+            const signals = [
+              {
+                label: "Rule of 40", value: `${ruleOf40.toFixed(0)}`,
+                badge: ruleOf40 >= 40 ? "PASS" : ruleOf40 >= 25 ? "NEAR" : "FAIL",
+                color: ruleOf40 >= 40 ? GREEN : ruleOf40 >= 25 ? AMBER : RED,
+                desc: "Rev growth + FCF margin. ≥40 target",
+              },
+              {
+                label: "Net Debt / EBITDA",
+                value: netDebtEbitda != null ? `${netDebtEbitda.toFixed(1)}x` : "—",
+                badge: netDebtEbitda == null ? "N/A" : netDebtEbitda < 0 ? "NET CASH" : netDebtEbitda < 1 ? "LOW" : netDebtEbitda < 3 ? "MOD" : "HIGH",
+                color: netDebtEbitda == null ? GRAY : netDebtEbitda < 1 ? GREEN : netDebtEbitda < 3 ? AMBER : RED,
+                desc: "Financial leverage. <1x conservative",
+              },
+              {
+                label: "Piotroski F-Score",
+                value: pScore != null ? `${pScore}/9` : "—",
+                badge: pScore == null ? "N/A" : pScore >= 7 ? "STRONG" : pScore >= 4 ? "MOD" : "WEAK",
+                color: pScore == null ? GRAY : pScore >= 7 ? GREEN : pScore >= 4 ? AMBER : RED,
+                desc: "9-factor financial health. ≥7 strong",
+              },
+            ];
+            return (
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+                {signals.map((sig, i) => (
+                  <View key={i} style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderTopWidth: 2, borderTopColor: sig.color, borderRadius: 3, padding: 8 }}>
+                    <Text style={{ fontSize: 6, color: GRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>{sig.label}</Text>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 2 }}>
+                      <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: NAVY }}>{sig.value}</Text>
+                      <View style={{ backgroundColor: LGRAY, borderRadius: 2, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: sig.color }}>
+                        <Text style={{ fontSize: 5.5, fontFamily: "Helvetica-Bold", color: sig.color }}>{sig.badge}</Text>
+                      </View>
+                    </View>
+                    <Text style={{ fontSize: 6, color: GRAY, lineHeight: 1.4 }}>{sig.desc}</Text>
+                  </View>
+                ))}
               </View>
             );
           })()}
@@ -912,8 +998,57 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* V. Financial Analysis */}
           <SectionHdr title="V. Financial Analysis" accentColor={ACCENT.primary} />
-          {rev.length > 0 && <><SubSectionHdr title="Revenue & Profitability Trends" />{rev.map((p,i) => <Para key={i} text={p} />)}</>}
-          {bal.length > 0 && <><SubSectionHdr title="Balance Sheet & Capital Allocation" />{bal.map((p,i) => <Para key={i} text={p} />)}</>}
+          {rev.length > 0 && (
+            <>
+              <SubSectionHdr title="Revenue & Profitability Trends" />
+              {rev.map((p,i) => <Para key={i} text={p} />)}
+              {/* Revenue CAGR callout */}
+              {(() => {
+                const revData = history.revenue ?? {};
+                const revYrs = Object.keys(revData).sort();
+                if (revYrs.length >= 3) {
+                  const oldest = revData[revYrs[0]];
+                  const newest = revData[revYrs[revYrs.length - 1]];
+                  const n = revYrs.length - 1;
+                  if (oldest > 0 && newest > 0) {
+                    const cagr = (Math.pow(newest / oldest, 1 / n) - 1) * 100;
+                    return (
+                      <CalloutBox
+                        label={`Revenue CAGR (${n}Y)`}
+                        value={`${cagr >= 0 ? "+" : ""}${cagr.toFixed(1)}%`}
+                        context={`FY${revYrs[0].slice(0,4)} – FY${revYrs[revYrs.length-1].slice(0,4)} compound annual growth rate`}
+                        color={cagr >= 15 ? GREEN : cagr >= 5 ? AMBER : RED}
+                      />
+                    );
+                  }
+                }
+                return null;
+              })()}
+            </>
+          )}
+          {bal.length > 0 && (
+            <>
+              <SubSectionHdr title="Balance Sheet & Capital Allocation" />
+              {bal.map((p,i) => <Para key={i} text={p} />)}
+              {/* Leverage callout */}
+              {(() => {
+                const nd = facts.net_debt;
+                const eb = facts.ebitda;
+                if (nd == null || eb == null || eb === 0) return null;
+                const ratio = nd / eb;
+                const status = ratio < 0 ? "Net cash position — balance sheet is a strategic asset" : ratio < 1 ? "Conservative leverage — ample financial flexibility" : ratio < 3 ? "Moderate leverage — manageable with stable cash flow" : "Elevated leverage — limits strategic flexibility";
+                const color = ratio < 1 ? GREEN : ratio < 3 ? AMBER : RED;
+                return (
+                  <CalloutBox
+                    label="Leverage Ratio"
+                    value={ratio < 0 ? "Net Cash" : `${ratio.toFixed(1)}x Net Debt / EBITDA`}
+                    context={status}
+                    color={color}
+                  />
+                );
+              })()}
+            </>
+          )}
           {fcf.length > 0 && <><SubSectionHdr title="Free Cash Flow & CapEx" />{fcf.map((p,i) => <Para key={i} text={p} />)}</>}
           {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}
           {qoe.length > 0 && <><SubSectionHdr title="Quality of Earnings & Cash Conversion" />{qoe.map((p,i) => <Para key={i} text={p} />)}</>}
