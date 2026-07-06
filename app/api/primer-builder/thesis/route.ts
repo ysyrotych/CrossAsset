@@ -25,20 +25,30 @@ export async function POST(req: NextRequest) {
   const price = facts?.stock_price;
   const pctFromHigh = w52h && price ? `${(((price / w52h) - 1) * 100).toFixed(0)}%` : "N/A";
 
+  const pe = facts?.pe_ratio;
+  const evEbitda = facts?.ev_ebitda;
+  const fcfYield = facts?.free_cash_flow && facts?.market_cap ? ((facts.free_cash_flow / facts.market_cap) * 100).toFixed(1) : null;
+  const opMargin = facts?.operating_margin;
+  const grossMargin = facts?.gross_margin;
+
   const prompt = `Generate exactly 5 distinct investment thesis angles for ${ticker} (${companyName}${sector ? `, ${sector}` : ""}).
 
 Company snapshot:
 - Revenue: ${fmt(facts?.revenue)} | Growth YoY: ${pct(facts?.revenue_growth ?? facts?.revenue_growth_yoy)}
-- FCF Margin: ${pct(facts?.fcf_margin)} | Gross Margin: ${pct(facts?.gross_margin)}
-- ROIC: ${pct(facts?.roic)} vs 9% WACC | Net Debt: ${fmt(facts?.net_debt)}
-- Current price: ${price ? `$${Number(price).toFixed(2)}` : "N/A"} | vs 52W high: ${pctFromHigh}
+- Gross Margin: ${pct(grossMargin)} | Op Margin: ${pct(opMargin)} | FCF Margin: ${pct(facts?.fcf_margin)}
+- ROIC: ${pct(facts?.roic)} | Net Debt: ${fmt(facts?.net_debt)} | Market Cap: ${fmt(facts?.market_cap)}
+- P/E: ${pe ? Number(pe).toFixed(1) : "N/A"} | EV/EBITDA: ${evEbitda ? Number(evEbitda).toFixed(1) : "N/A"} | FCF Yield: ${fcfYield ? fcfYield + "%" : "N/A"}
+- Stock: $${price ? Number(price).toFixed(2) : "N/A"} | 52W High: $${facts?.week52_high ? Number(facts.week52_high).toFixed(0) : "N/A"} | vs 52W high: ${pctFromHigh}
+- EPS: $${facts?.eps_diluted ? Number(facts.eps_diluted).toFixed(2) : "N/A"}
 - Analyst tone preference: ${tone ?? "analytical"}
 
 Rules for the 5 theses:
-- Each must be a DIFFERENT angle — not just optimistic/pessimistic variants of the same story
-- Include: 1-2 pure bull (market underappreciates X), 1-2 pure bear (market overestimates Y), 1 contrarian or nuanced
-- Give each a punchy, memorable title (e.g. "The Hidden Margin Flywheel", "The Valuation Mirage")
-- Be specific to THIS company's actual numbers — no generic financial theses
+- Each must be a FUNDAMENTALLY DIFFERENT angle — not just optimistic/pessimistic variants of the same story
+- Include: 1-2 pure bull (market underappreciates something specific in the numbers), 1-2 pure bear (market is pricing in growth that won't materialize), 1 contrarian or event-driven angle
+- Give each a punchy, memorable title using financial jargon or a vivid image (e.g. "The Hidden Margin Flywheel", "The Valuation Mirage", "Priced for Perfection It Can't Deliver")
+- core_argument must reference at least one specific number from the snapshot above
+- key_assumptions must be falsifiable — things you could check in an earnings call
+- Be specific to THIS company's actual numbers — no generic thesis that could apply to any company in the sector
 
 Return ONLY a valid JSON array of exactly 5 objects, no markdown, no preamble:
 [

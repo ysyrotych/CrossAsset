@@ -556,7 +556,7 @@ function BuildStage({
   function buildDocumentContext(upToId: string): string {
     const relevant = sections.filter(s => s.included && s.generated && s.content && s.id !== upToId);
     if (relevant.length === 0) return "";
-    return relevant.map(s => `## ${s.title}\n${s.content.slice(0, 400)}...`).join("\n\n");
+    return relevant.map(s => `## ${s.title}\n${s.content.slice(0, 1000)}${s.content.length > 1000 ? "…" : ""}`).join("\n\n");
   }
 
   async function generateSection(id: string) {
