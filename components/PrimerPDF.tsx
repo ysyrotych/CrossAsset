@@ -245,6 +245,44 @@ function parseParas(text: string): string[] {
     .filter(p => p.length > 30 && !p.startsWith("#") && !p.startsWith("|"));
 }
 
+function parseRisks(text: string): { title: string; body: string }[] {
+  if (!text) return [];
+  // Handle both formats:
+  // 1. **RISK TITLE**\nbody text
+  // 2. • **RISK TITLE:** body text  (single-line bullet with bold title)
+  const risks: { title: string; body: string }[] = [];
+  const lines = text.split("\n");
+  let curTitle = "";
+  let bodyLines: string[] = [];
+  const flush = () => {
+    if (curTitle) {
+      risks.push({ title: curTitle, body: bodyLines.join(" ").trim() });
+      curTitle = ""; bodyLines = [];
+    }
+  };
+  for (const line of lines) {
+    const t = line.trim();
+    if (!t) continue;
+    // Bold standalone title: **TITLE** (possibly after a bullet marker)
+    const titleMatch = t.match(/^[•\-]?\s*\*\*([^*]+)\*\*\s*$/) ?? t.match(/^[•\-]?\s*\*\*([^*]+)\*\*:?\s*$/);
+    if (titleMatch) { flush(); curTitle = titleMatch[1].trim(); continue; }
+    // Bullet with bold-prefixed title: • **TITLE:** body...
+    const inlineMatch = t.match(/^[•\-]\s*\*\*([^*]+)\*\*[:\s]+(.+)$/);
+    if (inlineMatch) { flush(); risks.push({ title: inlineMatch[1].trim(), body: inlineMatch[2].trim() }); continue; }
+    // Regular line → body content
+    if (curTitle) bodyLines.push(t.replace(/^[•\-]\s*/, ""));
+  }
+  flush();
+  // Fallback: if no structure found, treat each paragraph as a risk item
+  if (risks.length === 0) {
+    return parseParas(text).slice(0, 8).map(p => {
+      const m = p.match(/^\*\*([^*]+)\*\*[:\s]*([\s\S]*)/);
+      return m ? { title: m[1].trim(), body: m[2].trim() } : { title: "", body: p };
+    });
+  }
+  return risks;
+}
+
 // ── SVG Chart Components ──────────────────────────────────────────────────────
 
 const CHART_W  = 460;
@@ -592,6 +630,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const leadership = parseParas(secs["LEADERSHIP_&_TRACK_RECORD"] ?? "");
   const capAlloc   = parseParas(secs["CAPITAL_ALLOCATION_DISCIPLINE"] ?? "");
 
+  const riskItems = parseRisks(secs["KEY_RISKS"] ?? "");
   const risks = parseBullets(secs["KEY_RISKS"] ?? "");
   const itText = secs["INVESTMENT_THESIS"] ?? "";
   const bull  = parseBullets(secs["BULL_CASE"] ?? "").length > 0
@@ -995,10 +1034,22 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           )}
 
           {/* IX. Key Risks */}
-          {risks.length > 0 && (
+          {(riskItems.length > 0 || risks.length > 0) && (
             <>
               <SectionHdr title="IX. Key Risks" accentColor={RED} pageBreak />
-              <Bullets items={risks} color={RED} />
+              {riskItems.length > 0
+                ? riskItems.map((r, i) => (
+                    <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: i < 2 ? RED : i < 4 ? AMBER : GRAY }}>
+                      {r.title ? (
+                        <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: i < 2 ? RED : NAVY, marginBottom: 3 }}>
+                          {r.title}
+                        </Text>
+                      ) : null}
+                      {r.body ? <Text style={S.para}>{r.body.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text> : null}
+                    </View>
+                  ))
+                : <Bullets items={risks} color={RED} />
+              }
             </>
           )}
 
