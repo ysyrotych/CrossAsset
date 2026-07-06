@@ -87,6 +87,55 @@ CEO: ${fmpExtended.ceo ?? "N/A"} | Employees: ${fmpExtended.employees != null ? 
 Analyst Rating: ${fmpExtended.fmp_rating ?? "N/A"} | Description: ${typeof fmpExtended.description === "string" ? fmpExtended.description.slice(0, 300) : "N/A"}
 ` : "";
 
+  // Insider trading block for management/governance sections
+  const insiderSections = ["management_governance", "management_commentary", "key_risks"];
+  const insiderBlock = insiderSections.includes(sectionId) && Array.isArray(fmpExtended?.insider_trading) && fmpExtended.insider_trading.length > 0
+    ? `\nINSIDER TRADING (last ${Math.min((fmpExtended.insider_trading as any[]).length, 10)} transactions):
+${(fmpExtended.insider_trading as Array<{name?: string; title?: string; transaction?: string; shares?: number; price?: number; value?: number; date?: string}>)
+  .slice(0, 10)
+  .map(t => `${t.date ? t.date.slice(0, 10) : "?"} | ${t.name ?? "?"} (${t.title ?? "?"}) | ${t.transaction ?? "?"} | ${t.shares != null ? Number(t.shares).toLocaleString() + " shares" : ""} @ $${t.price?.toFixed(2) ?? "?"} | Value: $${t.value != null ? (Math.abs(t.value) / 1e6).toFixed(2) + "M" : "?"}`)
+  .join("\n")}
+`
+    : "";
+
+  // Earnings surprise history for earnings questions and management sections
+  const surpriseSections = ["earnings_questions", "management_commentary", "management_governance", "executive_summary"];
+  const surpriseBlock = surpriseSections.includes(sectionId) && Array.isArray(fmpExtended?.earnings_surprises) && fmpExtended.earnings_surprises.length > 0
+    ? `\nEARNINGS SURPRISE HISTORY (${(fmpExtended.earnings_surprises as any[]).length} quarters):
+${(fmpExtended.earnings_surprises as Array<{date?: string; quarter?: string; actual_eps?: number; estimated_eps?: number; surprise_pct?: number}>)
+  .slice(0, 8)
+  .map(e => {
+    const surp = e.surprise_pct ?? (e.actual_eps != null && e.estimated_eps != null ? ((e.actual_eps - e.estimated_eps) / Math.abs(e.estimated_eps)) * 100 : null);
+    return `${e.date?.slice(0, 7) ?? e.quarter ?? "?"}: Actual EPS $${e.actual_eps?.toFixed(2) ?? "?"} vs Est $${e.estimated_eps?.toFixed(2) ?? "?"} (${surp != null ? (surp >= 0 ? "+" : "") + surp.toFixed(1) + "%" : "?"})`;
+  })
+  .join("\n")}
+`
+    : "";
+
+  // Analyst rec breakdown for thesis/investment sections
+  const analysisSections = ["investment_thesis", "executive_summary", "key_risks"];
+  const analystRecBlock = analysisSections.includes(sectionId) && fmpExtended?.analyst_rec != null
+    ? (() => {
+        const rec = fmpExtended.analyst_rec as { strong_buy: number; buy: number; hold: number; sell: number; strong_sell: number; total: number };
+        const bullish = (rec.strong_buy ?? 0) + (rec.buy ?? 0);
+        const bearish = (rec.sell ?? 0) + (rec.strong_sell ?? 0);
+        return `\nANALYST CONSENSUS: ${bullish} Buy / ${rec.hold ?? 0} Hold / ${bearish} Sell (of ${rec.total ?? 0} analysts)\n`;
+      })()
+    : "";
+
+  // Segment revenue for business/snapshot sections
+  const segmentSections = ["business_overview", "company_snapshot", "financial_analysis"];
+  const segmentBlock = segmentSections.includes(sectionId) && fmpExtended?.segments?.data != null
+    ? (() => {
+        const segs = fmpExtended.segments as { data: Record<string, number> };
+        const total = Object.values(segs.data).reduce((s, v) => s + Math.abs(v), 0);
+        const lines = Object.entries(segs.data)
+          .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+          .map(([name, val]) => `${name}: $${Math.abs(val) >= 1e9 ? (val / 1e9).toFixed(1) + "B" : (val / 1e6).toFixed(0) + "M"} (${total > 0 ? (Math.abs(val) / total * 100).toFixed(0) : "?"}%)`);
+        return `\nREVENUE SEGMENTS:\n${lines.join("\n")}\n`;
+      })()
+    : "";
+
   const histBlock = history && Object.keys(history).length > 0 ? `
 HISTORICAL TRENDS (multi-year):
 ${Object.entries(history).map(([metric, years]) => {
@@ -129,7 +178,7 @@ ${thesis || "Write from a balanced, analytical perspective with a clear bottom-l
 
 TONE: ${tone ?? "analytical"}
 
-${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${newsBlock}
+${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${segmentBlock}${insiderBlock}${surpriseBlock}${analystRecBlock}${newsBlock}
 TASK: ${sectionGuidance}
 
 FORMATTING:
