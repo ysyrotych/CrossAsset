@@ -74,25 +74,25 @@ const S = StyleSheet.create({
   // Sections
   sectionHeader: {
     backgroundColor: NAVY, color: "white", fontSize: 7, fontFamily: "Helvetica-Bold",
-    letterSpacing: 1.2, textTransform: "uppercase", paddingHorizontal: 8, paddingVertical: 4,
-    marginBottom: 8, marginTop: 16,
+    letterSpacing: 1.4, textTransform: "uppercase", paddingHorizontal: 10, paddingVertical: 5,
+    marginBottom: 10, marginTop: 20,
   },
   subsectionHeader: {
-    fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY, marginBottom: 5, marginTop: 10,
-    borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 2,
+    fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 6, marginTop: 14,
+    borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 3,
   },
 
-  para:       { fontSize: 8.5, lineHeight: 1.6, color: DGRAY, marginBottom: 6 },
-  bullet:     { flexDirection: "row", marginBottom: 5 },
+  para:       { fontSize: 8.5, lineHeight: 1.65, color: DGRAY, marginBottom: 8 },
+  bullet:     { flexDirection: "row", marginBottom: 6 },
   bulletDot:  { width: 12, fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
-  bulletText: { flex: 1, fontSize: 8.5, lineHeight: 1.6, color: DGRAY },
+  bulletText: { flex: 1, fontSize: 8.5, lineHeight: 1.65, color: DGRAY },
 
   // Table
-  table:          { marginVertical: 8 },
-  tableHeader:    { flexDirection: "row", backgroundColor: NAVY, paddingVertical: 4, paddingHorizontal: 6 },
-  tableHeaderCell:{ color: "white", fontSize: 7, fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },
-  tableRow:       { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 3, paddingHorizontal: 6 },
-  tableRowAlt:    { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 3, paddingHorizontal: 6, backgroundColor: LGRAY },
+  table:          { marginVertical: 10 },
+  tableHeader:    { flexDirection: "row", backgroundColor: NAVY, paddingVertical: 5, paddingHorizontal: 8 },
+  tableHeaderCell:{ color: "white", fontSize: 7.5, fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },
+  tableRow:       { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 4, paddingHorizontal: 8 },
+  tableRowAlt:    { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: LGRAY },
   tableCell:      { fontSize: 8, color: DGRAY },
   tableCellBold:  { fontSize: 8, color: NAVY, fontFamily: "Helvetica-Bold" },
   tableCellNum:   { fontSize: 8, color: DGRAY, textAlign: "right" },
@@ -150,19 +150,42 @@ const S = StyleSheet.create({
 
 function parsePrimerSections(markdown: string): Record<string, string> {
   const sections: Record<string, string> = {};
+  const h2Accum: Record<string, string[]> = {};
   const lines = markdown.split("\n");
+  let h2Key = "";
   let currentKey = "";
   let buf: string[] = [];
   const toKey = (raw: string) => raw.trim().toUpperCase().replace(/\s+/g, "_");
-  const flush = () => { if (currentKey) sections[currentKey] = buf.join("\n").trim(); };
+
+  const flush = () => {
+    if (!currentKey) return;
+    const content = buf.join("\n").trim();
+    sections[currentKey] = content;
+    // Accumulate subsection content into parent h2 bucket so fallback rendering always works,
+    // even when Claude uses non-standard ### header names that don't match canonical keys.
+    if (h2Key && currentKey !== h2Key && content) {
+      (h2Accum[h2Key] ??= []).push(content);
+    }
+  };
+
   for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+)$/);
     const h3 = line.match(/^###\s+(.+)$/);
-    if (h2) { flush(); currentKey = toKey(h2[1]); buf = []; }
-    else if (h3) { flush(); currentKey = toKey(h3[1]); buf = []; }
+    const h2 = line.match(/^##\s+(.+)$/);
+    if (h3) { flush(); currentKey = toKey(h3[1]); buf = []; }
+    else if (h2) { flush(); h2Key = toKey(h2[1]); currentKey = h2Key; buf = []; }
     else { buf.push(line); }
   }
   flush();
+
+  // Fill empty h2 parent keys with accumulated subsection content.
+  // This ensures Business Overview/Industry Analysis/Financial Analysis always have
+  // renderable content even when Claude's ### headers don't exactly match canonical keys.
+  for (const [key, parts] of Object.entries(h2Accum)) {
+    if (!(sections[key] ?? "").trim()) {
+      sections[key] = parts.join("\n\n");
+    }
+  }
+
   // Add stripped versions of keys with roman-numeral prefixes (e.g. "III._BUSINESS_OVERVIEW" → "BUSINESS_OVERVIEW")
   const romanPrefix = /^[IVXLCDM]+\._/;
   for (const [key, val] of Object.entries(sections)) {
@@ -451,9 +474,13 @@ interface PrimerPDFProps {
   history: Record<string, Record<string, number>>;
   facts: Record<string, number>;
   sector?: string;
+  selectedCharts?: string[];
 }
 
-export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector }: PrimerPDFProps) {
+const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"];
+
+export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts }: PrimerPDFProps) {
+  const showChart = (id: string) => !selectedCharts || selectedCharts.length === 0 || selectedCharts.includes(id);
   const secs = parsePrimerSections(content);
 
   const execBullets  = parseBullets(secs["EXECUTIVE_SUMMARY"] ?? "");
@@ -602,14 +629,14 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           <SectionHdr title="I. Executive Summary" accentColor={ACCENT.primary} />
           {execBullets.length > 0
             ? <Bullets items={execBullets} color={ACCENT.primary} />
-            : <Para text={secs["EXECUTIVE_SUMMARY"] ?? ""} />}
+            : parseParas(secs["EXECUTIVE_SUMMARY"] ?? "").map((p, i) => <Para key={i} text={p} />)}
 
           {/* II. Company Snapshot */}
           <SectionHdr title="II. Company Snapshot" accentColor={ACCENT.primary} />
           {snapshotRows.length > 0 && <SnapshotTable rows={snapshotRows} />}
 
           {/* Financial Positioning Card (4 boxes) */}
-          {(() => {
+          {showChart("positioning") && (() => {
             const roic = facts.roic;
             const roicSpread = roic != null ? roic - 9 : null;
             const fcfYld = facts.free_cash_flow && facts.market_cap ? (facts.free_cash_flow / facts.market_cap * 100) : null;
@@ -649,20 +676,22 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           })()}
 
           {/* Charts — Revenue+FCF and EPS side by side */}
-          {Object.keys(history.revenue ?? {}).length >= 2 && (
+          {(showChart("revenue_fcf") || showChart("eps") || showChart("margins")) && Object.keys(history.revenue ?? {}).length >= 2 && (
             <>
               <SubSectionHdr title="Financial Trends" />
               <View style={{ flexDirection: "row", gap: 16, marginBottom: 8 }}>
-                <View style={{ flex: 3 }}>
-                  <RevenueBarChart history={history} />
-                </View>
-                {Object.keys(history.eps_diluted ?? {}).length >= 2 && (
+                {showChart("revenue_fcf") && (
+                  <View style={{ flex: 3 }}>
+                    <RevenueBarChart history={history} />
+                  </View>
+                )}
+                {showChart("eps") && Object.keys(history.eps_diluted ?? {}).length >= 2 && (
                   <View style={{ flex: 2 }}>
                     <EpsBarChart history={history} />
                   </View>
                 )}
               </View>
-              <MarginLineChart history={history} />
+              {showChart("margins") && <MarginLineChart history={history} />}
             </>
           )}
 
@@ -745,7 +774,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   <SubSectionHdr title="Implied Scenarios" />
                   {valScen.map((p,i) => <Para key={i} text={p} />)}
                   {/* Scenario price range visual */}
-                  {(() => {
+                  {showChart("price_range") && (() => {
                     const allText = valScen.join(" ");
                     // Extract scenario prices from the labeled format: "Bear Case ($42):", "Base Case ($105):", "Bull Case ($155):"
                     const bearMatch = allText.match(/bear\s+case\s*[\(\[\{]?\$\s*(\d{1,5}(?:\.\d{1,2})?)/i);
@@ -781,7 +810,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                             ))}
                           </Svg>
                           <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
-                            {pts.map(p => (
+                            {[...pts].sort((a, b) => a.price - b.price).map(p => (
                               <View key={p.label} style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color }} />
                                 <Text style={{ fontSize: 6.5, color: DGRAY }}>{p.label}: ${p.price.toFixed(0)}{cur && p.price !== cur ? ` (${((p.price/cur-1)*100).toFixed(0)}%)` : ""}</Text>
@@ -817,7 +846,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   <SubSectionHdr title="Capital Allocation Discipline" />
                   {capAlloc.map((p,i) => <Para key={i} text={p} />)}
                   {/* Capital Allocation waterfall */}
-                  {(() => {
+                  {showChart("cap_alloc") && (() => {
                     const capex  = facts.capex != null ? Math.abs(facts.capex) : null;
                     const buybk  = facts.buybacks != null ? Math.abs(facts.buybacks) : null;
                     const divs   = facts.dividends_paid != null ? Math.abs(facts.dividends_paid) : null;

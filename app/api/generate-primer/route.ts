@@ -635,11 +635,22 @@ CRITICAL WRITING RULES — NON-NEGOTIABLE:
 5. SCENARIOS must include explicit price math: "Base case: $[X] = [EBITDA × multiple] + net cash ÷ shares"
 6. SECTOR FRAME: Write with the vocabulary and metrics that ${ext.sector ?? industry} analysts actually use — use the sector-specific context provided above
 7. TONE by section: Executive Summary = punchy and decisive; Financial Analysis = precise and technical; Risks = direct and unhedged
-8. BANNED PHRASES — never use: "it is worth noting", "importantly", "as mentioned", "going forward", "in conclusion", "significant" without a number, "notable"
+8. BANNED PHRASES — never use: "it is worth noting", "importantly", "as mentioned", "going forward", "in conclusion", "significant" without a number, "notable", "delve", "leverage" as a verb
 9. USE the Piotroski score, ROIC-WACC spread, earnings beat trend, and FCF yield vs risk-free in your analysis — they appear in the Computed Metrics section above
 10. The KEY METRICS DASHBOARD must reflect the sector frame — for tech, include Rule of 40 and SBC dilution; for consumer, include gross margin and SGA%; for banks, include ROE and credit quality
+11. ANTI-AI STYLE — Write like a Managing Director who has covered this company for 5 years: use sentence fragments when appropriate, vary sentence length, lead with the conclusion not the setup. Analysts don't explain what revenue is — they argue about whether the growth is sustainable.
+12. MINIMUM CONTENT: Each ### subsection must have at least 2 full paragraphs. If data is limited, draw inferences from what you know. Do NOT leave a subsection with only 1 short sentence.
 
 Write a complete institutional equity research primer using EXACTLY these section headers (## for main sections, ### for subsections). DO NOT add any text before "## EXECUTIVE SUMMARY".
+
+⚠ CRITICAL HEADER RULE: Every ### subsection header below must appear CHARACTER FOR CHARACTER — same spelling, same capitalization, same punctuation, same word order. Do not add words, rename, or abbreviate. Deviating causes content to be silently dropped from the PDF. Required ### headers by section:
+• Business Overview: Company Background | Product Portfolio & Revenue Mix | Customers, End Markets & Geographic Exposure
+• Industry Analysis: Market Structure & Competitive Dynamics | Key Industry Drivers & Cycle | Competitive Position
+• Financial Analysis: Revenue & Profitability Trends | Balance Sheet & Capital Allocation | Free Cash Flow & CapEx | Quality of Earnings & Cash Conversion
+• Valuation Framework: Current Valuation vs. Historical Range | Peer Valuation Context | Implied Scenarios
+• Management Commentary: Earnings Call Highlights | Forward Guidance & Outlook
+• Management & Governance: Leadership & Track Record | Capital Allocation Discipline
+• Investment Thesis: Bull Case | Bear Case | Analyst Note
 
 ## EXECUTIVE SUMMARY
 Write 6-8 bullet points (• prefix). Cover: (1) what the company does and why it matters, (2) the core investment question right now, (3) the most compelling financial characteristic with exact numbers, (4) the growth trajectory in concrete numbers, (5) key valuation context vs peers, (6) the single biggest risk that could derail the thesis, (7) the bottom line verdict for a long-term institutional investor.

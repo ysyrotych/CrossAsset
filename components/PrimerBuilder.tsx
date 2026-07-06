@@ -143,15 +143,33 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ── Stage 1: Configure ─────────────────────────────────────────────────────────
 
+const CHART_OPTIONS = [
+  { id: "revenue_fcf", label: "Revenue vs FCF", desc: "5-year bars with FCF overlay" },
+  { id: "eps", label: "EPS Trend", desc: "5-year EPS bar chart" },
+  { id: "margins", label: "Margin Lines", desc: "Gross/Op/Net margin over time" },
+  { id: "positioning", label: "KPI Cards", desc: "ROIC, FCF yield, earnings quality" },
+  { id: "price_range", label: "Price Range", desc: "Bear / Base / Bull scenario visual" },
+  { id: "cap_alloc", label: "Capital Allocation", desc: "FCF deployment waterfall" },
+];
+
 function ConfigureStage({
-  sections, setSections, tone, setTone, length, setLength, onNext,
+  sections, setSections, tone, setTone, length, setLength,
+  selectedCharts, setSelectedCharts, onNext,
 }: {
   sections: SectionDef[];
   setSections: React.Dispatch<React.SetStateAction<SectionDef[]>>;
   tone: Tone; setTone: (t: Tone) => void;
   length: Length; setLength: (l: Length) => void;
+  selectedCharts: string[]; setSelectedCharts: (c: string[]) => void;
   onNext: () => void;
 }) {
+  function toggleChart(id: string) {
+    setSelectedCharts(
+      selectedCharts.includes(id)
+        ? selectedCharts.filter(c => c !== id)
+        : [...selectedCharts, id]
+    );
+  }
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -289,6 +307,33 @@ function ConfigureStage({
               </button>
             ))}
           </div>
+        </div>
+      </div>
+
+      {/* Chart selection */}
+      <div style={{ marginBottom: 28 }}>
+        <label style={{ fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Charts to Include in PDF</label>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
+          {CHART_OPTIONS.map(ch => {
+            const on = selectedCharts.includes(ch.id);
+            return (
+              <button key={ch.id} onClick={() => toggleChart(ch.id)}
+                style={{
+                  background: on ? ACCENT + "60" : "transparent",
+                  border: `1px solid ${on ? BLUE : BORDER}`,
+                  borderRadius: 6, padding: "8px 10px", cursor: "pointer", textAlign: "left",
+                  transition: "all 0.15s",
+                }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
+                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${on ? BLUE : MUTED}`, background: on ? BLUE : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
+                    {on && <span style={{ color: "white", fontSize: 9, lineHeight: 1 }}>✓</span>}
+                  </div>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: on ? TEXT : MUTED }}>{ch.label}</span>
+                </div>
+                <p style={{ fontSize: 9, color: MUTED, margin: 0, paddingLeft: 20 }}>{ch.desc}</p>
+              </button>
+            );
+          })}
         </div>
       </div>
 
@@ -681,7 +726,7 @@ function BuildStage({
 // ── Stage 4: Review ────────────────────────────────────────────────────────────
 
 function ReviewStage({
-  ticker, companyName, industry, sections, facts, history, sector,
+  ticker, companyName, industry, sections, facts, history, sector, selectedCharts,
   onBack, onRestart,
 }: {
   ticker: string; companyName: string; industry: string;
@@ -689,6 +734,7 @@ function ReviewStage({
   facts: Record<string, number | null>;
   history: Record<string, Record<string, number>>;
   sector: string;
+  selectedCharts?: string[];
   onBack: () => void; onRestart: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -721,6 +767,7 @@ function ReviewStage({
           history={history}
           facts={facts as Record<string, number>}
           sector={sector}
+          selectedCharts={selectedCharts}
         />
         <button onClick={onBack}
           style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: MUTED }}>
@@ -1003,6 +1050,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
   const [length, setLength] = useState<Length>("standard");
   const [theses, setTheses] = useState<ThesisOption[]>([]);
   const [selectedThesis, setSelectedThesis] = useState("");
+  const [selectedCharts, setSelectedCharts] = useState<string[]>(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
 
   function restart() {
     setSections(DEFAULT_SECTIONS.map(s => ({ ...s, generating: false })));
@@ -1010,6 +1058,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
     setLength("standard");
     setTheses([]);
     setSelectedThesis("");
+    setSelectedCharts(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
     setStage("configure");
   }
 
@@ -1035,6 +1084,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               sections={sections} setSections={setSections}
               tone={tone} setTone={setTone}
               length={length} setLength={setLength}
+              selectedCharts={selectedCharts} setSelectedCharts={setSelectedCharts}
               onNext={() => setStage("thesis")}
             />
           )}
@@ -1059,6 +1109,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
             <ReviewStage
               ticker={ticker} companyName={companyName} industry={industry}
               sections={sections} facts={facts} history={history} sector={sector}
+              selectedCharts={selectedCharts}
               onBack={() => setStage("build")} onRestart={restart}
             />
           )}
