@@ -651,7 +651,11 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const qaRaw  = secs["EARNINGS_CALL_QUESTIONS"] ?? "";
   const qaItems = qaRaw.split("\n")
     .filter(l => l.trim().match(/^(\d+[\.\)]\s|\*\*Q|\*\*\d|Q\d)/i))
-    .map(l => l.replace(/^\d+[\.\)]\s*/, "").replace(/^\*\*/,"").replace(/\*\*$/,"").trim())
+    .map(l => l
+      .replace(/^\d+[\.\)]\s*/, "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*\*/g, "")
+      .trim())
     .filter(Boolean)
     .slice(0, 10);
 
