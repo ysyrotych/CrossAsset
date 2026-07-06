@@ -461,7 +461,7 @@ function ThesisStage({
                       {t.sentiment}
                     </span>
                   </div>
-                  <p style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.6, margin: 0 }}>{t.core_argument}</p>
+                  <p style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.6, margin: "0 0 0 0", borderLeft: `2px solid ${isSelected ? BLUE : BORDER}`, paddingLeft: 8, fontStyle: "italic" }}>{t.core_argument}</p>
                 </div>
                 <div style={{ flexShrink: 0, width: 20, height: 20, borderRadius: 10, border: `2px solid ${isSelected ? BLUE : BORDER}`, background: isSelected ? BLUE : "transparent", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   {isSelected && <Check size={12} color="white" />}
@@ -633,6 +633,7 @@ function BuildStage({
           const isEditing = editingId === sec.id;
           const statusColor = sec.userEdited ? AMBER : sec.generated ? GREEN : MUTED;
           const statusLabel = sec.userEdited ? "Edited" : sec.generated ? "Generated" : sec.generating ? "Generating…" : "Not generated";
+          const wordCount = sec.content ? sec.content.split(/\s+/).filter(Boolean).length : 0;
 
           return (
             <div key={sec.id} style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 8, overflow: "hidden" }}>
@@ -641,7 +642,9 @@ function BuildStage({
                 onClick={() => setExpandedId(isExpanded ? null : sec.id)}>
                 <div style={{ width: 8, height: 8, borderRadius: 4, background: statusColor, flexShrink: 0 }} />
                 <span style={{ fontSize: 12, fontWeight: 700, color: TEXT, flex: 1 }}>{sec.title}</span>
-                <span style={{ fontSize: 9, color: statusColor, fontWeight: 700, letterSpacing: "0.06em" }}>{statusLabel}</span>
+                <span style={{ fontSize: 9, color: statusColor, fontWeight: 700, letterSpacing: "0.06em" }}>
+                  {statusLabel}{wordCount > 0 && <span style={{ color: MUTED, fontWeight: 400, marginLeft: 4 }}>· {wordCount}w</span>}
+                </span>
                 {sec.userEdited && <Lock size={10} color={AMBER} />}
                 <div style={{ display: "flex", gap: 4 }} onClick={e => e.stopPropagation()}>
                   {!sec.userEdited && (
@@ -800,9 +803,14 @@ function ReviewStage({
         <div style={{ padding: "20px 24px", maxHeight: 600, overflowY: "auto" }}>
           {sections.filter(s => s.included && s.content).map((sec, i) => (
             <div key={i} style={{ marginBottom: 28 }}>
-              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: BLUE, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", gap: 6 }}>
-                {sec.title}
-                {sec.userEdited && <span style={{ fontSize: 8, color: AMBER, fontWeight: 600 }}>• edited</span>}
+              <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: BLUE, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                  {sec.title}
+                  {sec.userEdited && <span style={{ fontSize: 8, color: AMBER, fontWeight: 600 }}>• edited</span>}
+                </span>
+                <button onClick={onBack} style={{ fontSize: 8, color: MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "2px 7px", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", textTransform: "none" }}>
+                  ✎ Edit
+                </button>
               </div>
               <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.75, whiteSpace: "pre-wrap" }}>
                 {sec.content}
@@ -1007,7 +1015,7 @@ Be direct. Reference specific numbers. Never say "I don't see the content" — i
         <input
           value={input}
           onChange={e => setInput(e.target.value)}
-          onKeyDown={e => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), send())}
+          onKeyDown={e => e.key === "Enter" && (!e.shiftKey || e.metaKey || e.ctrlKey) && (e.preventDefault(), send())}
           placeholder="Ask anything about the primer…"
           style={{ flex: 1, background: BG, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 10px", fontSize: 11, color: TEXT, outline: "none" }}
         />
