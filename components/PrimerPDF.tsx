@@ -286,21 +286,22 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
           const fcfH = Math.max(2, (Math.abs(fcf) / maxV) * PLOT_H);
           const revLabel = fmtShort(rev);
           const fcfLabel = fmtShort(fcf);
-          const labelAbove = revH < 16;
+          const revLabelInside = revH >= 14;
+          const fcfLabelInside = fcfH >= 14;
           return (
             <G key={yr}>
               {/* Revenue bar */}
               <Rect x={x0} y={PLOT_H - revH} width={BAR_W} height={revH} fill={NAVY} rx={1} />
               {/* Revenue label */}
-              {labelAbove
-                ? <G><Line x1={x0 + BAR_W/2} y1={PLOT_H - revH - 1} x2={x0 + BAR_W/2} y2={PLOT_H - revH - 4} stroke={NAVY} strokeWidth={0.5} /></G>
-                : null}
+              {revLabelInside
+                ? <Text x={x0 + BAR_W/2} y={PLOT_H - revH/2 + 2} style={{ fontSize: 4.5, fill: "white", fontFamily: "Helvetica", textAnchor: "middle" }}>{revLabel}</Text>
+                : <Text x={x0 + BAR_W/2} y={PLOT_H - revH - 2} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica", textAnchor: "middle" }}>{revLabel}</Text>}
               {/* FCF bar */}
               <Rect x={x0 + BAR_W + 4} y={PLOT_H - fcfH} width={BAR_W} height={fcfH} fill={fcf >= 0 ? GREEN : RED} rx={1} />
-              {/* Year label */}
-              <G>
-                <Line x1={x0 + PAIR_W/2} y1={PLOT_H} x2={x0 + PAIR_W/2} y2={PLOT_H + 2} stroke={BORDER} strokeWidth={0.5} />
-              </G>
+              {/* FCF label */}
+              {fcfLabelInside
+                ? <Text x={x0 + BAR_W + 4 + BAR_W/2} y={PLOT_H - fcfH/2 + 2} style={{ fontSize: 4.5, fill: "white", fontFamily: "Helvetica", textAnchor: "middle" }}>{fcfLabel}</Text>
+                : <Text x={x0 + BAR_W + 4 + BAR_W/2} y={PLOT_H - fcfH - 2} style={{ fontSize: 4.5, fill: fcf >= 0 ? GREEN : RED, fontFamily: "Helvetica", textAnchor: "middle" }}>{fcfLabel}</Text>}
             </G>
           );
         })}
@@ -385,9 +386,10 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
             <G key={v}>
               <Line x1={YAXIS_W} y1={y} x2={CHART_W} y2={y} stroke={isZero ? DGRAY : BORDER}
                 strokeWidth={isZero ? 0.8 : 0.4} strokeDasharray={isZero ? "none" : "2,2"} />
-              <G>
-                {/* Y-axis label via absolute-positioned trick using SVG Text */}
-              </G>
+              <Text x={YAXIS_W - 2} y={y + 2}
+                style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "end" }}>
+                {v}%
+              </Text>
             </G>
           );
         })}
@@ -412,18 +414,6 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
           );
         })}
       </Svg>
-      {/* Y-axis labels rendered as positioned View layer */}
-      <View style={{ position: "absolute", top: 14, left: 0, width: YAXIS_W - 2 }}>
-        {gridLines.map(v => {
-          const y = toY(v);
-          if (y == null) return null;
-          return (
-            <View key={v} style={{ position: "absolute", top: y - 4, right: 2, alignItems: "flex-end" }}>
-              <Text style={{ fontSize: 5, color: GRAY }}>{v}%</Text>
-            </View>
-          );
-        })}
-      </View>
       <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2, paddingLeft: YAXIS_W }}>
         {years.map(yr => (
           <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center" }}>FY{yr.slice(0,4)}</Text>
@@ -458,9 +448,14 @@ function EpsBarChart({ history }: { history: Record<string, Record<string, numbe
           const barH = Math.max(2, (Math.abs(v) / maxAbs) * MID_Y);
           const x0   = GAP + i * (BAR_W + GAP);
           const y0   = v >= 0 ? MID_Y - barH : MID_Y;
+          const labelY = v >= 0 ? y0 - 3 : y0 + barH + 7;
           return (
             <G key={yr}>
               <Rect x={x0} y={y0} width={BAR_W} height={barH} fill={v >= 0 ? AMBER : RED} rx={1} />
+              <Text x={x0 + BAR_W/2} y={labelY}
+                style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>
+                {fmtEps(v)}
+              </Text>
             </G>
           );
         })}
@@ -794,17 +789,17 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   ))}
                 </View>
                 {[
-                  { label: "Revenue",       data: history.revenue },
-                  { label: "Gross Profit",  data: history.gross_profit },
-                  { label: "Op. Income",    data: history.operating_income },
-                  { label: "Net Income",    data: history.net_income },
-                  { label: "Operating CF",  data: history.operating_cf },
-                  { label: "Free Cash Flow",data: history.free_cash_flow },
+                  { label: "Revenue",       data: history.revenue,        key: true },
+                  { label: "Gross Profit",  data: history.gross_profit,   key: false },
+                  { label: "Op. Income",    data: history.operating_income,key: false },
+                  { label: "Net Income",    data: history.net_income,     key: true },
+                  { label: "Operating CF",  data: history.operating_cf,   key: false },
+                  { label: "Free Cash Flow",data: history.free_cash_flow, key: true },
                 ].filter(r => r.data && Object.keys(r.data).length > 0).map((row, ri) => (
-                  <View key={row.label} style={ri % 2 === 0 ? S.tableRow : S.tableRowAlt}>
-                    <Text style={[S.tableCellBold, { width: "28%" }]}>{row.label}</Text>
+                  <View key={row.label} style={[ri % 2 === 0 ? S.tableRow : S.tableRowAlt, row.key ? { borderTopWidth: 1, borderTopColor: BORDER } : {}]}>
+                    <Text style={[row.key ? S.tableCellBold : S.tableCell, { width: "28%", color: row.key ? NAVY : DGRAY }]}>{row.label}</Text>
                     {allFY.map(y => (
-                      <Text key={y} style={[S.tableCellNum, { flex: 1 }]}>{fmtM(row.data?.[y])}</Text>
+                      <Text key={y} style={[row.key ? { ...S.tableCellNum, fontFamily: "Helvetica-Bold", color: NAVY } : S.tableCellNum, { flex: 1 }]}>{fmtM(row.data?.[y])}</Text>
                     ))}
                   </View>
                 ))}
@@ -853,7 +848,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* VI. Valuation Framework */}
           {(valCurrHist.length > 0 || valPeer.length > 0 || valScen.length > 0) && (
             <>
-              <SectionHdr title="VI. Valuation Framework" accentColor={ACCENT.primary} />
+              <SectionHdr title="VI. Valuation Framework" accentColor={ACCENT.primary} pageBreak />
               {valCurrHist.length > 0 && <><SubSectionHdr title="Current Valuation vs. Historical Range" />{valCurrHist.map((p,i) => <Para key={i} text={p} />)}</>}
               {valPeer.length > 0 && <><SubSectionHdr title="Peer Valuation Context" />{valPeer.map((p,i) => <Para key={i} text={p} />)}</>}
               {valScen.length > 0 && (
@@ -884,20 +879,38 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                         { label: "Base", price: resolvedBase, color: ACCENT.primary },
                         { label: "Bull", price: bull3, color: GREEN },
                       ];
+                      // Stagger labels: sort by price, alternate above/below
+                      const sortedPts = [...pts].sort((a, b) => a.price - b.price);
                       return (
                         <View style={{ marginVertical: 8, padding: 8, backgroundColor: LGRAY, borderRadius: 3 }}>
-                          <Text style={{ fontSize: 6.5, color: GRAY, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 6 }}>Price Range Visual</Text>
-                          <Svg width={BAR_W3 + 30} height={36}>
-                            <Line x1={0} y1={16} x2={BAR_W3} y2={16} stroke={BORDER} strokeWidth={2} />
-                            {pts.map(p => (
-                              <G key={p.label}>
-                                <Rect x={toX3(p.price) - 3} y={10} width={6} height={12} fill={p.color} rx={3} />
-                                <Line x1={toX3(p.price)} y1={22} x2={toX3(p.price)} y2={28} stroke={p.color} strokeWidth={0.5} />
-                              </G>
-                            ))}
+                          <Text style={{ fontSize: 6.5, color: GRAY, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Price Range Visual</Text>
+                          <Svg width={BAR_W3 + 40} height={56}>
+                            {/* Track */}
+                            <Line x1={0} y1={28} x2={BAR_W3} y2={28} stroke={BORDER} strokeWidth={2} />
+                            {/* Range fill between bear and bull */}
+                            <Rect x={toX3(bear3)} y={26} width={toX3(bull3) - toX3(bear3)} height={4} fill={LGRAY} rx={0} />
+                            {pts.map((p, idx) => {
+                              // alternate stagger: even = label above, odd = label below
+                              const rank = sortedPts.findIndex(s => s.label === p.label);
+                              const above = rank % 2 === 0;
+                              const lx = toX3(p.price);
+                              const stemY1 = above ? 24 : 32;
+                              const stemY2 = above ? 18 : 38;
+                              const textY  = above ? 15 : 44;
+                              return (
+                                <G key={p.label}>
+                                  <Rect x={lx - 4} y={24} width={8} height={8} fill={p.color} rx={4} />
+                                  <Line x1={lx} y1={stemY1} x2={lx} y2={stemY2} stroke={p.color} strokeWidth={0.7} strokeDasharray="1,1" />
+                                  <Text x={lx} y={textY}
+                                    style={{ fontSize: 5.5, fill: p.color, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>
+                                    {p.label} ${p.price.toFixed(0)}
+                                  </Text>
+                                </G>
+                              );
+                            })}
                           </Svg>
-                          <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap", marginTop: 2 }}>
-                            {[...pts].sort((a, b) => a.price - b.price).map(p => (
+                          <View style={{ flexDirection: "row", gap: 12, flexWrap: "wrap", marginTop: 0 }}>
+                            {sortedPts.map(p => (
                               <View key={p.label} style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
                                 <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: p.color }} />
                                 <Text style={{ fontSize: 6.5, color: DGRAY }}>{p.label}: ${p.price.toFixed(0)}{cur && p.price !== cur ? ` (${((p.price/cur-1)*100).toFixed(0)}%)` : ""}</Text>
@@ -984,7 +997,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* IX. Key Risks */}
           {risks.length > 0 && (
             <>
-              <SectionHdr title="IX. Key Risks" accentColor={RED} />
+              <SectionHdr title="IX. Key Risks" accentColor={RED} pageBreak />
               <Bullets items={risks} color={RED} />
             </>
           )}
@@ -1019,7 +1032,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           })()}
 
           {/* XI. Investment Thesis */}
-          <SectionHdr title="XI. Investment Thesis" accentColor={ACCENT.primary} />
+          <SectionHdr title="XI. Investment Thesis" accentColor={ACCENT.primary} pageBreak />
           <View style={S.twoCols}>
             <View style={S.col}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
@@ -1043,16 +1056,16 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} />
               <View style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
-                  {["KPI", "Current", "Watch Threshold", "Why It Matters"].map((h, i) => (
-                    <Text key={h} style={[S.tableHeaderCell, { flex: i === 3 ? 2 : 1 }]}>{h}</Text>
+                  {[["KPI", 1], ["Current", 0.8], ["Watch Threshold", 0.9], ["Why It Matters", 2.3]].map(([h, f]) => (
+                    <Text key={h as string} style={[S.tableHeaderCell, { flex: f as number }]}>{h as string}</Text>
                   ))}
                 </View>
                 {kpiRows.map((row, i) => (
                   <View key={i} style={i % 2 === 0 ? S.tableRow : S.tableRowAlt}>
                     <Text style={[S.tableCellBold, { flex: 1 }]}>{stripMd(row.kpi)}</Text>
-                    <Text style={[S.tableCell,     { flex: 1 }]}>{stripMd(row.current)}</Text>
-                    <Text style={[S.tableCell,     { flex: 1, color: RED }]}>{stripMd(row.threshold)}</Text>
-                    <Text style={[S.tableCell,     { flex: 2 }]}>{stripMd(row.why)}</Text>
+                    <Text style={[S.tableCell,     { flex: 0.8 }]}>{stripMd(row.current)}</Text>
+                    <Text style={[S.tableCell,     { flex: 0.9, color: RED }]}>{stripMd(row.threshold)}</Text>
+                    <Text style={[S.tableCell,     { flex: 2.3 }]}>{stripMd(row.why)}</Text>
                   </View>
                 ))}
               </View>
