@@ -1,21 +1,22 @@
 "use client";
 import { useState, useRef, useCallback } from "react";
-import { RefreshCw, TrendingUp, TrendingDown, Minus, Brain, Copy, Check } from "lucide-react";
+import { RefreshCw, Brain, Copy, Check, TrendingUp, TrendingDown, Minus } from "lucide-react";
 
-const CAT_COLORS: Record<string, string> = {
-  "EARNINGS":           "#1e3a5f",
-  "GUIDANCE":           "#5c3800",
-  "ANALYST ACTION":     "#1e3560",
-  "M&A":                "#3b1d6e",
-  "REGULATORY/LEGAL":   "#5c1a1a",
-  "MANAGEMENT":         "#1a3a2a",
-  "CAPITAL ALLOCATION": "#0d4a3a",
-  "PRODUCT/BUSINESS":   "#1a3050",
-  "INSIDER ACTIVITY":   "#4a2800",
-  "GENERAL":            "#1a2540",
+// ── Category palette ──────────────────────────────────────────────────────────
+
+const CAT_BG: Record<string, string> = {
+  "EARNINGS":           "#0e2240",
+  "GUIDANCE":           "#3d2000",
+  "ANALYST ACTION":     "#0e1f40",
+  "M&A":                "#250d50",
+  "REGULATORY/LEGAL":   "#3d0d0d",
+  "MANAGEMENT":         "#0d2c1c",
+  "CAPITAL ALLOCATION": "#073028",
+  "PRODUCT/BUSINESS":   "#0d1f38",
+  "INSIDER ACTIVITY":   "#301800",
+  "GENERAL":            "#111827",
 };
-
-const CAT_TEXT: Record<string, string> = {
+const CAT_FG: Record<string, string> = {
   "EARNINGS":           "#93c5fd",
   "GUIDANCE":           "#fcd34d",
   "ANALYST ACTION":     "#a5b4fc",
@@ -28,19 +29,23 @@ const CAT_TEXT: Record<string, string> = {
   "GENERAL":            "#94a3b8",
 };
 
-const SECTION_META: Record<string, { icon: string; color: string; short: string }> = {
-  "FLASH ASSESSMENT":                         { icon: "⚡", color: "#6366f1", short: "Flash" },
-  "THE NARRATIVE RIGHT NOW":                  { icon: "📡", color: "#3b82f6", short: "Narrative" },
-  "EARNINGS & FINANCIAL SIGNALS":             { icon: "📊", color: "#10b981", short: "Earnings" },
-  "COMPETITIVE & STRATEGIC POSITION":         { icon: "⚔️", color: "#8b5cf6", short: "Competitive" },
-  "MANAGEMENT CREDIBILITY & INSIDER SIGNALS": { icon: "👁️", color: "#f59e0b", short: "Management" },
-  "ANALYST & INSTITUTIONAL SENTIMENT SHIFT":  { icon: "🏦", color: "#06b6d4", short: "Analysts" },
-  "REGULATORY & LEGAL WATCH":                 { icon: "⚖️", color: "#ef4444", short: "Regulatory" },
-  "MARKET PRICING REALITY CHECK":             { icon: "💹", color: "#ec4899", short: "Pricing" },
-  "CATALYSTS TO WATCH — NEXT 30-60 DAYS":    { icon: "🎯", color: "#f97316", short: "Catalysts" },
-  "EMERGING RISKS IN THE NEWS":               { icon: "⚠️", color: "#dc2626", short: "Risks" },
-  "ONE-PARAGRAPH VERDICT":                    { icon: "✦",  color: "#6366f1", short: "Verdict" },
+// ── Section metadata (icon + accent) ─────────────────────────────────────────
+
+const SEC_META: Record<string, { icon: string; color: string; short: string }> = {
+  "FLASH ASSESSMENT":                          { icon: "⚡", color: "#818cf8", short: "Flash" },
+  "THE NARRATIVE RIGHT NOW":                   { icon: "📡", color: "#3b82f6", short: "Narrative" },
+  "EARNINGS & FINANCIAL SIGNALS":              { icon: "📊", color: "#10b981", short: "Earnings" },
+  "COMPETITIVE & STRATEGIC POSITION":          { icon: "⚔️",  color: "#8b5cf6", short: "Competitive" },
+  "MANAGEMENT CREDIBILITY & INSIDER SIGNALS":  { icon: "👁️",  color: "#f59e0b", short: "Management" },
+  "ANALYST & INSTITUTIONAL SENTIMENT SHIFT":   { icon: "🏦", color: "#06b6d4", short: "Analysts" },
+  "REGULATORY & LEGAL WATCH":                  { icon: "⚖️",  color: "#ef4444", short: "Regulatory" },
+  "MARKET PRICING REALITY CHECK":              { icon: "💹", color: "#ec4899", short: "Pricing" },
+  "CATALYSTS TO WATCH — NEXT 30-60 DAYS":     { icon: "🎯", color: "#f97316", short: "Catalysts" },
+  "EMERGING RISKS IN THE NEWS":                { icon: "⚠️",  color: "#dc2626", short: "Risks" },
+  "ONE-PARAGRAPH VERDICT":                     { icon: "✦",  color: "#6366f1", short: "Verdict" },
 };
+
+// ── Types ─────────────────────────────────────────────────────────────────────
 
 interface NewsItem {
   date: string;
@@ -60,55 +65,82 @@ interface Props {
   facts?: Record<string, any>;
 }
 
+// ── Helpers ───────────────────────────────────────────────────────────────────
+
 function parseAnalysisSections(text: string): { title: string; content: string }[] {
-  const sections: { title: string; content: string }[] = [];
-  const lines = text.split("\n");
-  let current: { title: string; content: string } | null = null;
-  for (const line of lines) {
-    const h2 = line.match(/^##\s+(.+)$/);
-    if (h2) {
-      if (current) sections.push(current);
-      current = { title: h2[1].trim(), content: "" };
-    } else if (current) {
-      current.content += line + "\n";
+  const secs: { title: string; content: string }[] = [];
+  let cur: { title: string; content: string } | null = null;
+  for (const line of text.split("\n")) {
+    const h = line.match(/^##\s+(.+)$/);
+    if (h) {
+      if (cur) secs.push(cur);
+      cur = { title: h[1].trim(), content: "" };
+    } else if (cur) {
+      cur.content += line + "\n";
     }
   }
-  if (current) sections.push(current);
-  return sections.filter(s => s.content.trim().length > 0);
+  if (cur) secs.push(cur);
+  return secs.filter(s => s.content.trim().length > 0);
 }
+
+function dateGroup(dateStr: string): string {
+  try {
+    const d = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - d.getTime();
+    const diffDays = Math.floor(diffMs / 86400000);
+    if (diffDays === 0) return "TODAY";
+    if (diffDays === 1) return "YESTERDAY";
+    if (diffDays <= 7) return "THIS WEEK";
+    if (diffDays <= 30) return "THIS MONTH";
+    return "EARLIER";
+  } catch { return "EARLIER"; }
+}
+
+function groupByDate(items: NewsItem[]): { group: string; items: NewsItem[] }[] {
+  const ORDER = ["TODAY", "YESTERDAY", "THIS WEEK", "THIS MONTH", "EARLIER"];
+  const map: Record<string, NewsItem[]> = {};
+  for (const item of items) {
+    const g = dateGroup(item.date ?? "");
+    if (!map[g]) map[g] = [];
+    map[g].push(item);
+  }
+  return ORDER.filter(g => map[g]).map(g => ({ group: g, items: map[g] }));
+}
+
+// ── Component ─────────────────────────────────────────────────────────────────
 
 export default function NewsAnalyst({ ticker, companyName, sector, newsItems, facts }: Props) {
   const [analysis, setAnalysis] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading]   = useState(false);
   const [activeCat, setActiveCat] = useState("ALL");
-  const [copied, setCopied] = useState(false);
-  const rightPanelRef = useRef<HTMLDivElement>(null);
-  const sectionRefs = useRef<Record<string, HTMLDivElement | null>>({});
+  const [copied, setCopied]     = useState(false);
+  const analysisRef             = useRef<HTMLDivElement>(null);
+  const sectionRefs             = useRef<Record<string, HTMLDivElement | null>>({});
 
   const sections = parseAnalysisSections(analysis);
   const cats = ["ALL", ...Array.from(new Set(newsItems.map(n => n.category ?? "GENERAL"))).sort()];
   const filtered = activeCat === "ALL" ? newsItems : newsItems.filter(n => (n.category ?? "GENERAL") === activeCat);
+  const grouped  = groupByDate(filtered);
 
   // 30-day sentiment
   const last30 = newsItems.filter(n => {
     try { return new Date(n.date) >= new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); } catch { return false; }
   });
-  const posTerms = ['beat','raise','launch','win','grow','record','strong','exceed','upgrade','buy','positive','initiate','partnership'];
-  const negTerms = ['cut','miss','decline','drop','fall','concern','risk','probe','loss','lower','warn','resign','downgrade','short'];
+  const posTerms = ["beat","raise","launch","win","grow","record","strong","exceed","upgrade","buy","positive","initiate","partnership","bullish"];
+  const negTerms = ["cut","miss","decline","drop","fall","concern","risk","probe","loss","lower","warn","resign","downgrade","short","bearish"];
   let sentScore = 0;
   for (const n of last30) {
-    const tl = (n.title ?? '').toLowerCase();
+    const tl = (n.title ?? "").toLowerCase();
     sentScore += posTerms.filter(t => tl.includes(t)).length;
     sentScore -= negTerms.filter(t => tl.includes(t)).length;
   }
   const sentLabel = sentScore > 3 ? "POSITIVE" : sentScore < -3 ? "NEGATIVE" : "MIXED";
   const sentColor = sentScore > 3 ? "#10b981" : sentScore < -3 ? "#ef4444" : "#f59e0b";
 
-  const scrollToSection = useCallback((title: string) => {
+  const scrollTo = useCallback((title: string) => {
     const el = sectionRefs.current[title];
-    if (el && rightPanelRef.current) {
-      rightPanelRef.current.scrollTo({ top: el.offsetTop - 8, behavior: "smooth" });
-    }
+    if (el && analysisRef.current) analysisRef.current.scrollTo({ top: el.offsetTop - 12, behavior: "smooth" });
   }, []);
 
   async function runAnalysis() {
@@ -121,7 +153,7 @@ export default function NewsAnalyst({ ticker, companyName, sector, newsItems, fa
         body: JSON.stringify({ ticker, companyName, sector, newsItems, facts }),
       });
       if (!res.body) { setLoading(false); return; }
-      const reader = res.body.getReader();
+      const reader  = res.body.getReader();
       const decoder = new TextDecoder();
       let text = "";
       while (true) {
@@ -129,204 +161,159 @@ export default function NewsAnalyst({ ticker, companyName, sector, newsItems, fa
         if (done) break;
         text += decoder.decode(value, { stream: true });
         setAnalysis(text);
-        // auto-scroll right panel to bottom while streaming
-        if (rightPanelRef.current) {
-          rightPanelRef.current.scrollTop = rightPanelRef.current.scrollHeight;
-        }
+        if (analysisRef.current) analysisRef.current.scrollTop = analysisRef.current.scrollHeight;
       }
-    } catch (e) {
-      console.error(e);
-    }
+    } catch (e) { console.error(e); }
     setLoading(false);
   }
 
   function copyAnalysis() {
     if (!analysis) return;
-    navigator.clipboard.writeText(analysis).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
+    navigator.clipboard.writeText(analysis).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
   }
 
+  const today = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+
+  // ── RENDER ──────────────────────────────────────────────────────────────────
+
   return (
-    <div style={{ background: "#040d1c", border: "1px solid #1a2d4a", borderRadius: 12, overflow: "hidden", marginTop: 24 }}>
-      {/* ── Header ── */}
-      <div style={{ background: "#06111f", borderBottom: "1px solid #1a2d4a", padding: "14px 20px", display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <Brain size={18} color="#3b82f6" />
-          <div>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#e2e8f0", letterSpacing: "0.02em" }}>
-              News Intelligence — {ticker}
-            </div>
-            <div style={{ fontSize: 10, color: "#475569", marginTop: 1 }}>
-              {newsItems.length} items · {last30.length} in last 30d · yfinance + Finviz + Seeking Alpha
-            </div>
-          </div>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {/* Sentiment badge */}
-          <div style={{ display: "flex", alignItems: "center", gap: 5, background: `${sentColor}18`, border: `1px solid ${sentColor}45`, borderRadius: 6, padding: "4px 10px" }}>
-            {sentScore > 3 ? <TrendingUp size={11} color={sentColor} /> : sentScore < -3 ? <TrendingDown size={11} color={sentColor} /> : <Minus size={11} color={sentColor} />}
-            <span style={{ fontSize: 10, fontWeight: 700, color: sentColor, letterSpacing: "0.08em" }}>{sentLabel}</span>
-            <span style={{ fontSize: 9, color: "#475569" }}>30d</span>
-          </div>
-          {/* Copy button */}
-          {analysis && (
-            <button onClick={copyAnalysis} style={{ display: "flex", alignItems: "center", gap: 5, background: "transparent", border: "1px solid #1a2d4a", borderRadius: 7, padding: "6px 12px", cursor: "pointer", fontSize: 10, color: "#64748b" }}>
-              {copied ? <Check size={12} color="#10b981" /> : <Copy size={12} />}
-              {copied ? "Copied" : "Copy"}
-            </button>
-          )}
-          {/* Analyze button */}
-          <button
-            onClick={runAnalysis}
-            disabled={loading}
-            style={{
-              display: "flex", alignItems: "center", gap: 6,
-              background: loading ? "#0f1e33" : "#1e3a5f",
-              border: `1px solid ${loading ? "#1a2d4a" : "#2a4a7f"}`,
-              borderRadius: 8, padding: "8px 16px",
-              cursor: loading ? "not-allowed" : "pointer",
-              fontSize: 11, fontWeight: 700, color: loading ? "#475569" : "#93bbff",
-              letterSpacing: "0.04em", transition: "all 0.15s",
-            }}
-          >
-            {loading
-              ? <RefreshCw size={13} style={{ animation: "na-spin 1s linear infinite" }} />
-              : <Brain size={13} />}
-            {loading ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze News"}
-          </button>
-        </div>
-      </div>
+    <div style={{ background: "#040d1c", border: "1px solid #1a2d4a", borderRadius: 12, overflow: "hidden" }}>
 
-      {/* ── Section nav chips (visible once sections load) ── */}
-      {sections.length > 0 && (
-        <div style={{ background: "#040d1c", borderBottom: "1px solid #1a2d4a", padding: "7px 16px", display: "flex", gap: 5, flexWrap: "wrap" }}>
-          {sections.map(sec => {
-            const meta = SECTION_META[sec.title] ?? { icon: "•", color: "#3b82f6", short: sec.title.slice(0, 10) };
-            return (
-              <button
-                key={sec.title}
-                onClick={() => scrollToSection(sec.title)}
-                style={{
-                  display: "flex", alignItems: "center", gap: 4,
-                  background: "#06111f", border: `1px solid #1a2d4a`,
-                  borderRadius: 5, padding: "3px 9px", cursor: "pointer",
-                  fontSize: 9.5, fontWeight: 600, color: meta.color,
-                  letterSpacing: "0.03em", transition: "border-color 0.1s",
-                }}
-              >
-                <span style={{ fontSize: 11 }}>{meta.icon}</span>
-                {meta.short}
+      {/* ── MASTHEAD ── */}
+      <div style={{ background: "#06111f", borderBottom: "2px solid #1a2d4a", padding: "0 24px" }}>
+        {/* Top strip */}
+        <div style={{ borderBottom: "1px solid #1a2d4a", padding: "8px 0", display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: "#3b82f6", textTransform: "uppercase" }}>
+              Market Intelligence
+            </span>
+            <span style={{ fontSize: 9, color: "#1a2d4a" }}>│</span>
+            <span style={{ fontSize: 9, color: "#334155" }}>{today}</span>
+            <span style={{ fontSize: 9, color: "#1a2d4a" }}>│</span>
+            <span style={{ fontSize: 9, color: "#334155" }}>{newsItems.length} items · {last30.length} in 30d</span>
+            <span style={{ fontSize: 9, color: "#1a2d4a" }}>│</span>
+            <span style={{ fontSize: 9, color: "#334155" }}>yfinance · Finviz · Seeking Alpha</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {/* Sentiment */}
+            <div style={{ display: "flex", alignItems: "center", gap: 5, background: `${sentColor}14`, border: `1px solid ${sentColor}40`, borderRadius: 4, padding: "3px 9px" }}>
+              {sentScore > 3 ? <TrendingUp size={10} color={sentColor} /> : sentScore < -3 ? <TrendingDown size={10} color={sentColor} /> : <Minus size={10} color={sentColor} />}
+              <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.1em", color: sentColor }}>{sentLabel}</span>
+            </div>
+            {/* Copy */}
+            {analysis && (
+              <button onClick={copyAnalysis} style={{ display: "flex", alignItems: "center", gap: 4, background: "transparent", border: "1px solid #1a2d4a", borderRadius: 4, padding: "3px 9px", cursor: "pointer", fontSize: 9, color: "#475569" }}>
+                {copied ? <Check size={10} color="#10b981" /> : <Copy size={10} />}
+                {copied ? "Copied" : "Copy"}
               </button>
-            );
-          })}
+            )}
+            {/* Analyze */}
+            <button onClick={runAnalysis} disabled={loading} style={{ display: "flex", alignItems: "center", gap: 6, background: loading ? "#0a1520" : "#1e3a5f", border: `1px solid ${loading ? "#1a2d4a" : "#2d5a9f"}`, borderRadius: 5, padding: "5px 14px", cursor: loading ? "not-allowed" : "pointer", fontSize: 10, fontWeight: 700, letterSpacing: "0.06em", color: loading ? "#334155" : "#93c5fd" }}>
+              {loading ? <RefreshCw size={11} style={{ animation: "na-spin 1s linear infinite" }} /> : <Brain size={11} />}
+              {loading ? "Analyzing…" : analysis ? "Re-analyze" : "Analyze"}
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* ── Two-panel body ── */}
-      <div style={{ display: "grid", gridTemplateColumns: "320px 1fr" }}>
+        {/* Main masthead line */}
+        <div style={{ padding: "16px 0 12px" }}>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 16 }}>
+            <h1 style={{ fontSize: 32, fontWeight: 900, color: "#f1f5f9", letterSpacing: "-0.02em", margin: 0, lineHeight: 1 }}>
+              {ticker}
+            </h1>
+            <div style={{ width: 1, height: 28, background: "#1a2d4a", flexShrink: 0 }} />
+            <span style={{ fontSize: 14, fontWeight: 300, color: "#64748b", letterSpacing: "0.02em" }}>
+              {companyName}
+            </span>
+            {sector && <>
+              <span style={{ fontSize: 11, color: "#1a2d4a" }}>·</span>
+              <span style={{ fontSize: 11, color: "#334155", letterSpacing: "0.04em" }}>{sector}</span>
+            </>}
+          </div>
+          <p style={{ fontSize: 11, color: "#334155", marginTop: 4, letterSpacing: "0.06em", fontWeight: 600, textTransform: "uppercase" }}>
+            News Intelligence Brief
+          </p>
+        </div>
 
-        {/* LEFT: News feed */}
-        <div style={{ borderRight: "1px solid #1a2d4a", height: 660, overflowY: "auto" }}>
-          {/* Category filters */}
-          <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#06111f", borderBottom: "1px solid #1a2d4a", padding: "7px 10px", display: "flex", flexWrap: "wrap", gap: 4 }}>
-            {cats.map(cat => {
-              const count = cat === "ALL" ? newsItems.length : newsItems.filter(n => (n.category ?? "GENERAL") === cat).length;
-              const isActive = activeCat === cat;
+        {/* Section nav chips — visible after analysis loads */}
+        {sections.length > 0 && (
+          <div style={{ borderTop: "1px solid #0d1a28", padding: "8px 0", display: "flex", gap: 4, flexWrap: "wrap" }}>
+            <span style={{ fontSize: 8.5, color: "#334155", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", alignSelf: "center", marginRight: 4 }}>Sections:</span>
+            {sections.map(sec => {
+              const m = SEC_META[sec.title] ?? { icon: "•", color: "#3b82f6", short: sec.title.slice(0, 12) };
               return (
-                <button
-                  key={cat}
-                  onClick={() => setActiveCat(cat)}
-                  style={{
-                    fontSize: 8.5, fontWeight: 700, letterSpacing: "0.05em",
-                    padding: "3px 7px", borderRadius: 4, border: "1px solid",
-                    cursor: "pointer",
-                    background: isActive ? (CAT_COLORS[cat] ?? "#1e3560") : "transparent",
-                    borderColor: isActive ? "#3a5580" : "#1a2d4a",
-                    color: isActive ? (CAT_TEXT[cat] ?? "#c8dcff") : "#475569",
-                  }}
-                >
-                  {cat === "ALL" ? `ALL (${count})` : `${cat.replace("REGULATORY/LEGAL", "REG/LEGAL").replace("CAPITAL ALLOCATION", "CAP ALLOC").replace("PRODUCT/BUSINESS", "PRODUCT")} (${count})`}
+                <button key={sec.title} onClick={() => scrollTo(sec.title)} style={{ display: "flex", alignItems: "center", gap: 3, background: "#040d1c", border: `1px solid #1a2d4a`, borderRadius: 4, padding: "3px 8px", cursor: "pointer", fontSize: 8.5, fontWeight: 700, color: m.color, letterSpacing: "0.04em" }}>
+                  <span style={{ fontSize: 10 }}>{m.icon}</span>
+                  {m.short}
                 </button>
               );
             })}
           </div>
+        )}
+      </div>
 
-          {/* News items */}
-          {filtered.length === 0 && (
-            <div style={{ padding: 20, fontSize: 11, color: "#334155", textAlign: "center" }}>No items in this category.</div>
-          )}
-          {filtered.map((item, i) => {
-            const isPos = item.stock_change?.startsWith("+");
-            const isNeg = item.stock_change?.startsWith("-");
-            return (
-              <div key={i} style={{ padding: "9px 12px", borderBottom: "1px solid #0d1a28" }}>
-                {/* Top row: category badge + stock change + date */}
-                <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 4, flexWrap: "wrap" }}>
-                  <span style={{
-                    fontSize: 7.5, fontWeight: 700, letterSpacing: "0.06em",
-                    padding: "2px 5px", borderRadius: 3, flexShrink: 0,
-                    background: CAT_COLORS[item.category ?? "GENERAL"] ?? "#1e3560",
-                    color: CAT_TEXT[item.category ?? "GENERAL"] ?? "#c8dcff",
-                  }}>
-                    {(item.category ?? "GENERAL").replace("REGULATORY/LEGAL","REG/LEGAL").replace("CAPITAL ALLOCATION","CAP ALLOC").replace("PRODUCT/BUSINESS","PRODUCT")}
-                  </span>
-                  {item.stock_change && (
-                    <span style={{
-                      fontSize: 9, fontWeight: 700, padding: "2px 5px", borderRadius: 3, flexShrink: 0,
-                      background: isPos ? "#0a2218" : isNeg ? "#2a0a0a" : "#151f30",
-                      color: isPos ? "#10b981" : isNeg ? "#ef4444" : "#64748b",
-                    }}>
-                      {item.stock_change}
-                    </span>
-                  )}
-                  <span style={{ fontSize: 9, color: "#334155", marginLeft: "auto" }}>{(item.date ?? "").slice(0, 10)}</span>
-                </div>
-                {/* Title */}
-                {item.url ? (
-                  <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
-                    <div style={{ fontSize: 11, fontWeight: 600, color: "#bdd3f0", lineHeight: 1.45, marginBottom: 3, cursor: "pointer" }}>
-                      {item.title}
-                    </div>
-                  </a>
-                ) : (
-                  <div style={{ fontSize: 11, fontWeight: 600, color: "#bdd3f0", lineHeight: 1.45, marginBottom: 3 }}>
-                    {item.title}
-                  </div>
-                )}
-                {/* Summary */}
-                {item.summary && (
-                  <div style={{ fontSize: 9.5, color: "#4a6080", lineHeight: 1.4, overflow: "hidden", display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical" } as any}>
-                    {item.summary}
-                  </div>
-                )}
-                {/* Source */}
-                {item.source && (
-                  <div style={{ fontSize: 9, color: "#263040", marginTop: 3 }}>{item.source}</div>
-                )}
+      {/* ── FLASH ASSESSMENT BANNER ── */}
+      {sections[0]?.title === "FLASH ASSESSMENT" && (() => {
+        const sec = sections[0];
+        const sigM = sec.content.match(/SIGNAL:\s*(\w+)/i);
+        const patM = sec.content.match(/PATTERN:\s*([^|\n]+)/i);
+        const conM = sec.content.match(/CONVICTION:\s*(\w+)/i);
+        const signal = sigM?.[1]?.toUpperCase() ?? "";
+        const pattern = patM?.[1]?.trim() ?? "";
+        const conviction = conM?.[1]?.toUpperCase() ?? "";
+        const bodyLines = sec.content.trim().split("\n").filter(Boolean).slice(1).join(" ").trim();
+        const sigColor = signal === "BULLISH" ? "#10b981" : signal === "BEARISH" ? "#ef4444" : "#f59e0b";
+        if (!signal) return null;
+        return (
+          <div style={{ background: `${sigColor}08`, borderBottom: `1px solid ${sigColor}25`, padding: "14px 24px", display: "flex", alignItems: "flex-start", gap: 16 }}>
+            <div style={{ display: "flex", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
+              <div style={{ background: `${sigColor}20`, border: `1px solid ${sigColor}50`, borderRadius: 5, padding: "6px 14px", textAlign: "center" }}>
+                <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.12em", color: `${sigColor}99`, textTransform: "uppercase" }}>Signal</div>
+                <div style={{ fontSize: 15, fontWeight: 900, color: sigColor, letterSpacing: "0.04em" }}>{signal}</div>
               </div>
-            );
-          })}
-        </div>
+              {pattern && (
+                <div style={{ background: "#06111f", border: "1px solid #1a2d4a", borderRadius: 5, padding: "6px 14px", textAlign: "center" }}>
+                  <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.12em", color: "#334155", textTransform: "uppercase" }}>Pattern</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>{pattern}</div>
+                </div>
+              )}
+              {conviction && (
+                <div style={{ background: "#06111f", border: "1px solid #1a2d4a", borderRadius: 5, padding: "6px 14px", textAlign: "center" }}>
+                  <div style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.12em", color: "#334155", textTransform: "uppercase" }}>Conviction</div>
+                  <div style={{ fontSize: 11, fontWeight: 700, color: conviction === "HIGH" ? "#10b981" : conviction === "LOW" ? "#ef4444" : "#f59e0b" }}>{conviction}</div>
+                </div>
+              )}
+            </div>
+            {bodyLines && (
+              <p style={{ fontSize: 12, color: "#c8dcff", lineHeight: 1.7, fontStyle: "italic", margin: 0, paddingTop: 4 }}>
+                {bodyLines}
+              </p>
+            )}
+          </div>
+        );
+      })()}
 
-        {/* RIGHT: AI Analysis */}
-        <div ref={rightPanelRef} style={{ height: 660, overflowY: "auto", padding: "16px 20px", background: "#040d1c" }}>
+      {/* ── MAIN BODY: two-column newspaper ── */}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 380px", minHeight: 700 }}>
+
+        {/* LEFT: Editorial analysis */}
+        <div ref={analysisRef} style={{ padding: "24px 28px", overflowY: "auto", maxHeight: 780, borderRight: "1px solid #1a2d4a" }}>
 
           {/* Empty state */}
           {!analysis && !loading && (
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: "100%", gap: 14, textAlign: "center" }}>
-              <Brain size={44} color="#1a2d4a" />
-              <div style={{ fontSize: 14, color: "#334155", fontWeight: 600 }}>
-                AI News Analyst — {ticker}
-              </div>
-              <div style={{ fontSize: 11, color: "#263040", maxWidth: 340, lineHeight: 1.6 }}>
-                Click <strong style={{ color: "#475569" }}>Analyze News</strong> to generate a multi-topic narrative intelligence brief. Claude reads all {newsItems.length} news items and produces analyst-grade commentary across 10 topics.
-              </div>
-              <div style={{ display: "flex", gap: 8, flexWrap: "wrap", justifyContent: "center", maxWidth: 360 }}>
-                {Object.entries(SECTION_META).slice(1, 6).map(([title, meta]) => (
-                  <span key={title} style={{ fontSize: 9, color: meta.color, background: `${meta.color}12`, border: `1px solid ${meta.color}30`, borderRadius: 4, padding: "3px 8px" }}>
-                    {meta.icon} {meta.short}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", height: 500, gap: 16, textAlign: "center" }}>
+              <div style={{ fontSize: 40, lineHeight: 1 }}>📰</div>
+              <p style={{ fontSize: 16, color: "#1e3a5f", fontWeight: 700, margin: 0 }}>
+                Click <span style={{ color: "#3b82f6" }}>Analyze</span> to generate the brief
+              </p>
+              <p style={{ fontSize: 12, color: "#1a2d4a", lineHeight: 1.6, maxWidth: 340, margin: 0 }}>
+                Claude reads all {newsItems.length} news items and writes a structured editorial — narrative, earnings signals, competitive dynamics, analyst sentiment, catalysts, and risks.
+              </p>
+              {/* Preview section chips */}
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 6, justifyContent: "center", maxWidth: 380 }}>
+                {Object.entries(SEC_META).slice(1, 7).map(([, m]) => (
+                  <span key={m.short} style={{ fontSize: 9, color: m.color, background: `${m.color}12`, border: `1px solid ${m.color}28`, borderRadius: 4, padding: "3px 8px" }}>
+                    {m.icon} {m.short}
                   </span>
                 ))}
               </div>
@@ -335,93 +322,61 @@ export default function NewsAnalyst({ ticker, companyName, sector, newsItems, fa
 
           {/* Loading skeleton */}
           {loading && sections.length === 0 && (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-              {[...Array(5)].map((_, i) => (
-                <div key={i} style={{ background: "#06111f", border: "1px solid #1a2d4a", borderRadius: 8, padding: 14, opacity: Math.max(0.2, 0.7 - i * 0.12) }}>
-                  <div style={{ height: 11, background: "#1a2d4a", borderRadius: 4, width: "45%", marginBottom: 10 }} />
-                  <div style={{ height: 8, background: "#0f1e33", borderRadius: 3, width: "92%", marginBottom: 6 }} />
-                  <div style={{ height: 8, background: "#0f1e33", borderRadius: 3, width: "78%", marginBottom: 6 }} />
-                  <div style={{ height: 8, background: "#0f1e33", borderRadius: 3, width: "86%" }} />
+            <div style={{ display: "flex", flexDirection: "column", gap: 24 }}>
+              {[...Array(4)].map((_, i) => (
+                <div key={i} style={{ opacity: 0.7 - i * 0.15 }}>
+                  <div style={{ height: 9, background: "#0d1e33", borderRadius: 3, width: "20%", marginBottom: 14 }} />
+                  <div style={{ height: 1, background: "#0d1e33", marginBottom: 14 }} />
+                  {[...Array(4)].map((_, j) => (
+                    <div key={j} style={{ height: 8, background: "#060f1e", borderRadius: 3, width: `${90 - j * 10}%`, marginBottom: 8 }} />
+                  ))}
                 </div>
               ))}
             </div>
           )}
 
-          {/* Rendered sections */}
-          {sections.map((sec, i) => {
-            const meta = SECTION_META[sec.title] ?? { icon: "•", color: "#3b82f6", short: sec.title };
-            const isFlash = sec.title === "FLASH ASSESSMENT";
+          {/* Rendered sections (skip FLASH ASSESSMENT — it's in the banner) */}
+          {sections.filter(s => s.title !== "FLASH ASSESSMENT").map((sec, i) => {
+            const m = SEC_META[sec.title] ?? { icon: "•", color: "#3b82f6", short: sec.title };
             const isVerdict = sec.title.includes("VERDICT");
-
-            // Parse FLASH ASSESSMENT signal line
-            let flashSignal = "";
-            let flashPattern = "";
-            let flashConviction = "";
-            let flashBody = sec.content.trim();
-            if (isFlash) {
-              const sigLine = sec.content.match(/SIGNAL:\s*(\w+)/i);
-              const patLine = sec.content.match(/PATTERN:\s*([^|]+)/i);
-              const conLine = sec.content.match(/CONVICTION:\s*(\w+)/i);
-              if (sigLine) flashSignal = sigLine[1].toUpperCase();
-              if (patLine) flashPattern = patLine[1].trim();
-              if (conLine) flashConviction = conLine[1].toUpperCase();
-              // Get the sentence after the first line
-              const lines = sec.content.trim().split("\n").filter(Boolean);
-              flashBody = lines.slice(1).join(" ").trim();
-            }
-
-            const signalColor = flashSignal === "BULLISH" ? "#10b981" : flashSignal === "BEARISH" ? "#ef4444" : "#f59e0b";
-
+            const isAlt = i % 2 === 1;
             return (
               <div
-                key={i}
+                key={sec.title}
                 ref={el => { sectionRefs.current[sec.title] = el; }}
                 style={{
-                  background: isFlash ? `${meta.color}0e` : isVerdict ? `${meta.color}08` : "#06111f",
-                  border: `1px solid ${isFlash || isVerdict ? meta.color + "35" : "#1a2d4a"}`,
-                  borderLeft: `3px solid ${meta.color}`,
-                  borderRadius: 8, padding: isFlash ? 16 : 14, marginBottom: 10,
+                  marginBottom: 28,
+                  padding: isVerdict ? "16px 18px" : 0,
+                  background: isVerdict ? `${m.color}0a` : isAlt ? "#030b18" : "transparent",
+                  borderRadius: isVerdict ? 8 : 0,
+                  border: isVerdict ? `1px solid ${m.color}30` : "none",
                 }}
               >
-                {/* Section header */}
-                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: isFlash ? 10 : 8 }}>
-                  <span style={{ fontSize: 15 }}>{meta.icon}</span>
-                  <span style={{ fontSize: 9.5, fontWeight: 800, letterSpacing: "0.09em", color: meta.color, textTransform: "uppercase", flex: 1 }}>
-                    {sec.title}
+                {/* Section label (newspaper style: small caps + colored rule) */}
+                <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 10 }}>
+                  <div style={{ width: 3, height: 16, background: m.color, borderRadius: 2, flexShrink: 0 }} />
+                  <span style={{ fontSize: 9, fontWeight: 900, letterSpacing: "0.16em", color: m.color, textTransform: "uppercase" }}>
+                    {m.icon} {sec.title}
                   </span>
                 </div>
 
-                {/* Flash Assessment special rendering */}
-                {isFlash && flashSignal ? (
-                  <>
-                    <div style={{ display: "flex", gap: 8, marginBottom: 10, flexWrap: "wrap" }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 6, background: `${signalColor}18`, border: `1px solid ${signalColor}40`, borderRadius: 6, padding: "5px 12px" }}>
-                        <span style={{ fontSize: 9, fontWeight: 800, color: signalColor, letterSpacing: "0.1em" }}>SIGNAL</span>
-                        <span style={{ fontSize: 12, fontWeight: 900, color: signalColor }}>{flashSignal}</span>
-                      </div>
-                      {flashPattern && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#0f1e33", border: "1px solid #1a2d4a", borderRadius: 6, padding: "5px 12px" }}>
-                          <span style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>PATTERN</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8" }}>{flashPattern}</span>
-                        </div>
-                      )}
-                      {flashConviction && (
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, background: "#0f1e33", border: "1px solid #1a2d4a", borderRadius: 6, padding: "5px 12px" }}>
-                          <span style={{ fontSize: 9, color: "#475569", fontWeight: 700, letterSpacing: "0.08em" }}>CONVICTION</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: flashConviction === "HIGH" ? "#10b981" : flashConviction === "LOW" ? "#ef4444" : "#f59e0b" }}>{flashConviction}</span>
-                        </div>
-                      )}
-                    </div>
-                    {flashBody && (
-                      <div style={{ fontSize: 12, color: "#c8dcff", lineHeight: 1.65, fontStyle: "italic", borderTop: "1px solid #1a2d4a", paddingTop: 10 }}>
-                        {flashBody}
-                      </div>
-                    )}
-                  </>
-                ) : (
-                  <div style={{ fontSize: 11.5, color: "#8faec8", lineHeight: 1.75, whiteSpace: "pre-wrap" }}>
-                    {sec.content.trim()}
+                {/* Article body */}
+                {isVerdict ? (
+                  <div style={{ position: "relative", paddingLeft: 20 }}>
+                    <span style={{ position: "absolute", left: 0, top: -4, fontSize: 36, color: m.color, lineHeight: 1, opacity: 0.3, fontFamily: "Georgia, serif" }}>"</span>
+                    <p style={{ fontSize: 13, color: "#cbd5e1", lineHeight: 1.8, margin: 0, fontStyle: "italic", fontFamily: "Georgia, serif" }}>
+                      {sec.content.trim()}
+                    </p>
                   </div>
+                ) : (
+                  <p style={{ fontSize: 12, color: "#8faec8", lineHeight: 1.85, margin: 0, whiteSpace: "pre-wrap" }}>
+                    {sec.content.trim()}
+                  </p>
+                )}
+
+                {/* Divider */}
+                {!isVerdict && (
+                  <div style={{ height: 1, background: "linear-gradient(to right, #1a2d4a, transparent)", marginTop: 20 }} />
                 )}
               </div>
             );
@@ -429,14 +384,91 @@ export default function NewsAnalyst({ ticker, companyName, sector, newsItems, fa
 
           {/* Streaming cursor */}
           {loading && analysis && (
-            <div style={{ display: "inline-block", width: 2, height: 14, background: "#3b82f6", marginLeft: 2, animation: "na-pulse 0.8s ease infinite" }} />
+            <span style={{ display: "inline-block", width: 2, height: 13, background: "#3b82f6", animation: "na-pulse 0.8s ease infinite", marginLeft: 2 }} />
           )}
+        </div>
+
+        {/* RIGHT: News Feed */}
+        <div style={{ background: "#030b18", overflowY: "auto", maxHeight: 780 }}>
+          {/* Category filter tabs */}
+          <div style={{ position: "sticky", top: 0, zIndex: 10, background: "#04111f", borderBottom: "1px solid #1a2d4a", padding: "8px 12px", display: "flex", flexWrap: "wrap", gap: 4 }}>
+            {cats.map(cat => {
+              const count = cat === "ALL" ? newsItems.length : newsItems.filter(n => (n.category ?? "GENERAL") === cat).length;
+              const active = activeCat === cat;
+              const label = cat === "ALL" ? "ALL" : cat.replace("REGULATORY/LEGAL", "REG/LEGAL").replace("CAPITAL ALLOCATION", "CAP ALLOC").replace("PRODUCT/BUSINESS", "PRODUCT");
+              return (
+                <button key={cat} onClick={() => setActiveCat(cat)} style={{ fontSize: 8, fontWeight: 800, letterSpacing: "0.07em", padding: "3px 7px", borderRadius: 3, border: "1px solid", cursor: "pointer", background: active ? (CAT_BG[cat] ?? "#0e1f40") : "transparent", borderColor: active ? "#3a5580" : "#1a2d4a", color: active ? (CAT_FG[cat] ?? "#93c5fd") : "#334155", textTransform: "uppercase" }}>
+                  {label} {count}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* News articles grouped by date */}
+          {grouped.length === 0 && (
+            <div style={{ padding: 24, fontSize: 11, color: "#1a2d4a", textAlign: "center" }}>No items in this category.</div>
+          )}
+          {grouped.map(({ group, items }) => (
+            <div key={group}>
+              {/* Date group header */}
+              <div style={{ padding: "8px 14px 4px", display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontSize: 7.5, fontWeight: 900, letterSpacing: "0.16em", color: "#1a2d4a", textTransform: "uppercase" }}>{group}</span>
+                <div style={{ flex: 1, height: 1, background: "#0d1a28" }} />
+              </div>
+              {items.map((item, i) => {
+                const cat     = item.category ?? "GENERAL";
+                const isPos   = item.stock_change?.startsWith("+");
+                const isNeg   = item.stock_change?.startsWith("-");
+                return (
+                  <div key={i} style={{ padding: "11px 14px", borderBottom: "1px solid #0a1520" }}>
+                    {/* Category pill + stock change + date */}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5, marginBottom: 5, flexWrap: "wrap" }}>
+                      <span style={{ fontSize: 7.5, fontWeight: 800, letterSpacing: "0.07em", padding: "2px 6px", borderRadius: 3, background: CAT_BG[cat] ?? "#0e1f40", color: CAT_FG[cat] ?? "#93c5fd", textTransform: "uppercase", flexShrink: 0 }}>
+                        {cat.replace("REGULATORY/LEGAL", "REG/LEGAL").replace("CAPITAL ALLOCATION", "CAP ALLOC").replace("PRODUCT/BUSINESS", "PRODUCT")}
+                      </span>
+                      {item.stock_change && (
+                        <span style={{ fontSize: 9, fontWeight: 700, padding: "2px 6px", borderRadius: 3, background: isPos ? "#061a0e" : isNeg ? "#1a0606" : "#111827", color: isPos ? "#10b981" : isNeg ? "#ef4444" : "#64748b", flexShrink: 0 }}>
+                          Stock {item.stock_change}
+                        </span>
+                      )}
+                      <span style={{ fontSize: 8.5, color: "#1e3050", marginLeft: "auto" }}>{(item.date ?? "").slice(0, 10)}</span>
+                    </div>
+
+                    {/* Headline (newspaper style) */}
+                    {item.url ? (
+                      <a href={item.url} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none" }}>
+                        <p style={{ fontSize: 12.5, fontWeight: 700, color: "#c8dcff", lineHeight: 1.45, margin: "0 0 4px", cursor: "pointer" }}>
+                          {item.title}
+                        </p>
+                      </a>
+                    ) : (
+                      <p style={{ fontSize: 12.5, fontWeight: 700, color: "#c8dcff", lineHeight: 1.45, margin: "0 0 4px" }}>
+                        {item.title}
+                      </p>
+                    )}
+
+                    {/* Byline */}
+                    <p style={{ fontSize: 9, color: "#334155", margin: "0 0 4px" }}>
+                      {[item.source, item.date?.slice(0, 10)].filter(Boolean).join(" · ")}
+                    </p>
+
+                    {/* Lede */}
+                    {item.summary && (
+                      <p style={{ fontSize: 10.5, color: "#3d5570", lineHeight: 1.5, margin: 0, display: "-webkit-box", WebkitLineClamp: 2, WebkitBoxOrient: "vertical", overflow: "hidden" } as any}>
+                        {item.summary}
+                      </p>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          ))}
         </div>
       </div>
 
       <style>{`
         @keyframes na-spin  { from { transform: rotate(0deg); }   to { transform: rotate(360deg); } }
-        @keyframes na-pulse { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+        @keyframes na-pulse { 0%,100% { opacity: 1; }             50% { opacity: 0; } }
       `}</style>
     </div>
   );
