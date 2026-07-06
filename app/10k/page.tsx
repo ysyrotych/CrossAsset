@@ -1712,6 +1712,7 @@ export default function TenKPage() {
   const [primerDone, setPrimerDone]   = useState(false);
   const [showPrimer, setShowPrimer]   = useState(false);
   const primerRef = useRef<HTMLDivElement>(null);
+  const primerContainerRef = useRef<HTMLDivElement>(null);
   const [uploadedDoc, setUploadedDoc] = useState<{name: string; base64: string; mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [pageView, setPageView]         = useState<"analytics" | "news">("analytics");
@@ -1779,6 +1780,7 @@ export default function TenKPage() {
     setPrimerText("");
     setPrimerDone(false);
     setShowPrimer(true);
+    setTimeout(() => primerContainerRef.current?.scrollIntoView({ behavior: "smooth", block: "start" }), 50);
     const allSections = [
       ...(data.annual?.sections ?? []),
       ...(data.quarterly?.sections ?? []),
@@ -2354,7 +2356,7 @@ export default function TenKPage() {
           </div>
 
           {/* ── Company Primer Generator ──────────────────────────────────── */}
-          <div className="border border-[#d0d7e8] rounded-lg overflow-hidden">
+          <div ref={primerContainerRef} className="border border-[#d0d7e8] rounded-lg overflow-hidden">
             <div className="px-5 py-4 bg-gradient-to-r from-[#0c1b38] to-[#152a55] flex items-center justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2 mb-1">
