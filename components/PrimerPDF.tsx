@@ -74,8 +74,14 @@ const S = StyleSheet.create({
   // Sections
   sectionHeader: {
     backgroundColor: NAVY, color: "white", fontSize: 7, fontFamily: "Helvetica-Bold",
-    letterSpacing: 1.4, textTransform: "uppercase", paddingHorizontal: 10, paddingVertical: 5,
-    marginBottom: 10, marginTop: 20,
+    letterSpacing: 1.5, textTransform: "uppercase", paddingHorizontal: 12, paddingVertical: 6,
+    marginBottom: 12, marginTop: 0,
+  },
+  sectionHeaderWrap: {
+    flexDirection: "row", marginTop: 24, marginBottom: 0,
+  },
+  sectionHeaderAccent: {
+    width: 4, marginBottom: 0,
   },
   subsectionHeader: {
     fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 6, marginTop: 14,
@@ -128,9 +134,9 @@ const S = StyleSheet.create({
 
   // Cover stat chips
   coverChips:      { flexDirection: "row", gap: 8, marginTop: 10 },
-  coverChip:       { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 3 },
-  coverChipLabel:  { fontSize: 6, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 1 },
-  coverChipValue:  { fontSize: 10, fontFamily: "Helvetica-Bold" },
+  coverChip:       { paddingHorizontal: 10, paddingVertical: 8, borderRadius: 3, borderBottomWidth: 1, borderBottomColor: "rgba(255,255,255,0.2)" },
+  coverChipLabel:  { fontSize: 6.5, letterSpacing: 0.6, textTransform: "uppercase", marginBottom: 3 },
+  coverChipValue:  { fontSize: 13, fontFamily: "Helvetica-Bold" },
 
   // Scenario range
   scenarioRow:     { flexDirection: "row", alignItems: "center", marginVertical: 8 },
@@ -256,9 +262,11 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
   ].filter(v => v > 0);
   const maxV = allVals.length ? Math.max(...allVals) : 1;
 
-  const BAR_W = 32;
+  const BAR_W = 30;
   const PAIR_W = BAR_W * 2 + 4;
   const GAP    = (CHART_W - years.length * PAIR_W) / (years.length + 1);
+  const LABEL_H = 14;
+  const PLOT_H  = CHART_H - LABEL_H;
 
   const fmtShort = (v: number) =>
     Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T`
@@ -267,35 +275,60 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
 
   return (
     <View style={{ marginBottom: 2 }}>
-      <Text style={S.chartLabel}>Revenue (■) vs Free Cash Flow (■) — 5-Year ($B)</Text>
-      <Svg width={CHART_W} height={CHART_H + 2}>
-        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+      <Text style={S.chartLabel}>Revenue (■) vs Free Cash Flow (■) — 5-Year</Text>
+      <Svg width={CHART_W} height={CHART_H + LABEL_H + 2}>
+        <Line x1={0} y1={PLOT_H} x2={CHART_W} y2={PLOT_H} stroke={BORDER} strokeWidth={0.5} />
         {years.map((yr, i) => {
           const rev = revData[yr] ?? 0;
           const fcf = fcfData[yr] ?? 0;
           const x0 = GAP + i * (PAIR_W + GAP);
-          const revH = Math.max(2, (rev / maxV) * CHART_H);
-          const fcfH = Math.max(2, (Math.abs(fcf) / maxV) * CHART_H);
+          const revH = Math.max(2, (rev / maxV) * PLOT_H);
+          const fcfH = Math.max(2, (Math.abs(fcf) / maxV) * PLOT_H);
+          const revLabel = fmtShort(rev);
+          const fcfLabel = fmtShort(fcf);
+          const labelAbove = revH < 16;
           return (
             <G key={yr}>
-              <Rect x={x0} y={CHART_H - revH} width={BAR_W} height={revH} fill={NAVY} rx={1} />
-              <Rect x={x0 + BAR_W + 4} y={CHART_H - fcfH} width={BAR_W} height={fcfH} fill={fcf >= 0 ? GREEN : RED} rx={1} />
+              {/* Revenue bar */}
+              <Rect x={x0} y={PLOT_H - revH} width={BAR_W} height={revH} fill={NAVY} rx={1} />
+              {/* Revenue label */}
+              {labelAbove
+                ? <G><Line x1={x0 + BAR_W/2} y1={PLOT_H - revH - 1} x2={x0 + BAR_W/2} y2={PLOT_H - revH - 4} stroke={NAVY} strokeWidth={0.5} /></G>
+                : null}
+              {/* FCF bar */}
+              <Rect x={x0 + BAR_W + 4} y={PLOT_H - fcfH} width={BAR_W} height={fcfH} fill={fcf >= 0 ? GREEN : RED} rx={1} />
+              {/* Year label */}
+              <G>
+                <Line x1={x0 + PAIR_W/2} y1={PLOT_H} x2={x0 + PAIR_W/2} y2={PLOT_H + 2} stroke={BORDER} strokeWidth={0.5} />
+              </G>
             </G>
           );
         })}
       </Svg>
-      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2 }}>
-        {years.map(yr => (
-          <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center", width: PAIR_W + GAP }}>
-            FY{yr.slice(0,4)}{"\n"}{fmtShort(revData[yr] ?? 0)}
-          </Text>
-        ))}
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 1 }}>
+        {years.map(yr => {
+          const rev = revData[yr] ?? 0;
+          const fcf = fcfData[yr] ?? 0;
+          return (
+            <View key={yr} style={{ width: PAIR_W + GAP, alignItems: "center" }}>
+              <Text style={{ fontSize: 6, color: GRAY, textAlign: "center" }}>FY{yr.slice(0,4)}</Text>
+              <Text style={{ fontSize: 5.5, color: NAVY, textAlign: "center" }}>{fmtShort(rev)}</Text>
+              <Text style={{ fontSize: 5.5, color: fcf >= 0 ? GREEN : RED, textAlign: "center" }}>{fmtShort(fcf)}</Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Revenue</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>FCF</Text></View>
       </View>
     </View>
   );
 }
 
 function MarginLineChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const YAXIS_W = 32;
+  const PLOT_W  = CHART_W - YAXIS_W;
   const revData = history.revenue ?? {};
   const gpData  = history.gross_profit ?? {};
   const oiData  = history.operating_income ?? {};
@@ -315,12 +348,15 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
   const netM   = margins(niData);
 
   const allVals = [...grossM, ...opM, ...netM].filter((v): v is number => v != null);
-  const minV = Math.min(...allVals, 0);
-  const maxV = Math.max(...allVals, 1);
+  const rawMin = Math.min(...allVals, 0);
+  const rawMax = Math.max(...allVals, 1);
+  // Round to nice 10% increments
+  const minV = Math.floor(rawMin / 10) * 10;
+  const maxV = Math.ceil(rawMax / 10) * 10;
   const range = maxV - minV || 1;
 
   const toY = (v: number | null) => v == null ? null : CHART_H - ((v - minV) / range) * CHART_H;
-  const toX = (i: number) => (i / (years.length - 1)) * CHART_W;
+  const toX = (i: number) => YAXIS_W + (i / (years.length - 1)) * PLOT_W;
 
   const toPoints = (vals: (number | null)[]) =>
     vals.map((v, i) => v == null ? null : `${toX(i)},${toY(v)!}`)
@@ -332,17 +368,63 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
   const netPts   = toPoints(netM);
   const zeroY    = toY(0);
 
+  // Gridlines at every 10% between minV and maxV
+  const gridLines: number[] = [];
+  for (let v = minV; v <= maxV; v += 10) gridLines.push(v);
+
   return (
     <View style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
       <Svg width={CHART_W} height={CHART_H + 2}>
-        {zeroY != null && <Line x1={0} y1={zeroY} x2={CHART_W} y2={zeroY} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />}
-        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {/* Y-axis gridlines and labels */}
+        {gridLines.map(v => {
+          const y = toY(v);
+          if (y == null) return null;
+          const isZero = v === 0;
+          return (
+            <G key={v}>
+              <Line x1={YAXIS_W} y1={y} x2={CHART_W} y2={y} stroke={isZero ? DGRAY : BORDER}
+                strokeWidth={isZero ? 0.8 : 0.4} strokeDasharray={isZero ? "none" : "2,2"} />
+              <G>
+                {/* Y-axis label via absolute-positioned trick using SVG Text */}
+              </G>
+            </G>
+          );
+        })}
+        {/* Baseline */}
+        <Line x1={YAXIS_W} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {/* Left axis line */}
+        <Line x1={YAXIS_W} y1={0} x2={YAXIS_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {/* Series polylines */}
         {grossPts && <Polyline points={grossPts} fill="none" stroke={BLUE} strokeWidth={1.5} strokeLinejoin="round" />}
         {opPts    && <Polyline points={opPts}    fill="none" stroke={NAVY} strokeWidth={1.5} strokeLinejoin="round" />}
         {netPts   && <Polyline points={netPts}   fill="none" stroke={GREEN} strokeWidth={1.5} strokeLinejoin="round" />}
+        {/* Dot markers at each year for the last value */}
+        {years.map((yr, i) => {
+          const gv = grossM[i]; const ov = opM[i]; const nv = netM[i];
+          const x = toX(i);
+          return (
+            <G key={yr}>
+              {gv != null && <Rect x={x-2} y={(toY(gv) ?? 0)-2} width={4} height={4} fill={BLUE} rx={2} />}
+              {ov != null && <Rect x={x-2} y={(toY(ov) ?? 0)-2} width={4} height={4} fill={NAVY} rx={2} />}
+              {nv != null && <Rect x={x-2} y={(toY(nv) ?? 0)-2} width={4} height={4} fill={GREEN} rx={2} />}
+            </G>
+          );
+        })}
       </Svg>
-      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2 }}>
+      {/* Y-axis labels rendered as positioned View layer */}
+      <View style={{ position: "absolute", top: 14, left: 0, width: YAXIS_W - 2 }}>
+        {gridLines.map(v => {
+          const y = toY(v);
+          if (y == null) return null;
+          return (
+            <View key={v} style={{ position: "absolute", top: y - 4, right: 2, alignItems: "flex-end" }}>
+              <Text style={{ fontSize: 5, color: GRAY }}>{v}%</Text>
+            </View>
+          );
+        })}
+      </View>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2, paddingLeft: YAXIS_W }}>
         {years.map(yr => (
           <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center" }}>FY{yr.slice(0,4)}</Text>
         ))}
@@ -416,8 +498,13 @@ function StockRangeBar({ facts }: { facts: Record<string, number> }) {
 
 // ── Sub-components ────────────────────────────────────────────────────────────
 
-function SectionHdr({ title, accentColor }: { title: string; accentColor?: string }) {
-  return <View><Text style={[S.sectionHeader, accentColor ? { backgroundColor: accentColor } : {}]}>{title}</Text></View>;
+function SectionHdr({ title, accentColor, pageBreak }: { title: string; accentColor?: string; pageBreak?: boolean }) {
+  return (
+    <View style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]}>
+      <View style={[S.sectionHeaderAccent, { backgroundColor: accentColor ?? NAVY }]} />
+      <Text style={[S.sectionHeader, { flex: 1 }]}>{title}</Text>
+    </View>
+  );
 }
 
 function SubSectionHdr({ title }: { title: string }) {

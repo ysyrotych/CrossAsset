@@ -627,19 +627,47 @@ ${sectorCtxStr}
 OUTPUT FORMAT
 ═══════════════════════════════════════════════════════════════
 
-CRITICAL WRITING RULES — NON-NEGOTIABLE:
-1. NEVER open any paragraph with "The company" — use the actual company name or a specific descriptor (e.g. "Duolingo's core language app", "${companyName}'s subscription tier")
-2. USE specific product/segment names from the data — reference actual segment names, geographies, and KPIs by name, not "the premium segment" or "the main product"
-3. OPEN the Executive Summary with a one-sentence hook about what makes ${companyName} uniquely compelling or uniquely risky RIGHT NOW — not a definition of what they do
-4. EVERY valuation claim must show the arithmetic: not "trades at a premium" but "P/E of ${f.pe_ratio != null ? f.pe_ratio.toFixed(0) : "?"}x vs sector median — X% premium"
-5. SCENARIOS must include explicit price math: "Base case: $[X] = [EBITDA × multiple] + net cash ÷ shares"
-6. SECTOR FRAME: Write with the vocabulary and metrics that ${ext.sector ?? industry} analysts actually use — use the sector-specific context provided above
-7. TONE by section: Executive Summary = punchy and decisive; Financial Analysis = precise and technical; Risks = direct and unhedged
-8. BANNED PHRASES — never use: "it is worth noting", "importantly", "as mentioned", "going forward", "in conclusion", "significant" without a number, "notable", "delve", "leverage" as a verb
-9. USE the Piotroski score, ROIC-WACC spread, earnings beat trend, and FCF yield vs risk-free in your analysis — they appear in the Computed Metrics section above
-10. The KEY METRICS DASHBOARD must reflect the sector frame — for tech, include Rule of 40 and SBC dilution; for consumer, include gross margin and SGA%; for banks, include ROE and credit quality
-11. ANTI-AI STYLE — Write like a Managing Director who has covered this company for 5 years: use sentence fragments when appropriate, vary sentence length, lead with the conclusion not the setup. Analysts don't explain what revenue is — they argue about whether the growth is sustainable.
-12. MINIMUM CONTENT: Each ### subsection must have at least 2 full paragraphs. If data is limited, draw inferences from what you know. Do NOT leave a subsection with only 1 short sentence.
+MANDATORY PROSE RULES — VIOLATIONS MAKE THIS PRIMER UNUSABLE:
+
+VOICE & TONE:
+• Write as a Managing Director who has covered this sector for 10 years and has a strong view. You have seen this cycle before.
+• Use active voice always: "Management destroyed value" not "Value was destroyed by management"
+• Have a clear opinion: "This is a structurally broken business model at current prices" not "there are risks to consider"
+• Vary sentence length aggressively: one sharp punchy sentence. Then a longer, clause-heavy analytical sentence that unpacks the mechanism. Then another short punch.
+• Lead with the conclusion, not the setup. Analysts don't explain what revenue is — they argue about whether the growth is real.
+
+SPECIFICITY (non-negotiable):
+• Every paragraph must contain at least one specific dollar amount, percentage, or date from the data provided
+• Never say "the company" when you can say ${companyName} or a specific product/segment name from the data
+• Never say "significant" — write the actual magnitude ("58% gross margin decline" not "a significant margin decline")
+• Never say "going forward" — write "in FY2026" or "by Q3 2026" or "over the next 12 months"
+• Name specific competitors (Samsung, Micron, AWS, etc.) when discussing competitive dynamics — never "the competition"
+• When referencing history, cite the specific year: "gross margin collapsed from 38% in FY2022 to 7% in FY2023" not "margins deteriorated"
+
+FORBIDDEN PHRASES — if any appear, the section fails quality review:
+"it is worth noting", "importantly", "in conclusion", "as mentioned", "going forward", "significant" (without a number), "notable", "it should be noted", "in summary", "to summarize", "overall", "at the end of the day", "moving forward", "in the current environment", "in today's landscape", "it is important to", "one must consider", "delve", "leverage" (as a verb), "in terms of", "a number of"
+
+STRUCTURE RULES (per section):
+• Executive Summary: The FIRST SENTENCE must be the single most important analytical claim about this stock RIGHT NOW — not "Company X is a leading provider of…" Start with what makes this hard to own or short.
+• Financial Analysis: Each subsection opens with the most surprising or counter-intuitive number, not the most obvious one
+• Key Risks: Each risk starts with a bold one-line title capturing the specific mechanism ("NAND Pricing Reversion Erases 80% of FY2025 Gross Profit") then 3-4 specific sentences quantifying the exposure
+• Investment Thesis: Every bull/bear bullet must contain a specific number — price target math, revenue figure, or margin assumption
+• Valuation: Show explicit multiple math for all price targets: "[EV multiple]x × [EBITDA] = [EV], minus [net debt], ÷ [shares] = $[price]"
+
+ANTI-AI STYLE REQUIREMENTS:
+• Use sentence fragments strategically for emphasis. "Flat revenue. Expanding losses. A 45x EV/EBITDA multiple. Pick one to defend."
+• Reference the Piotroski score, ROIC-WACC spread, earnings beat trend, and FCF yield vs risk-free from the Computed Metrics section — weave them into the narrative, don't list them
+• The KEY METRICS DASHBOARD must be sector-specific: for tech use Rule of 40 and SBC dilution; for consumer use comp growth and gross margin; for banks use ROE and credit quality; for semis use ASPs and fab utilization
+• MINIMUM CONTENT: Each ### subsection must have at least 2 full paragraphs. Do NOT produce a single short paragraph and move on.
+• NEVER begin a paragraph or bullet with: "This", "The company", "It is", "There are", "Furthermore", "Moreover", "Additionally", "In addition", "Overall", "In summary". These are dead giveaways of AI-generated text.
+• Use rhetorical questions sparingly but effectively: "Why does gross margin matter here? Because ${companyName} earns $X in FCF only when utilization exceeds Y%."
+• Express genuine analytical uncertainty the way analysts do: "Our base case assumes X. If Y proves wrong — and it might — the bear case is Z."
+• Where data contradicts the consensus narrative, call it out explicitly: "The bull case rests on margin recovery. The accrual ratio says look again."
+• Write as if you know things your reader doesn't — that's the value-add. Not "revenue grew 12%" but "the 12% top-line number obscures a 3pp mix shift toward lower-margin products that won't be visible in consensus models."
+• Avoid parallel structure in bullet lists — varying the rhythm of how bullets start prevents the robotic AI list cadence. Some bullets should be declarative, some conditional, some imperative.
+
+TARGET: 5,000–5,500 words total. Section allocation:
+Executive Summary: 400-500 words | Business Overview: 600-700 words | Industry Analysis: 500-600 words | Financial Analysis: 700-800 words | Valuation Framework: 500-600 words | Management Commentary: 300-400 words | Management & Governance: 300-400 words | Key Risks: 700-800 words (7 risks, 100+ words each) | News Analysis: 400-500 words | Investment Thesis: 400-500 words | Key Metrics + Earnings Questions: remainder
 
 Write a complete institutional equity research primer using EXACTLY these section headers (## for main sections, ### for subsections). DO NOT add any text before "## EXECUTIVE SUMMARY".
 
@@ -653,7 +681,8 @@ Write a complete institutional equity research primer using EXACTLY these sectio
 • Investment Thesis: Bull Case | Bear Case | Analyst Note
 
 ## EXECUTIVE SUMMARY
-Write 6-8 bullet points (• prefix). Cover: (1) what the company does and why it matters, (2) the core investment question right now, (3) the most compelling financial characteristic with exact numbers, (4) the growth trajectory in concrete numbers, (5) key valuation context vs peers, (6) the single biggest risk that could derail the thesis, (7) the bottom line verdict for a long-term institutional investor.
+Write 6-8 bullet points (• prefix). FIRST bullet must be the most important analytical claim — not a company description. Cover: (1) the core tension in this investment (what makes it hard to own AND hard to short), (2) the one metric that matters most right now with the exact current value, (3) revenue growth trajectory: 2-year history + FY forward estimate with specific % numbers, (4) what the current valuation implies about growth (not just the multiple — what must the company deliver to justify ${x(f.ev_ebitda)} EV/EBITDA?), (5) the single bull case catalyst and probability, (6) the single biggest risk with estimated financial impact, (7) verdict: buy/hold/avoid and why in one unambiguous sentence.
+Do NOT write a bullet that simply says what the company does. An investor reading this already knows what the company does.
 
 ## COMPANY SNAPSHOT
 Pipe-delimited table. FIRST ROW must be:
@@ -728,11 +757,15 @@ Analyst Rating | ${analystRecStr}
 1-2 paragraphs. Compare the subject company's multiples directly to the peers listed. Is it at a premium or discount? Is the premium/discount justified by growth, returns, or quality differentials? Reference specific peer multiples from the comparison table.
 
 ### Implied Scenarios
-Write a compact 3-scenario analysis:
-**Bull Case ($[calculate implied price]):** [2-3 sentences on what multiple expansion + earnings upside drives price]
-**Base Case ($[calculate implied price]):** [2 sentences on consensus + current multiple]
-**Bear Case ($[calculate implied price]):** [2-3 sentences on multiple compression + downside risk]
-Use the FCF yield or EV/EBITDA as the anchor for the price targets. Show your math briefly.
+Write a 3-scenario analysis with explicit price math. Use EV/EBITDA or P/FCF as the valuation anchor (whichever is more relevant for this sector):
+
+**Bull Case ($[price]):** [Multiple]x EV/EBITDA × $[EBITDA estimate], minus $[net debt], ÷ [shares out] = $[price]. [2 sentences on what drives this: specific margin or revenue assumption, catalyst timeline]
+
+**Base Case ($[price]):** [Multiple]x EV/EBITDA × $[EBITDA estimate] = $[price]. [1-2 sentences: what consensus is pricing in]
+
+**Bear Case ($[price]):** [Multiple]x EV/EBITDA × $[EBITDA estimate] = $[price]. [2 sentences on what drives compression: specific risk materializing, financial deterioration]
+
+Show the math every time. "Multiple expansion" without a number is not a scenario — it's a hope.
 
 ## MANAGEMENT COMMENTARY & GUIDANCE
 
@@ -751,7 +784,12 @@ Use the FCF yield or EV/EBITDA as the anchor for the price targets. Show your ma
 2 paragraphs. Evaluate capital allocation quality over the past 5 years: when and at what prices did they buy back stock? M&A history — did acquisitions create or destroy value? How do they balance growth investment (R&D CapEx at ${capexPct ? pct(capexPct) : "N/A"} of revenue) vs. shareholder returns? Assess ROIC trajectory as evidence of capital discipline.
 
 ## KEY RISKS
-Write 7 specific, material risks (• prefix). For each: **[Risk Name in Bold]** — explain the mechanism, quantify the exposure where possible, and rate Probability (Low/Medium/High) and Impact (Low/Medium/High). No generic boilerplate. Only risks specific to ${companyName}'s actual business model and financial structure.
+Write 7 specific, material risks. Format each as:
+
+**[RISK TITLE: must capture the specific mechanism in plain English, e.g. "NAND Oversupply Cycle Compresses Gross Margin from 38% to Single Digits"]**
+3-4 sentences: (1) What specifically causes this risk to materialize for ${companyName}? (2) What is the quantified financial exposure — revenue at risk, margin impact, or balance sheet hit? (3) What early warning signals would confirm this risk is activating? Rate: Probability [Low/Medium/High] | Impact [Low/Medium/High]
+
+Zero boilerplate. If a risk doesn't have a number attached to it, it's not specific enough. Name the customers, competitors, regulators, or macro variables involved. No generic "competitive pressures" risks — name the specific competitor and the specific pressure.
 
 ## NEWS ANALYSIS & MARKET INTELLIGENCE
 5-part structured analysis following the NEWS ANALYSIS INSTRUCTIONS in the data section above. Include all 5 parts: Events Scorecard, Sentiment Trajectory, Analyst Positioning, What's Priced In vs Not, Near-Term Catalysts. Do not skip or abbreviate.
@@ -785,13 +823,13 @@ Questions must be: (1) directly answerable from company data (2) not already ans
 
 ---
 
-RULES:
+FINAL RULES (non-negotiable):
 - Every claim must be grounded in the data provided. Never fabricate numbers.
-- Be institutional: direct, no hedging, no "it is worth noting," no preamble
-- Use exact figures throughout — no vague language like "significant" without a number
-- Target 4,500-5,000 words total
+- Target 5,000-5,500 words total. Respect per-section allocations above.
 - Do NOT add any text before "## EXECUTIVE SUMMARY"
-- When transcript data is "Not available", synthesize from the MD&A and financial trends instead`;
+- When transcript data is "Not available", synthesize from the MD&A and financial trends instead
+- Before writing any section, ask: does this read like a Managing Director wrote it, or does it read like ChatGPT? If the latter, rewrite it.
+- If data is missing for a subsection, draw analytical inferences from what you do have — never leave a subsection empty or with a single sentence`;
 
   const upstream = await fetch("https://api.anthropic.com/v1/messages", {
     method: "POST",
@@ -802,7 +840,7 @@ RULES:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 20000,
+      max_tokens: 24000,
       stream: true,
       messages: [{ role: "user", content: prompt }],
     }),
