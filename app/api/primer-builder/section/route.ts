@@ -5,43 +5,43 @@ export const maxDuration = 120;
 
 const SECTION_PROMPTS: Record<string, string> = {
   executive_summary:
-    "Write a high-conviction executive summary. Open with the single most important thing an investor needs to know right now — the defining fact about this company at this moment. Then: (1) what the business actually does and why the model is unusual, (2) the three financial metrics that define the investment case, (3) valuation snapshot with what the multiple implies, (4) the bull and bear in one sentence each, (5) a one-sentence bottom line with a stance. No hedging. Name specific numbers every other sentence.",
+    "Write a high-conviction executive summary. Open with the single most important thing an investor needs to know right now — cite the specific ROIC-WACC spread or FCF yield vs risk-free rate from the computed metrics block. Then: (1) what the business actually does and why the model is unusual, (2) reference the Rule of 40 score and Piotroski F-Score to anchor the financial quality argument, (3) valuation snapshot with what the multiple implies about implied growth, (4) the bull and bear in one sentence each using specific numbers, (5) a one-sentence bottom line with a clear stance. No hedging. Every other sentence must contain a specific number.",
 
   company_snapshot:
-    "Write a company snapshot. Cover: what the company actually does and how it makes money (specific revenue mix), when it was founded and the pivotal business model evolution, what scale looks like today ($revenue, employees, segments), and what the financial profile reveals about business quality that peers lack. Make the reader feel they understand this company in 90 seconds.",
+    "Write a company snapshot. Cover: what the company actually does and how it makes money (specific revenue mix from the segments data), what scale looks like today ($revenue, employees, key product lines), and what the financial profile reveals about business quality. Lead with the most defining financial characteristic of the business model — whether that's margin structure, cash conversion, asset intensity, or network economics. Make the reader feel they understand this company in 90 seconds.",
 
   business_overview:
-    "Write a thorough business overview. Cover: the founding story and key strategic pivots, the current product/service portfolio with revenue contribution per segment, the customer base (named customers or concentration %, churn), geographic mix, the moat sources with evidence (retention rates, margins vs peers, pricing power), and switching costs. Name products, segments, and customers. Quote revenue numbers.",
+    "Write a thorough business overview. Open with the most important structural fact about this company. Cover: the current product/service portfolio with exact revenue contribution per segment (use the REVENUE SEGMENTS data), named customers or concentration metrics, geographic mix with percentages, the moat sources with hard evidence (retention rates, margin comparison, pricing power), and switching costs. Name specific products and quote segment revenue numbers. Do not use generic placeholders.",
 
   industry_analysis:
-    "Write an industry analysis with a clear directional stance. Cover: the market structure (oligopoly/fragmented/duopoly), total addressable market with the company's current share, the key demand driver right now and where it is in its cycle, barriers to entry (capital intensity, regulatory, network effects), pricing dynamics and who sets prices, and exactly where this company sits on the competitive map. Conclude with your view on industry direction over 12-24 months.",
+    "Write an industry analysis with a clear directional stance. Cover: the market structure (oligopoly/fragmented/duopoly), the key demand driver right now and where the company sits in its cycle, barriers to entry (capital intensity, regulatory, network effects), pricing dynamics and who sets prices, and exactly where this company sits on the competitive map vs named peers. Conclude with a concrete directional view on the industry over the next 12-24 months. Take a stance.",
 
   financial_analysis:
-    "Write a rigorous financial analysis. Lead with the revenue story: what's driving growth or decline and whether it's sustainable. Then: gross margin trajectory and what it reveals about pricing power, operating leverage evidence (does OpEx grow slower than revenue), FCF quality vs reported earnings (is the gap widening or closing), balance sheet durability (debt maturity, coverage ratios, liquidity), and working capital trends. Every paragraph must contain at least one specific dollar amount and one percentage.",
+    "Write a rigorous financial analysis that integrates the computed metrics provided. REQUIRED: (1) Lead with revenue trajectory — use the CAGR from HISTORICAL TRENDS, call out if it is accelerating or decelerating. (2) Gross margin story — is pricing power growing or eroding? (3) Operating leverage — explicitly compare revenue growth to OpEx growth rates from the historical data. (4) Earnings quality — use the accrual ratio or OCF/Net Income ratio from computed metrics; if OCF > net income, say why and by how much. (5) Balance sheet durability — use Net Debt/EBITDA ratio from computed metrics, reference debt maturity if known. (6) FCF conversion — what % of EBITDA converts to FCF and why. Every paragraph must cite at least one specific dollar amount and one percentage from the data provided.",
 
   valuation:
-    "Write a valuation framework. Cover: current trading multiples (P/E, EV/EBITDA, EV/Rev, FCF yield) vs the 3-year historical average and sector median. Show what the current multiple mathematically implies about expected growth. Then provide three explicit price scenarios with visible math: Bear [$X revenue × Y multiple ± $Z net debt ÷ N shares = $price], Base [same format], Bull [same format]. Conclude with which scenario you weight most heavily and why.",
+    "Write a valuation framework that shows explicit math. REQUIRED: (1) Current trading multiples vs the 3-year average — quote P/E, EV/EBITDA, EV/Rev, and FCF yield. (2) What the current multiple mathematically implies about expected growth — show the algebra. (3) Three explicit price target scenarios using the format: [Bear: $X revenue × Y multiple ± $Z net cash/debt ÷ N shares = $TT]. [Base: same format]. [Bull: same format]. Use the shares outstanding and net debt/cash from the data. (4) Conclude with which scenario you weight most heavily and the single number that would cause you to move between scenarios.",
 
   management_commentary:
-    "Write management commentary. Cover: what leadership has said about business trends (with direct quote patterns if available), whether guidance has been raised/maintained/cut and the credibility track record (beat rate), what sell-side analysts are focused on heading into the next print, and any notable changes in language around capital allocation. Be specific about guidance numbers.",
+    "Write management commentary. Use the EARNINGS SURPRISE HISTORY to assess guidance credibility — what is the beat rate, is it consistent or deteriorating, are beats driven by real upside or just sandbagging? Cover what leadership has communicated about business trends with specific guidance numbers, what sell-side analysts are focused on heading into the next print based on recent news/commentary, and any notable capital allocation language shifts. Reference specific quarters by name.",
 
   management_governance:
-    "Write a management and governance assessment. Cover: CEO tenure and the key strategic decisions they've made (with outcomes), insider ownership % and any recent buying or selling (name the dollars), capital allocation track record (buyback timing, M&A quality), board composition quality, and whether compensation structures align with long-term value creation. Take a stance on management quality.",
+    "Write a management and governance assessment. Use the INSIDER TRADING data provided — name the executives, quote the exact dollar amounts, and characterize the signal (cluster buying vs isolated selling). Cover CEO tenure and the key strategic decisions they've made (with outcomes). Assess capital allocation quality: has buyback timing been value-accretive? What M&A has been done and what was the outcome? Take a clear stance on whether you trust this management team with capital.",
 
   key_risks:
-    "Write 7-8 specific, company-relevant risks in structured bullet format. For each risk: (1) what it is — be specific to this company, not generic sector boilerplate, (2) what data or evidence makes it real today, (3) probability assessment (High/Medium/Low) with rationale. Risk categories to cover: competitive, regulatory, financial/leverage, execution, macro/cycle, and company-specific. No generic risks.",
+    "Write 7-8 specific, company-relevant risks. Use any news items categorized as REGULATORY/LEGAL, GUIDANCE, or ANALYST ACTION to make risks current and specific. For each risk: (1) the specific threat — no generic sector boilerplate, reference actual company data, (2) what evidence makes it real today (data, news, trend), (3) probability (High/Medium/Low) and what would trigger it. Format: bold risk title on its own line, then a tight paragraph of evidence and assessment. Cover competitive, regulatory, financial, execution, and macro risks.",
 
   news_analysis:
-    "Write a news flow analysis. Cover: the dominant narrative in recent coverage (not a list, a synthesis), key events by category with the market impact, whether sentiment has been improving or deteriorating and why, what appears already priced in vs what the market seems to be underestimating, and two or three specific events from the news feed that changed your view of the investment case. Be a journalist, not an archivist.",
+    "Write a news flow analysis. Synthesize the news data into a coherent narrative — not a list. Cover: the dominant theme driving recent coverage, how market sentiment has shifted and why (reference stock price reactions to specific events if available), what appears already priced in vs what the market seems to be underestimating, 2-3 specific events that materially changed the investment picture. Conclude with the single most important upcoming catalyst from the news flow. Be a journalist synthesizing a story, not an archivist cataloguing events.",
 
   investment_thesis:
-    "Write a bull/bear investment thesis. BULL CASE: 4-5 specific bullets with the catalysts, timeline, and a price target with math. BEAR CASE: 4-5 specific bullets with what specifically breaks the model, the magnitude of downside, and price with math. Then write a 2-paragraph conviction statement: which case you find more compelling and precisely what data would cause you to flip.",
+    "Write a bull/bear investment thesis. BULL CASE: 4-5 specific bullets — each must name a catalyst, a timeline, and a specific metric that would confirm the thesis. End with an explicit price target showing the math. BEAR CASE: 4-5 specific bullets — each must name what specifically breaks, the magnitude of the downside, and the specific trigger. End with an explicit downside price target. Then write a 2-paragraph conviction statement: which case you find more compelling based on the data, and precisely what single data point would cause you to flip.",
 
   key_metrics:
-    "Write a key metrics dashboard. For 7-8 KPIs: the current value, the watch threshold (the specific number that would change your thesis), and why this metric matters for THIS company more than others. Format strictly as a table: KPI | Current Value | Watch Threshold | Why It Matters Here. Pick metrics that are specific to this business model — not generic earnings per share.",
+    "Write a key metrics dashboard. For 7-8 KPIs: current value, the specific watch threshold that would change your thesis, and why this metric matters for THIS business model more than others. Include metrics specific to this company's business model — not generic EPS. Consider: revenue CAGR, gross margin trajectory, FCF conversion, Rule of 40, Net Debt/EBITDA, key operational KPI (ARR/NRR for SaaS, same-store sales for retail, book-to-bill for semiconductors, etc.). Format strictly as a table: KPI | Current Value | Watch Threshold | Why It Matters Here.",
 
   earnings_questions:
-    "Write 10 institutional-grade questions for the next earnings call. Each question should: probe a specific inconsistency in the data, test management credibility on a specific guidance number, or seek clarification on an unusual accounting item. No softballs. Questions should be phrased as a PM who has read the last 4 earnings transcripts and noticed something specific.",
+    "Write 10 institutional-grade questions for the next earnings call. Use the EARNINGS SURPRISE HISTORY to probe guidance credibility — note specific quarters where beats/misses occurred. Questions must probe specific inconsistencies in the data, test management credibility on guidance numbers, or seek clarification on unusual accounting items. Phrase each question as if you've read the last 4 transcripts and noticed something specific. No softballs. Avoid generic questions about 'the macro environment' or 'competitive dynamics.'"
 };
 
 export async function POST(req: NextRequest) {
@@ -66,11 +66,25 @@ export async function POST(req: NextRequest) {
   const pctV = (v: number | null | undefined) => v != null ? `${Number(v).toFixed(1)}%` : "N/A";
   const numV = (v: number | null | undefined, dp = 1) => v != null ? Number(v).toFixed(dp) : "N/A";
 
+  // Computed derived metrics
+  const roicWaccSpread = facts?.roic != null ? facts.roic - 9 : null;
+  const fcfYield = facts?.free_cash_flow != null && facts?.market_cap != null && facts.market_cap > 0 ? (facts.free_cash_flow / facts.market_cap) * 100 : null;
+  const fcfYieldErp = fcfYield != null ? fcfYield - 3.5 : null;
+  const ocfNiRatio = facts?.operating_cf != null && facts?.net_income != null && facts.net_income !== 0 ? facts.operating_cf / facts.net_income : null;
+  const netDebtEbitda = facts?.net_debt != null && facts?.ebitda != null && facts.ebitda !== 0 ? facts.net_debt / facts.ebitda : null;
+  const ruleOf40 = (facts?.revenue_growth ?? 0) + (facts?.free_cash_flow != null && facts?.revenue != null && facts.revenue > 0 ? (facts.free_cash_flow / facts.revenue) * 100 : facts?.operating_margin ?? 0);
+  const revenueYrs = Object.keys(history?.revenue ?? {}).sort();
+  const revCagr = revenueYrs.length >= 3 ? (() => {
+    const rv = history.revenue;
+    const oldest = rv[revenueYrs[0]]; const newest = rv[revenueYrs[revenueYrs.length - 1]]; const n = revenueYrs.length - 1;
+    return oldest > 0 && newest > 0 ? (Math.pow(newest / oldest, 1 / n) - 1) * 100 : null;
+  })() : null;
+
   const factsBlock = facts ? `
 COMPANY FINANCIALS (most recent):
-Revenue: ${fmtV(facts.revenue)} | YoY Growth: ${pctV(facts.revenue_growth ?? facts.revenue_growth_yoy)}
+Revenue: ${fmtV(facts.revenue)} | YoY Growth: ${pctV(facts.revenue_growth ?? facts.revenue_growth_yoy)} | ${revenueYrs.length >= 3 ? `${revenueYrs.length - 1}Y CAGR: ${revCagr != null ? pctV(revCagr) : "N/A"}` : ""}
 Gross Margin: ${pctV(facts.gross_margin)} | Op Margin: ${pctV(facts.operating_margin)} | Net Margin: ${pctV(facts.net_margin)}
-EBITDA: ${fmtV(facts.ebitda)} | FCF: ${fmtV(facts.free_cash_flow)} | FCF Margin: ${pctV(facts.fcf_margin)}
+EBITDA: ${fmtV(facts.ebitda)} | FCF: ${fmtV(facts.free_cash_flow)} | FCF Margin: ${pctV(facts.fcf_margin ?? (facts.free_cash_flow != null && facts.revenue ? facts.free_cash_flow / facts.revenue * 100 : undefined))}
 OCF: ${fmtV(facts.operating_cf)} | CapEx: ${fmtV(facts.capex)}
 ROIC: ${pctV(facts.roic)} | Cash: ${fmtV(facts.cash)} | LT Debt: ${fmtV(facts.long_term_debt)} | Net Debt: ${fmtV(facts.net_debt)}
 Market Cap: ${fmtV(facts.market_cap)} | EV: ${fmtV(facts.enterprise_value)}
@@ -78,6 +92,13 @@ Stock: $${numV(facts.stock_price, 2)} | 52W Low: $${numV(facts.week52_low, 0)} |
 P/E: ${numV(facts.pe_ratio)} | EV/EBITDA: ${numV(facts.ev_ebitda)} | EV/Rev: ${numV(facts.ev_revenue)} | P/FCF: ${facts.free_cash_flow && facts.market_cap ? numV(facts.market_cap / facts.free_cash_flow) : "N/A"}
 EPS Diluted: $${numV(facts.eps_diluted, 2)} | Shares: ${facts.shares_outstanding != null ? (facts.shares_outstanding / 1e6).toFixed(0) + "M" : "N/A"}
 Dividend Yield: ${pctV(facts.dividend_yield)} | Beta: ${numV(facts.beta)}
+
+COMPUTED QUALITY METRICS (use these explicitly in the analysis):
+ROIC vs WACC: ${roicWaccSpread != null ? `${roicWaccSpread >= 0 ? "+" : ""}${roicWaccSpread.toFixed(1)}pp spread vs 9% WACC — ${roicWaccSpread >= 3 ? "VALUE-CREATING" : roicWaccSpread >= 0 ? "MARGINAL" : "VALUE-DESTROYING"}` : "N/A"}
+FCF Yield: ${fcfYield != null ? `${fcfYield.toFixed(1)}% vs 3.5% RF (ERP: ${fcfYieldErp != null ? (fcfYieldErp >= 0 ? "+" : "") + fcfYieldErp.toFixed(1) + "pp" : "N/A"})` : "N/A"}
+Earnings Quality (OCF/NI): ${ocfNiRatio != null ? `${ocfNiRatio.toFixed(2)}x — ${ocfNiRatio > 1.2 ? "HIGH QUALITY (OCF > earnings)" : ocfNiRatio > 0.8 ? "MODERATE" : "LOW QUALITY (earnings outrun cash)"}` : "N/A"}
+Net Debt / EBITDA: ${netDebtEbitda != null ? `${netDebtEbitda.toFixed(1)}x — ${netDebtEbitda < 0 ? "NET CASH" : netDebtEbitda < 1 ? "LOW LEVERAGE" : netDebtEbitda < 3 ? "MODERATE" : "ELEVATED"}` : "N/A"}
+Rule of 40: ${ruleOf40.toFixed(0)} (rev growth + FCF margin) — ${ruleOf40 >= 40 ? "ABOVE threshold (efficiency + growth)" : ruleOf40 >= 25 ? "BELOW threshold but approaching" : "WELL BELOW threshold — growth/profitability tension"}
 ` : "";
 
   const extBlock = fmpExtended ? `
@@ -196,7 +217,7 @@ FORMATTING:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 2500,
+      max_tokens: 3000,
       stream: true,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
