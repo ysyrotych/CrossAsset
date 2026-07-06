@@ -432,13 +432,27 @@ Every observation must connect directly to the investment thesis or expected sto
   })();
 
   const sectorCtxStr = (() => {
-    const s = (ext.sector ?? "").toLowerCase();
-    if (s.includes("tech") || s.includes("software") || s.includes("semi"))
-      return `Technology sector frame. Key metrics: R&D% of revenue (${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"}), SBC dilution (${sbcPct ? pct(sbcPct) : "N/A"}), ${rule40Str}. Use ARR/NRR/churn vocabulary. Emphasize durable revenue quality over near-term EPS.`;
+    const s = (ext.sector ?? ext.fmp_industry ?? industry ?? "").toLowerCase();
+    const ind = (ext.fmp_industry ?? industry ?? "").toLowerCase();
+    const isSemi = s.includes("semi") || ind.includes("semi") || ind.includes("storage") || ind.includes("memory") || ind.includes("nand") || ind.includes("dram");
+    const isSaas = ind.includes("saas") || ind.includes("software") || s.includes("software");
+    const isHardware = ind.includes("hardware") || ind.includes("networking") || ind.includes("storage device") || ind.includes("electronic");
+    const isAd = ind.includes("internet") || ind.includes("social") || ind.includes("digital media") || ind.includes("advertising");
+
+    if (isSemi)
+      return `Semiconductor/memory sector frame. Key metrics: ASP trends ($/GB for NAND/DRAM or $/unit for logic), fab utilization %, inventory levels across supply chain, gross margin sensitivity to pricing vs volume, capex intensity (${capexPct ? pct(capexPct) : "N/A"} of rev). Current cycle position: is the industry in oversupply correction, bottom, recovery, or peak? Vocabulary: ASP, wafer starts, fab utilization, bit growth, inventory correction, pricing power, technology node, HBM/DDR5/QLC migration. ROIC is highly cyclical — assess trough vs. peak ROIC separately.`;
+    if (isSaas)
+      return `Software/SaaS sector frame. Key metrics: ${rule40Str}, NRR/NDR implied by revenue growth vs. net new ARR, SBC dilution (${sbcPct ? pct(sbcPct) : "N/A"} of rev), CAC payback period. Use ARR/NRR/churn/seat expansion vocabulary. Gross margin (${pct(f.gross_margin_pct)}) determines long-run FCF potential — focus on gross margin durability vs. competition.`;
+    if (isHardware)
+      return `Hardware sector frame. Key metrics: unit volumes × ASP = revenue, gross margin per unit (${pct(f.gross_margin_pct)}), refresh cycle timing, market share vs. Gartner/IDC data, capex intensity (${capexPct ? pct(capexPct) : "N/A"} of rev). Vocabulary: attach rate, form factor transitions, refresh cycle, competitive displacement, component pricing. R&D efficiency matters: R&D ${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev.`;
+    if (isAd)
+      return `Digital advertising/internet sector frame. Key metrics: DAU/MAU engagement trends, ARPU trajectory, CPM/CPC pricing dynamics, time-on-platform vs. competition, operating leverage (${rule40Str}). Vocabulary: impressions, click-through, ARPU, engagement, ad load, brand vs. performance advertising, cookie deprecation. SBC dilution (${sbcPct ? pct(sbcPct) : "N/A"}) is especially relevant.`;
+    if (s.includes("tech") || s.includes("hardware"))
+      return `Technology sector frame. Key metrics: R&D% of revenue (${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"}), SBC dilution (${sbcPct ? pct(sbcPct) : "N/A"}), ${rule40Str}. Emphasize durable revenue quality vs. near-term earnings optics.`;
     if (s.includes("health") || s.includes("pharma") || s.includes("bio"))
       return `Healthcare sector frame. Key metrics: gross margin vs peers (${pct(f.gross_margin_pct)}), R&D pipeline economics (R&D ${f.rd_expense && f.revenue ? (f.rd_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev), regulatory/reimbursement risk. Use clinical stage/approval/net pricing vocabulary.`;
     if (s.includes("consumer") || s.includes("retail"))
-      return `Consumer sector frame. Key metrics: same-store sales equivalent, gross margin (${pct(f.gross_margin_pct)}), SGA leverage (${f.sga_expense && f.revenue ? (f.sga_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev). Use comp/traffic/ticket/loyalty vocabulary.`;
+      return `Consumer sector frame. Key metrics: same-store sales, gross margin (${pct(f.gross_margin_pct)}), SGA leverage (${f.sga_expense && f.revenue ? (f.sga_expense/f.revenue*100).toFixed(1)+"%" : "N/A"} of rev). Use comp/traffic/ticket/loyalty vocabulary.`;
     if (s.includes("financ") || s.includes("bank") || s.includes("insur"))
       return `Financial sector frame. Key metrics: ROE vs cost of equity (ROE: ${roe != null ? pct(roe) : "N/A"}), credit quality, fee income diversification. Use NIM/credit loss/capital ratio vocabulary.`;
     if (s.includes("energy") || s.includes("oil") || s.includes("gas"))
