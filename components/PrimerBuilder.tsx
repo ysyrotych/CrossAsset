@@ -773,20 +773,34 @@ function ReviewStage({
   );
 }
 
+// ── Chat Panel helpers ─────────────────────────────────────────────────────────
+
+function parseSectionBlocks(content: string): { id: string; text: string }[] {
+  const regex = /```section:([a-z_]+)\n([\s\S]*?)```/g;
+  const blocks: { id: string; text: string }[] = [];
+  let m;
+  while ((m = regex.exec(content)) !== null) {
+    blocks.push({ id: m[1], text: m[2].trim() });
+  }
+  return blocks;
+}
+
 // ── Chat Panel ─────────────────────────────────────────────────────────────────
 
 function ChatPanel({
-  ticker, companyName, stage, sections, selectedThesis,
+  ticker, companyName, stage, sections, setSections, selectedThesis, tone, length,
 }: {
   ticker: string; companyName: string; stage: BuildStage;
-  sections: SectionDef[]; selectedThesis: string;
+  sections: SectionDef[]; setSections: React.Dispatch<React.SetStateAction<SectionDef[]>>;
+  selectedThesis: string; tone: Tone; length: Length;
 }) {
   const [messages, setMessages] = useState<ChatMsg[]>([
     { role: "assistant", content: `I'm your primer co-pilot for **${ticker}** (${companyName}). Ask me to refine any section, explore a different investment angle, add a specific risk, or rewrite content in a different tone. I can also produce full section drafts for you to paste in.` }
   ]);
   const [input, setInput] = useState("");
   const [running, setRunning] = useState(false);
-  const bottomRef = useRef<HTMLDivElement>(null);
+  const chatRef = useRef<HTMLDivElement>(null);
+  const userScrolledRef = useRef(false);
 
   const quickActions = [
     "Improve the Executive Summary",
@@ -795,21 +809,54 @@ function ChatPanel({
     "What's the key number to watch?",
   ];
 
+  const handleChatScroll = () => {
+    if (!chatRef.current) return;
+    const { scrollTop, scrollHeight, clientHeight } = chatRef.current;
+    userScrolledRef.current = scrollHeight - scrollTop - clientHeight > 100;
+  };
+
+  useEffect(() => {
+    if (!userScrolledRef.current && chatRef.current) {
+      chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [messages]);
+
+  useEffect(() => {
+    if (!running) {
+      userScrolledRef.current = false;
+      if (chatRef.current) chatRef.current.scrollTop = chatRef.current.scrollHeight;
+    }
+  }, [running]);
+
+  const handleApplySectionContent = (sectionId: string, content: string) => {
+    setSections(prev => prev.map(s =>
+      s.id === sectionId ? { ...s, content, userEdited: true, generated: true } : s
+    ));
+  };
+
   const systemPrompt = `You are an AI co-pilot helping build an institutional equity research primer for ${ticker} (${companyName}).
 
 Current state:
-- Stage: ${stage}
+- Stage: ${stage} | Tone: ${tone} | Length: ${length}
 - Thesis: ${selectedThesis || "none selected yet"}
 - Sections included: ${sections.filter(s => s.included).map(s => s.title).join(", ")}
-- Generated so far: ${sections.filter(s => s.generated).map(s => s.title).join(", ") || "none yet"}
+- Not yet generated: ${sections.filter(s => s.included && !s.generated).map(s => s.title).join(", ") || "all generated"}
 
-${sections.filter(s => s.generated && s.content).slice(0, 4).map(s => `## ${s.title}\n${s.content.slice(0, 400)}...`).join("\n\n")}
+COMPLETE DOCUMENT CONTENT (full text of all generated sections):
+${sections.filter(s => s.included && s.generated && s.content).map(s =>
+  `\n---\n## ${s.title}\n${s.content}`
+).join("\n") || "(no sections generated yet)"}
 
-Help the user improve their primer. When producing replacement section content, wrap it in a markdown code block so they can copy and paste it in. Be direct, specific, and reference actual company data where possible.`;
+You have the FULL text of every generated section above. When the user asks you to check, verify, or improve a section, read the actual content above and respond with specific numbers and references.
 
-  useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [messages]);
+When producing replacement content for a section, format it EXACTLY like this so the user can click Apply:
+\`\`\`section:SECTION_ID
+[full replacement content here]
+\`\`\`
+
+Available section IDs: ${sections.filter(s => s.included).map(s => s.id).join(", ")}
+
+Be direct. Reference specific numbers. Never say "I don't see the content" — it is all above.`;
 
   async function send(text?: string) {
     const msg = (text ?? input).trim();
@@ -852,21 +899,50 @@ Help the user improve their primer. When producing replacement section content, 
       </div>
 
       {/* Messages */}
-      <div style={{ flex: 1, overflowY: "auto", padding: "12px 12px 0" }}>
-        {messages.map((m, i) => (
-          <div key={i} style={{ marginBottom: 12, display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
-            <div style={{
-              maxWidth: "85%", padding: "8px 11px", borderRadius: 8, fontSize: 11, lineHeight: 1.6,
-              background: m.role === "user" ? ACCENT : BG,
-              border: `1px solid ${m.role === "user" ? BLUE + "60" : BORDER}`,
-              color: m.role === "user" ? TEXT : SUBTLE,
-              whiteSpace: "pre-wrap",
-            }}>
-              {m.content || (running && i === messages.length - 1 ? "▋" : "")}
+      <div ref={chatRef} onScroll={handleChatScroll} style={{ flex: 1, overflowY: "auto", padding: "12px 12px 0" }}>
+        {messages.map((m, i) => {
+          const sectionBlocks = m.role === "assistant" ? parseSectionBlocks(m.content) : [];
+          // Strip section code blocks from displayed text
+          const displayContent = m.role === "assistant"
+            ? m.content.replace(/```section:[a-z_]+\n[\s\S]*?```/g, "").trim()
+            : m.content;
+          return (
+            <div key={i} style={{ marginBottom: 12 }}>
+              <div style={{ display: "flex", justifyContent: m.role === "user" ? "flex-end" : "flex-start" }}>
+                <div style={{
+                  maxWidth: "85%", padding: "8px 11px", borderRadius: 8, fontSize: 11, lineHeight: 1.6,
+                  background: m.role === "user" ? ACCENT : BG,
+                  border: `1px solid ${m.role === "user" ? BLUE + "60" : BORDER}`,
+                  color: m.role === "user" ? TEXT : SUBTLE,
+                  whiteSpace: "pre-wrap",
+                }}>
+                  {displayContent || (running && i === messages.length - 1 ? "▋" : "")}
+                </div>
+              </div>
+              {sectionBlocks.map((blk, bi) => {
+                const sec = sections.find(s => s.id === blk.id);
+                return (
+                  <div key={bi} style={{ margin: "6px 0 6px 4px", background: "#0a1628", border: `1px solid ${BLUE}40`, borderRadius: 6, overflow: "hidden" }}>
+                    <div style={{ padding: "6px 10px", background: "#0d1e38", borderBottom: `1px solid ${BLUE}30`, fontSize: 9, color: MUTED, fontWeight: 700, letterSpacing: "0.06em" }}>
+                      REPLACEMENT CONTENT FOR: {sec?.title ?? blk.id.toUpperCase()}
+                    </div>
+                    <div style={{ padding: "8px 10px", fontSize: 10, color: SUBTLE, maxHeight: 120, overflowY: "auto", whiteSpace: "pre-wrap", lineHeight: 1.5 }}>
+                      {blk.text.slice(0, 400)}{blk.text.length > 400 ? "…" : ""}
+                    </div>
+                    <div style={{ padding: "6px 10px", borderTop: `1px solid ${BLUE}30` }}>
+                      <button
+                        onClick={() => handleApplySectionContent(blk.id, blk.text)}
+                        style={{ fontSize: 9, fontWeight: 700, padding: "4px 12px", borderRadius: 4, background: BLUE, border: "none", color: "white", cursor: "pointer", letterSpacing: "0.04em" }}
+                      >
+                        ✓ Apply to {sec?.title ?? blk.id}
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
-          </div>
-        ))}
-        <div ref={bottomRef} />
+          );
+        })}
       </div>
 
       {/* Quick actions */}
@@ -992,7 +1068,8 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
         <div style={{ width: 300, flexShrink: 0, height: "calc(100vh - 96px)" }}>
           <ChatPanel
             ticker={ticker} companyName={companyName}
-            stage={stage} sections={sections} selectedThesis={selectedThesis}
+            stage={stage} sections={sections} setSections={setSections}
+            selectedThesis={selectedThesis} tone={tone} length={length}
           />
         </div>
       </div>

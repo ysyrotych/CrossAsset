@@ -153,15 +153,24 @@ function parsePrimerSections(markdown: string): Record<string, string> {
   const lines = markdown.split("\n");
   let currentKey = "";
   let buf: string[] = [];
+  const toKey = (raw: string) => raw.trim().toUpperCase().replace(/\s+/g, "_");
   const flush = () => { if (currentKey) sections[currentKey] = buf.join("\n").trim(); };
   for (const line of lines) {
     const h2 = line.match(/^##\s+(.+)$/);
     const h3 = line.match(/^###\s+(.+)$/);
-    if (h2) { flush(); currentKey = h2[1].trim().toUpperCase().replace(/\s+/g, "_"); buf = []; }
-    else if (h3) { flush(); currentKey = h3[1].trim().toUpperCase().replace(/\s+/g, "_"); buf = []; }
+    if (h2) { flush(); currentKey = toKey(h2[1]); buf = []; }
+    else if (h3) { flush(); currentKey = toKey(h3[1]); buf = []; }
     else { buf.push(line); }
   }
   flush();
+  // Add stripped versions of keys with roman-numeral prefixes (e.g. "III._BUSINESS_OVERVIEW" → "BUSINESS_OVERVIEW")
+  const romanPrefix = /^[IVXLCDM]+\._/;
+  for (const [key, val] of Object.entries(sections)) {
+    if (romanPrefix.test(key)) {
+      const stripped = key.replace(romanPrefix, "");
+      if (!sections[stripped]) sections[stripped] = val;
+    }
+  }
   return sections;
 }
 
@@ -185,7 +194,20 @@ function parseBullets(text: string): string[] {
   return text.split("\n")
     .filter(l => l.trim().startsWith("•") || l.trim().startsWith("-"))
     .map(l => l.replace(/^[•\-]\s*/, "").trim())
-    .filter(Boolean);
+    .filter(b => b.length > 3 && b !== "--" && b !== "-");
+}
+
+function stripMd(s: string): string {
+  return s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").trim();
+}
+
+function sectionFallback(
+  secs: Record<string, string>,
+  mainKey: string,
+  subKeys: string[]
+): string {
+  if (subKeys.some(k => (secs[k] ?? "").trim().length > 0)) return "";
+  return secs[mainKey] ?? "";
 }
 
 function parseParas(text: string): string[] {
@@ -695,18 +717,21 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {bg.length > 0 && <><SubSectionHdr title="Company Background" />{bg.map((p,i) => <Para key={i} text={p} />)}</>}
           {pp.length > 0 && <><SubSectionHdr title="Product Portfolio & Revenue Mix" />{pp.map((p,i) => <Para key={i} text={p} />)}</>}
           {cust.length > 0 && <><SubSectionHdr title="Customers, End Markets & Geographic Exposure" />{cust.map((p,i) => <Para key={i} text={p} />)}</>}
+          {parseParas(sectionFallback(secs, "BUSINESS_OVERVIEW", ["COMPANY_BACKGROUND","PRODUCT_PORTFOLIO_&_REVENUE_MIX","CUSTOMERS,_END_MARKETS_&_GEOGRAPHIC_EXPOSURE"])).map((p,i) => <Para key={i} text={p} />)}
 
           {/* IV. Industry Analysis */}
           <SectionHdr title="IV. Industry Analysis" accentColor={ACCENT.primary} />
           {mkt.length > 0 && <><SubSectionHdr title="Market Structure & Competitive Dynamics" />{mkt.map((p,i) => <Para key={i} text={p} />)}</>}
           {drv.length > 0 && <><SubSectionHdr title="Key Industry Drivers & Cycle" />{drv.map((p,i) => <Para key={i} text={p} />)}</>}
           {comp.length > 0 && <><SubSectionHdr title="Competitive Position" />{comp.map((p,i) => <Para key={i} text={p} />)}</>}
+          {parseParas(sectionFallback(secs, "INDUSTRY_ANALYSIS", ["MARKET_STRUCTURE_&_COMPETITIVE_DYNAMICS","KEY_INDUSTRY_DRIVERS_&_CYCLE","COMPETITIVE_POSITION"])).map((p,i) => <Para key={i} text={p} />)}
 
           {/* V. Financial Analysis */}
           <SectionHdr title="V. Financial Analysis" accentColor={ACCENT.primary} />
           {rev.length > 0 && <><SubSectionHdr title="Revenue & Profitability Trends" />{rev.map((p,i) => <Para key={i} text={p} />)}</>}
           {bal.length > 0 && <><SubSectionHdr title="Balance Sheet & Capital Allocation" />{bal.map((p,i) => <Para key={i} text={p} />)}</>}
           {fcf.length > 0 && <><SubSectionHdr title="Free Cash Flow & CapEx" />{fcf.map((p,i) => <Para key={i} text={p} />)}</>}
+          {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}
           {qoe.length > 0 && <><SubSectionHdr title="Quality of Earnings & Cash Conversion" />{qoe.map((p,i) => <Para key={i} text={p} />)}</>}
 
           {/* VI. Valuation Framework */}
@@ -908,10 +933,10 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 </View>
                 {kpiRows.map((row, i) => (
                   <View key={i} style={i % 2 === 0 ? S.tableRow : S.tableRowAlt}>
-                    <Text style={[S.tableCellBold, { flex: 1 }]}>{row.kpi}</Text>
-                    <Text style={[S.tableCell,     { flex: 1 }]}>{row.current}</Text>
-                    <Text style={[S.tableCell,     { flex: 1, color: RED }]}>{row.threshold}</Text>
-                    <Text style={[S.tableCell,     { flex: 2 }]}>{row.why.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>
+                    <Text style={[S.tableCellBold, { flex: 1 }]}>{stripMd(row.kpi)}</Text>
+                    <Text style={[S.tableCell,     { flex: 1 }]}>{stripMd(row.current)}</Text>
+                    <Text style={[S.tableCell,     { flex: 1, color: RED }]}>{stripMd(row.threshold)}</Text>
+                    <Text style={[S.tableCell,     { flex: 2 }]}>{stripMd(row.why)}</Text>
                   </View>
                 ))}
               </View>
