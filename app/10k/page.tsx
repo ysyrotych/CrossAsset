@@ -1329,13 +1329,35 @@ function BriefBody({ text }: { text: string }) {
   lines.forEach((line, i) => {
     const t = line.trim();
     if (!t) { nodes.push(<div key={i} className="h-2" />); return; }
-    if (t.startsWith("**") && t.endsWith("**") && !t.slice(2, -2).includes("**")) {
+    if (t.startsWith("## ")) {
+      const title = t.slice(3).trim();
+      nodes.push(
+        <div key={i} className="mt-6 mb-3 first:mt-0 flex items-center gap-3 border-b border-[#d0d7e8] pb-2">
+          <span className="w-3 h-3 rounded-sm bg-[#0c1b38] shrink-0" />
+          <p className="text-[11px] font-bold tracking-[0.14em] uppercase text-[#0c1b38]">{title}</p>
+        </div>
+      );
+    } else if (t.startsWith("### ")) {
+      nodes.push(<p key={i} className="text-[10.5px] font-bold text-[#334155] uppercase tracking-[0.1em] mt-4 mb-1">{t.slice(4).trim()}</p>);
+    } else if (t.startsWith("**") && t.endsWith("**") && !t.slice(2, -2).includes("**")) {
       nodes.push(<p key={i} className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#0c1b38] mt-5 mb-2 first:mt-0">{t.slice(2, -2)}</p>);
     } else if (t.startsWith("• ") || t.startsWith("- ")) {
-      nodes.push(<div key={i} className="flex items-start gap-2 py-0.5"><span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" /><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.slice(2), i)}</p></div>);
+      nodes.push(<div key={i} className="flex items-start gap-2 py-0.5 ml-2"><span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" /><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.slice(2), i)}</p></div>);
     } else if (/^\d+\.\s/.test(t)) {
       const num = t.match(/^(\d+)\./)?.[1] ?? "";
-      nodes.push(<div key={i} className="flex items-start gap-2.5 py-0.5"><span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.replace(/^\d+\.\s*/, ""), i)}</p></div>);
+      nodes.push(<div key={i} className="flex items-start gap-2.5 py-0.5 ml-2"><span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span><p className="text-[12.5px] text-[#333] leading-[1.7]">{inline(t.replace(/^\d+\.\s*/, ""), i)}</p></div>);
+    } else if (t.includes("|") && !t.startsWith("|---")) {
+      // Pipe-delimited table rows
+      const cells = t.split("|").map(c => c.trim()).filter(Boolean);
+      nodes.push(
+        <div key={i} className="flex border-b border-[#ebebeb] py-1.5">
+          {cells.map((c, ci) => (
+            <span key={ci} className={`text-[11px] ${ci === 0 ? "w-48 shrink-0 text-[#555] font-medium" : "flex-1 text-[#1a1a1a] font-semibold"}`}>{inline(c, ci)}</span>
+          ))}
+        </div>
+      );
+    } else if (t.startsWith("|---")) {
+      // Skip markdown table separator rows
     } else {
       nodes.push(<p key={i} className="text-[12.5px] text-[#1a1a1a] leading-[1.8]">{inline(t, i)}</p>);
     }
@@ -2374,21 +2396,23 @@ export default function TenKPage() {
                   <span className="w-2 h-2 rounded-full bg-[#0c1b38] animate-pulse" />
                   <span className="text-[10.5px] font-semibold text-[#0c1b38]">
                     {primerText.length < 200 ? "Starting analysis…"
-                      : primerText.includes("## BUSINESS OVERVIEW") ? "Writing business overview…"
-                      : primerText.includes("## INDUSTRY ANALYSIS") ? "Analyzing industry dynamics…"
-                      : primerText.includes("## FINANCIAL ANALYSIS") ? "Building financial deep-dive…"
-                      : primerText.includes("## VALUATION FRAMEWORK") ? "Building valuation framework…"
-                      : primerText.includes("## MANAGEMENT COMMENTARY") ? "Synthesizing management commentary…"
-                      : primerText.includes("## MANAGEMENT & GOVERNANCE") ? "Assessing management & governance…"
-                      : primerText.includes("## KEY RISKS") ? "Identifying key risks…"
+                      : primerText.includes("## KEY METRICS") ? "Writing key metrics dashboard…"
                       : primerText.includes("## INVESTMENT THESIS") ? "Forming investment thesis…"
+                      : primerText.includes("## KEY RISKS") ? "Identifying key risks…"
+                      : primerText.includes("## NEWS ANALYSIS") ? "Synthesizing news intelligence…"
+                      : primerText.includes("## MANAGEMENT & GOVERNANCE") ? "Assessing management & governance…"
+                      : primerText.includes("## MANAGEMENT COMMENTARY") ? "Synthesizing management commentary…"
+                      : primerText.includes("## VALUATION FRAMEWORK") ? "Building valuation framework…"
+                      : primerText.includes("## FINANCIAL ANALYSIS") ? "Building financial deep-dive…"
+                      : primerText.includes("## INDUSTRY ANALYSIS") ? "Analyzing industry dynamics…"
+                      : primerText.includes("## BUSINESS OVERVIEW") ? "Writing business overview…"
                       : "Writing executive summary…"}
                   </span>
                   <span className="text-[10px] text-[#bbb] ml-auto">{primerText.split(/\s+/).filter(Boolean).length} words</span>
                 </div>
                 <div className="h-1.5 bg-[#ebebeb] rounded-full overflow-hidden">
                   <div className="h-full bg-[#0c1b38] rounded-full transition-all duration-500"
-                    style={{ width: `${Math.min(100, (primerText.length / 16000) * 100)}%` }} />
+                    style={{ width: `${Math.min(100, (primerText.length / 32000) * 100)}%` }} />
                 </div>
               </div>
             )}
