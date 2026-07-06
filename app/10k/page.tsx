@@ -2,7 +2,7 @@
 import { useState, useRef } from "react";
 import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
-import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown, Paperclip, X } from "lucide-react";
+import { Search, FileText, AlertTriangle, ChevronDown, ChevronUp, Sparkles, ExternalLink, TrendingUp, Download, BookOpen, MessageCircle, Send, FileDown, Paperclip, X, BarChart2, Newspaper, Wand2 } from "lucide-react";
 
 const PrimerDownloadButton = dynamic(
   () => import("@/components/PrimerDownloadButton").then(m => m.PrimerDownloadButton),
@@ -1692,6 +1692,7 @@ export default function TenKPage() {
   const primerRef = useRef<HTMLDivElement>(null);
   const [uploadedDoc, setUploadedDoc] = useState<{name: string; base64: string; mimeType: string} | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [pageView, setPageView]         = useState<"analytics" | "news">("analytics");
 
   async function fetchFiling(sym?: string) {
     const t = (sym ?? ticker).toUpperCase().trim();
@@ -1988,6 +1989,36 @@ export default function TenKPage() {
             })()}
           </div>
 
+          {/* ── Page View Tabs ── */}
+          <div style={{ display: "flex", borderBottom: "1px solid #1a2d4a", background: "#040d1c" }}>
+            {(["analytics", "news"] as const).map(id => {
+              const label = id === "analytics" ? "Financial Analytics" : "News Intelligence";
+              const Icon  = id === "analytics" ? BarChart2 : Newspaper;
+              const active = pageView === id;
+              return (
+                <button
+                  key={id}
+                  onClick={() => setPageView(id)}
+                  style={{
+                    padding: "14px 28px", fontSize: 12, fontWeight: 700, letterSpacing: "0.06em",
+                    borderBottom: active ? "2px solid #3b82f6" : "2px solid transparent",
+                    borderTop: "none", borderLeft: "none", borderRight: "none",
+                    color: active ? "#e2e8f0" : "#475569",
+                    background: "transparent", cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 8,
+                    transition: "color 0.15s, border-color 0.15s",
+                  }}
+                >
+                  <Icon size={14} />
+                  {label}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* ── Analytics View ── */}
+          {pageView === "analytics" && <>
+
           {/* Company Overview */}
           {data.fmp_extended && (
             <CompanyOverview ext={data.fmp_extended} ticker={data.company.ticker} />
@@ -2061,16 +2092,7 @@ export default function TenKPage() {
             />
           </div>
 
-          {/* AI News Analyst */}
-          {((data.fmp_extended?.news_combined ?? []).length > 0 || (data.fmp_extended?.recent_news ?? []).length > 0) && (
-            <NewsAnalyst
-              ticker={data.company.ticker}
-              companyName={data.company.name ?? data.company.ticker}
-              sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
-              newsItems={data.fmp_extended?.news_combined ?? data.fmp_extended?.recent_news ?? []}
-              facts={data.xbrl_facts ?? {}}
-            />
-          )}
+          {/* AI News Analyst → moved to News Intelligence tab */}
 
           {/* Valuation & Returns */}
           {Object.keys(data.xbrl_facts).length > 0 && (() => {
@@ -2322,6 +2344,14 @@ export default function TenKPage() {
                 </p>
               </div>
               <div className="flex items-center gap-2 shrink-0">
+                {data && (
+                  <a
+                    href={`/primer-builder/${data.company.ticker}`}
+                    style={{ display: "inline-flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.08)", border: "1px solid rgba(255,255,255,0.2)", borderRadius: 6, padding: "6px 12px", fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.8)", textDecoration: "none", letterSpacing: "0.03em" }}
+                  >
+                    <Wand2 size={12} /> Build Primer
+                  </a>
+                )}
                 {primerDone && (
                   <button onClick={() => setShowPrimer(v => !v)}
                     className="px-3 py-1.5 border border-white/20 text-white/70 text-[10.5px] font-semibold rounded hover:bg-white/10 transition-colors">
@@ -2562,6 +2592,19 @@ export default function TenKPage() {
               </button>
             </div>
           </div>
+
+          </>}
+
+          {/* ── News Intelligence View ── */}
+          {pageView === "news" && (
+            <NewsAnalyst
+              ticker={data.company.ticker}
+              companyName={data.company.name ?? data.company.ticker}
+              sector={data.fmp_extended?.sector ?? data.company.sic_description ?? ""}
+              newsItems={data.fmp_extended?.news_combined ?? data.fmp_extended?.recent_news ?? []}
+              facts={data.xbrl_facts ?? {}}
+            />
+          )}
 
         </div>
       )}
