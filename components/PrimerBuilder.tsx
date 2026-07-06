@@ -384,12 +384,13 @@ function ConfigureStage({
 // ── Stage 2: Thesis ────────────────────────────────────────────────────────────
 
 function ThesisStage({
-  ticker, companyName, sector, facts, tone,
+  ticker, companyName, sector, facts, tone, fmpExtended,
   theses, setTheses, selectedThesis, setSelectedThesis, onNext, onBack,
 }: {
   ticker: string; companyName: string; sector: string;
   facts: Record<string, number | null>;
   tone: Tone;
+  fmpExtended: Record<string, unknown>;
   theses: ThesisOption[]; setTheses: (t: ThesisOption[]) => void;
   selectedThesis: string; setSelectedThesis: (t: string) => void;
   onNext: () => void; onBack: () => void;
@@ -410,7 +411,7 @@ function ThesisStage({
       const r = await fetch("/api/primer-builder/thesis", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ticker, companyName, sector, facts, tone }),
+        body: JSON.stringify({ ticker, companyName, sector, facts, tone, fmpExtended }),
       });
       const j = await r.json();
       if (j.error) throw new Error(j.error);
@@ -743,12 +744,19 @@ function BuildStage({
 
 // ── Stage 4: Review ────────────────────────────────────────────────────────────
 
+interface SynthesisResult {
+  suggestions: string[];
+  inconsistencies: string[];
+  overallFeedback: string;
+}
+
 function ReviewStage({
-  ticker, companyName, industry, sections, facts, history, sector, selectedCharts,
+  ticker, companyName, industry, sections, selectedThesis, facts, history, sector, selectedCharts,
   onBack, onEditSection, onRestart,
 }: {
   ticker: string; companyName: string; industry: string;
   sections: SectionDef[];
+  selectedThesis: string;
   facts: Record<string, number | null>;
   history: Record<string, Record<string, number>>;
   sector: string;
@@ -756,6 +764,8 @@ function ReviewStage({
   onBack: () => void; onEditSection: (sectionId: string) => void; onRestart: () => void;
 }) {
   const [copied, setCopied] = useState(false);
+  const [polishing, setPolishing] = useState(false);
+  const [synthesis, setSynthesis] = useState<SynthesisResult | null>(null);
   const assembled = sections
     .filter(s => s.included && s.content)
     .map(s => `## ${s.title.toUpperCase()}\n\n${s.content}`)
@@ -763,6 +773,27 @@ function ReviewStage({
 
   function copyMarkdown() {
     navigator.clipboard.writeText(assembled).then(() => { setCopied(true); setTimeout(() => setCopied(false), 2000); });
+  }
+
+  async function polish() {
+    setPolishing(true);
+    setSynthesis(null);
+    try {
+      const res = await fetch("/api/primer-builder/synthesis", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker, companyName,
+          thesis: selectedThesis,
+          sections: sections.filter(s => s.included && s.content).map(s => ({ id: s.id, title: s.title, content: s.content })),
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setSynthesis(data);
+      }
+    } catch { /* ignore */ }
+    setPolishing(false);
   }
 
   const wordCount = assembled.split(/\s+/).filter(Boolean).length;
@@ -773,6 +804,10 @@ function ReviewStage({
       <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 20, flexWrap: "wrap" }}>
         <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT, margin: 0, flex: 1 }}>Review & Export</h2>
         <span style={{ fontSize: 10, color: MUTED }}>{wordCount} words · {readMin} min read</span>
+        <button onClick={polish} disabled={polishing}
+          style={{ display: "flex", alignItems: "center", gap: 6, background: polishing ? ACCENT : "#1a2d4a", border: `1px solid ${BLUE}40`, borderRadius: 6, padding: "7px 14px", cursor: polishing ? "not-allowed" : "pointer", fontSize: 11, color: BLUE, fontWeight: 600, opacity: polishing ? 0.7 : 1 }}>
+          <Sparkles size={11} /> {polishing ? "Analyzing…" : "Polish Document"}
+        </button>
         <button onClick={copyMarkdown}
           style={{ display: "flex", alignItems: "center", gap: 6, background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: copied ? GREEN : MUTED }}>
           {copied ? <Check size={11} color={GREEN} /> : <Copy size={11} />} {copied ? "Copied!" : "Copy Markdown"}
@@ -796,6 +831,48 @@ function ReviewStage({
           Start Over
         </button>
       </div>
+
+      {/* Synthesis / Polish results */}
+      {synthesis && (
+        <div style={{ background: CARD, border: `1px solid ${BLUE}40`, borderRadius: 10, padding: 20, marginBottom: 16 }}>
+          <div style={{ fontSize: 11, fontWeight: 700, color: BLUE, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+            <Sparkles size={12} /> Editor&apos;s Assessment
+          </div>
+          {synthesis.overallFeedback && (
+            <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.7, marginBottom: 14, padding: "10px 14px", background: BG, borderRadius: 6, borderLeft: `3px solid ${BLUE}` }}>
+              {synthesis.overallFeedback}
+            </div>
+          )}
+          {synthesis.suggestions.length > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 10, fontWeight: 700, color: GREEN, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Improvement Suggestions</div>
+              {synthesis.suggestions.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "flex-start" }}>
+                  <div style={{ width: 18, height: 18, borderRadius: 9, background: GREEN + "20", border: `1px solid ${GREEN}40`, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0, marginTop: 1 }}>
+                    <span style={{ fontSize: 8, fontWeight: 800, color: GREEN }}>{i + 1}</span>
+                  </div>
+                  <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.6 }}>{s}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          {synthesis.inconsistencies.length > 0 && (
+            <div>
+              <div style={{ fontSize: 10, fontWeight: 700, color: AMBER, letterSpacing: "0.06em", textTransform: "uppercase", marginBottom: 8 }}>Inconsistencies Found</div>
+              {synthesis.inconsistencies.map((s, i) => (
+                <div key={i} style={{ display: "flex", gap: 8, marginBottom: 6, alignItems: "flex-start" }}>
+                  <span style={{ fontSize: 11, color: AMBER, flexShrink: 0 }}>⚠</span>
+                  <div style={{ fontSize: 11, color: SUBTLE, lineHeight: 1.6 }}>{s}</div>
+                </div>
+              ))}
+            </div>
+          )}
+          <button onClick={() => setSynthesis(null)}
+            style={{ marginTop: 10, fontSize: 10, color: MUTED, background: "none", border: "none", cursor: "pointer", textDecoration: "underline" }}>
+            Dismiss
+          </button>
+        </div>
+      )}
 
       {/* Sections preview */}
       <div style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 10, overflow: "hidden" }}>
@@ -872,12 +949,17 @@ function ChatPanel({
   const chatRef = useRef<HTMLDivElement>(null);
   const userScrolledRef = useRef(false);
 
+  const generatedIds = sections.filter(s => s.included && s.generated).map(s => s.id);
   const quickActions = [
-    "Improve the Executive Summary",
-    "Add a risk I might be missing",
-    "Make the thesis more bearish",
-    "What's the key number to watch?",
-  ];
+    ...(generatedIds.includes("executive_summary") ? ["Punch up the Executive Summary opening"] : []),
+    ...(generatedIds.includes("key_risks") ? ["What risk am I most likely missing?"] : []),
+    ...(generatedIds.includes("valuation") ? ["Check the valuation math — does the price target arithmetic work?"] : []),
+    ...(generatedIds.includes("investment_thesis") ? ["Strengthen the bear case with specific numbers"] : []),
+    ...(generatedIds.includes("financial_analysis") ? ["What's the most important financial trend to call out?"] : []),
+    ...(generatedIds.includes("earnings_questions") ? ["Make the earnings questions more pointed and specific"] : []),
+    "What's the single number to watch most closely?",
+    "What would cause you to flip your thesis?",
+  ].slice(0, 5);
 
   const handleChatScroll = () => {
     if (!chatRef.current) return;
@@ -1114,7 +1196,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
           )}
           {stage === "thesis" && (
             <ThesisStage
-              ticker={ticker} companyName={companyName} sector={sector} facts={facts} tone={tone}
+              ticker={ticker} companyName={companyName} sector={sector} facts={facts} tone={tone} fmpExtended={fmpExtended}
               theses={theses} setTheses={setTheses}
               selectedThesis={selectedThesis} setSelectedThesis={setSelectedThesis}
               onNext={() => setStage("build")} onBack={() => setStage("configure")}
@@ -1134,7 +1216,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
           {stage === "review" && (
             <ReviewStage
               ticker={ticker} companyName={companyName} industry={industry}
-              sections={sections} facts={facts} history={history} sector={sector}
+              sections={sections} selectedThesis={selectedThesis} facts={facts} history={history} sector={sector}
               selectedCharts={selectedCharts}
               onBack={() => setStage("build")}
               onEditSection={(sectionId) => { setEditTargetId(sectionId); setStage("build"); }}
