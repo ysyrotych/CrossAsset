@@ -951,7 +951,7 @@ function PqV5() {
 }
 
 // Map chart ID → array of {name, render}
-function buildVariants(history: Record<string, Record<string, number>>, _facts: Record<string, number | null>) {
+function buildVariants(history: Record<string, Record<string, number>>, _facts: Record<string, number | null> | null) {
   const revData = history.revenue ?? {}, fcfData = history.free_cash_flow ?? {};
   const epsData = history.eps_diluted ?? {};
   const gpData = history.gross_profit ?? {}, oiData = history.operating_income ?? {}, niData = history.net_income ?? {};
@@ -985,27 +985,122 @@ function buildVariants(history: Record<string, Record<string, number>>, _facts: 
       { name: "Outline", el: EpsV4(eps, epYrs) },
       { name: "Mountain", el: EpsV5(eps, epYrs) },
     ],
-    price_range: [
-      { name: "Color Dots", el: PrV1() },
-      { name: "Spectrum Bar", el: PrV2() },
-      { name: "Price Ladder", el: PrV3() },
-      { name: "Arrow Targets", el: PrV4() },
-      { name: "Donut Gauge", el: PrV5() },
-    ],
-    cap_alloc: [
-      { name: "Stacked Bar", el: CaV1() },
-      { name: "Donut", el: CaV2() },
-      { name: "Treemap", el: CaV3() },
-      { name: "Bar per Category", el: CaV4() },
-      { name: "Waffle Grid", el: CaV5() },
-    ],
-    positioning: [
-      { name: "Dark Cards", el: PqV1() },
-      { name: "Score Bars", el: PqV2() },
-      { name: "Gauge Arcs", el: PqV3() },
-      { name: "Badge Circles", el: PqV4() },
-      { name: "Progress Bars", el: PqV5() },
-    ],
+    price_range: (() => {
+      // Use real price data if available
+      const cur = _facts?.stock_price ?? null;
+      const lo52 = _facts?.week52_low ?? null;
+      const hi52 = _facts?.week52_high ?? null;
+      const ptC = _facts?.pt_consensus ?? null;
+      const ptH = _facts?.pt_high ?? null;
+      const ptL = _facts?.pt_low ?? null;
+      if (cur && lo52 && hi52) {
+        // Build real targets: 52W Low, Current, Consensus PT, 52W High
+        const bear = ptL ?? lo52; const bull = ptH ?? hi52 * 1.05;
+        const base = ptC ?? (cur * 1.15);
+        const realTargets = [
+          { l: "52W Low", c: "#b42318", v: Math.round(lo52) },
+          { l: "Current", c: "#b45309", v: Math.round(cur) },
+          { l: "Consensus", c: "#1a56db", v: Math.round(base) },
+          { l: "52W High", c: "#0d6b45", v: Math.round(hi52) },
+        ];
+        const min2 = Math.min(...realTargets.map(t => t.v)) * 0.95;
+        const max2 = Math.max(...realTargets.map(t => t.v)) * 1.05;
+        const xOf2 = (v: number) => 4 + ((v - min2) / (max2 - min2)) * (TW - 8);
+        return [
+          { name: "Color Dots", el: <svg width={TW} height={TH}>
+            {realTargets.map((p, i) => { const x = 10 + i * 26; return <g key={p.l}><circle cx={x} cy={TH/2-6} r={7} fill={p.c}/><text x={x} y={TH/2-3} textAnchor="middle" fill="white" fontSize={5.5} fontWeight="bold">{p.l.slice(0,4)}</text><text x={x} y={TH-8} textAnchor="middle" fill={p.c} fontSize={6}>${p.v}</text></g>; })}
+          </svg> },
+          { name: "Spectrum Bar", el: <svg width={TW} height={TH}>
+            <rect x={4} y={TH/2-5} width={TW-8} height={10} rx={2} fill="#1a2d4a"/>
+            {realTargets.map(p => <line key={p.l} x1={xOf2(p.v)} y1={TH/2-10} x2={xOf2(p.v)} y2={TH/2+10} stroke={p.c} strokeWidth={2}/>)}
+            {realTargets.map(p => <text key={p.l} x={xOf2(p.v)} y={TH/2-13} textAnchor="middle" fill={p.c} fontSize={5.5}>{p.l.slice(0,4)}</text>)}
+            {realTargets.map(p => <text key={p.l+1} x={xOf2(p.v)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>${p.v}</text>)}
+          </svg> },
+          { name: "Price Ladder", el: PrV3() },
+          { name: "Arrow Targets", el: PrV4() },
+          { name: "Donut Gauge", el: PrV5() },
+        ];
+      }
+      return [
+        { name: "Color Dots", el: PrV1() },
+        { name: "Spectrum Bar", el: PrV2() },
+        { name: "Price Ladder", el: PrV3() },
+        { name: "Arrow Targets", el: PrV4() },
+        { name: "Donut Gauge", el: PrV5() },
+      ];
+    })(),
+    cap_alloc: (() => {
+      // Use real cap alloc data if available
+      const fcv = _facts?.free_cash_flow ?? null;
+      if (fcv && fcv > 0) {
+        const capex = _facts?.capex != null ? Math.abs(_facts.capex) : 0;
+        const buybk = _facts?.buybacks != null ? Math.abs(_facts.buybacks) : 0;
+        const divs = _facts?.dividends_paid != null ? Math.abs(_facts.dividends_paid) : 0;
+        const cashBld = Math.max(0, fcv - capex - buybk - divs);
+        const total = capex + buybk + divs + cashBld;
+        if (total > 0) {
+          const segs = [
+            { l: "CapEx", p: capex / total, c: "#1a56db" },
+            { l: "Buybacks", p: buybk / total, c: "#0c1b38" },
+            { l: "Dividends", p: divs / total, c: "#0d6b45" },
+            { l: "Cash", p: cashBld / total, c: "#b45309" },
+          ].filter(s => s.p > 0.01);
+          // Use the real segs — override global
+          const oldSegs = [...CA_SEGS];
+          CA_SEGS.length = 0; segs.forEach(s => CA_SEGS.push(s));
+          const result = [
+            { name: "Stacked Bar", el: CaV1() },
+            { name: "Donut", el: CaV2() },
+            { name: "Treemap", el: CaV3() },
+            { name: "Bar per Category", el: CaV4() },
+            { name: "Waffle Grid", el: CaV5() },
+          ];
+          CA_SEGS.length = 0; oldSegs.forEach(s => CA_SEGS.push(s)); // restore
+          return result;
+        }
+      }
+      return [
+        { name: "Stacked Bar", el: CaV1() },
+        { name: "Donut", el: CaV2() },
+        { name: "Treemap", el: CaV3() },
+        { name: "Bar per Category", el: CaV4() },
+        { name: "Waffle Grid", el: CaV5() },
+      ];
+    })(),
+    positioning: (() => {
+      // Use real positioning data if available
+      const roic = _facts?.roic ?? null;
+      const nd = _facts?.net_debt ?? null; const eb = _facts?.ebitda ?? null;
+      const ocf = _facts?.operating_cf ?? null; const ni = _facts?.net_income ?? null;
+      const roicSprd = roic != null ? roic - 9 : null;
+      const ndEb = nd != null && eb != null && eb !== 0 ? nd / eb : null;
+      const fcfQ = ocf != null && ni != null && ni !== 0 ? ocf / ni : null;
+      if (roicSprd != null || ndEb != null) {
+        const cards = [
+          { l: "ROIC/WACC", v: roicSprd != null ? `${roicSprd >= 0 ? "+" : ""}${roicSprd.toFixed(1)}pp` : "N/A", c: roicSprd != null ? (roicSprd >= 5 ? "#0d6b45" : roicSprd >= 0 ? "#b45309" : "#b42318") : "#4b6484" },
+          { l: "ND/EBITDA", v: ndEb != null ? (ndEb < 0 ? "Net Cash" : `${ndEb.toFixed(1)}x`) : "N/A", c: ndEb != null ? (ndEb < 1 ? "#0d6b45" : ndEb < 3 ? "#b45309" : "#b42318") : "#4b6484" },
+          { l: "OCF/NI", v: fcfQ != null ? `${fcfQ.toFixed(2)}x` : "N/A", c: fcfQ != null ? (fcfQ > 1.1 ? "#0d6b45" : fcfQ > 0.8 ? "#b45309" : "#b42318") : "#4b6484" },
+        ];
+        const oldCards = [...PQ_CARDS];
+        PQ_CARDS.length = 0; cards.forEach(c => PQ_CARDS.push(c));
+        const result = [
+          { name: "Dark Cards", el: PqV1() },
+          { name: "Score Bars", el: PqV2() },
+          { name: "Gauge Arcs", el: PqV3() },
+          { name: "Badge Circles", el: PqV4() },
+          { name: "Progress Bars", el: PqV5() },
+        ];
+        PQ_CARDS.length = 0; oldCards.forEach(c => PQ_CARDS.push(c)); // restore
+        return result;
+      }
+      return [
+        { name: "Dark Cards", el: PqV1() },
+        { name: "Score Bars", el: PqV2() },
+        { name: "Gauge Arcs", el: PqV3() },
+        { name: "Badge Circles", el: PqV4() },
+        { name: "Progress Bars", el: PqV5() },
+      ];
+    })(),
   } as Record<string, { name: string; el: React.ReactNode }[]>;
 }
 
