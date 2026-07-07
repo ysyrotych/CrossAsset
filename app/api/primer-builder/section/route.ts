@@ -72,12 +72,26 @@ export async function POST(req: NextRequest) {
   const fcfYieldErp = fcfYield != null ? fcfYield - 3.5 : null;
   const ocfNiRatio = facts?.operating_cf != null && facts?.net_income != null && facts.net_income !== 0 ? facts.operating_cf / facts.net_income : null;
   const netDebtEbitda = facts?.net_debt != null && facts?.ebitda != null && facts.ebitda !== 0 ? facts.net_debt / facts.ebitda : null;
+  const fcfEbitdaConv = facts?.free_cash_flow != null && facts?.ebitda != null && facts.ebitda !== 0 ? (facts.free_cash_flow / facts.ebitda) * 100 : null;
   const revenueYrs = Object.keys(history?.revenue ?? {}).sort();
   const revCagr = revenueYrs.length >= 3 ? (() => {
     const rv = history.revenue;
     const oldest = rv[revenueYrs[0]]; const newest = rv[revenueYrs[revenueYrs.length - 1]]; const n = revenueYrs.length - 1;
     return oldest > 0 && newest > 0 ? (Math.pow(newest / oldest, 1 / n) - 1) * 100 : null;
   })() : null;
+  // Incremental operating margin — YoY operating leverage signal (ΔEBIT / ΔRevenue)
+  const incrEbitdaMargin = (() => {
+    const revData = history?.revenue ?? {};
+    const oiData  = history?.operating_income ?? {};
+    const revYrs  = Object.keys(revData).sort();
+    const oiYrs   = Object.keys(oiData).sort();
+    if (revYrs.length < 2 || oiYrs.length < 2) return null;
+    const curRevYr = revYrs[revYrs.length - 1]; const priorRevYr = revYrs[revYrs.length - 2];
+    const curOiYr  = oiYrs[oiYrs.length - 1];   const priorOiYr  = oiYrs[oiYrs.length - 2];
+    const dRev = (revData[curRevYr] ?? 0) - (revData[priorRevYr] ?? 0);
+    const dOi  = (oiData[curOiYr]  ?? 0) - (oiData[priorOiYr]  ?? 0);
+    return dRev !== 0 ? (dOi / dRev) * 100 : null;
+  })();
 
   const factsBlock = facts ? `
 COMPANY FINANCIALS (most recent):
@@ -97,6 +111,8 @@ ROIC vs WACC: ${roicWaccSpread != null ? `${roicWaccSpread >= 0 ? "+" : ""}${roi
 FCF Yield: ${fcfYield != null ? `${fcfYield.toFixed(1)}% vs 3.5% RF (ERP: ${fcfYieldErp != null ? (fcfYieldErp >= 0 ? "+" : "") + fcfYieldErp.toFixed(1) + "pp" : "N/A"})` : "N/A"}
 Earnings Quality (OCF/NI): ${ocfNiRatio != null ? `${ocfNiRatio.toFixed(2)}x — ${ocfNiRatio > 1.2 ? "HIGH QUALITY (OCF > earnings)" : ocfNiRatio > 0.8 ? "MODERATE" : "LOW QUALITY (earnings outrun cash)"}` : "N/A"}
 Net Debt / EBITDA: ${netDebtEbitda != null ? `${netDebtEbitda.toFixed(1)}x — ${netDebtEbitda < 0 ? "NET CASH" : netDebtEbitda < 1 ? "LOW LEVERAGE" : netDebtEbitda < 3 ? "MODERATE" : "ELEVATED"}` : "N/A"}
+FCF / EBITDA Conversion: ${fcfEbitdaConv != null ? `${fcfEbitdaConv.toFixed(1)}% — ${fcfEbitdaConv > 70 ? "HIGH CONVERSION (strong cash generation)" : fcfEbitdaConv > 40 ? "MODERATE" : "LOW (CapEx-heavy or working capital drag)"}` : "N/A"}
+Incremental Op Margin YoY (ΔEBIT/ΔRev): ${incrEbitdaMargin != null ? `${incrEbitdaMargin.toFixed(1)}% — ${incrEbitdaMargin > 30 ? "STRONG OPERATING LEVERAGE" : incrEbitdaMargin > 15 ? "POSITIVE LEVERAGE" : incrEbitdaMargin > 0 ? "MARGINAL LEVERAGE" : "NEGATIVE (OpEx growing faster than revenue)"}` : "N/A"}
 Short Interest: ${facts?.short_float_pct != null ? `${facts.short_float_pct.toFixed(1)}% of float — ${facts.short_float_pct > 15 ? "ELEVATED (crowded short, squeeze risk)" : facts.short_float_pct > 5 ? "MODERATE" : "LOW"}` : "N/A"}${facts?.short_ratio != null ? ` | ${facts.short_ratio.toFixed(1)} days to cover` : ""}
 CapEx Intensity: ${facts?.capex != null && facts?.revenue != null && facts.revenue > 0 ? `${(Math.abs(facts.capex) / facts.revenue * 100).toFixed(1)}% of revenue` : "N/A"}
 ` : "";
