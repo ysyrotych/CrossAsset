@@ -1083,6 +1083,49 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             </View>
             {/* 52W range bar */}
             <StockRangeBar facts={facts} />
+            {/* Analyst consensus + price target range */}
+            {(() => {
+              const rec = fmpExtended?.analyst_rec as { strong_buy?: number; buy?: number; hold?: number; sell?: number; strong_sell?: number; total?: number } | undefined;
+              const ptConsensus = facts.pt_consensus;
+              const ptHigh = facts.pt_high;
+              const ptLow = facts.pt_low;
+              if (!rec && !ptConsensus) return null;
+              const bullish = rec ? (rec.strong_buy ?? 0) + (rec.buy ?? 0) : 0;
+              const hold = rec?.hold ?? 0;
+              const bearish = rec ? (rec.sell ?? 0) + (rec.strong_sell ?? 0) : 0;
+              const total = rec?.total ?? (bullish + hold + bearish);
+              const upside = ptConsensus && facts.stock_price ? ((ptConsensus - facts.stock_price) / facts.stock_price * 100) : null;
+              return (
+                <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)", flexDirection: "row", gap: 14, alignItems: "flex-start" }}>
+                  {rec && total > 0 && (
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 6, color: "rgba(255,255,255,0.45)", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 }}>Sell-Side ({total} analysts)</Text>
+                      <View style={{ flexDirection: "row", height: 6, borderRadius: 2, overflow: "hidden", marginBottom: 3 }}>
+                        <View style={{ flex: bullish, backgroundColor: "#22c55e" }} />
+                        <View style={{ flex: hold, backgroundColor: "#f59e0b" }} />
+                        <View style={{ flex: bearish, backgroundColor: "#ef4444" }} />
+                      </View>
+                      <View style={{ flexDirection: "row", gap: 8 }}>
+                        <Text style={{ fontSize: 5.5, color: "#22c55e" }}>▲ {bullish} Buy</Text>
+                        <Text style={{ fontSize: 5.5, color: "#f59e0b" }}>■ {hold} Hold</Text>
+                        <Text style={{ fontSize: 5.5, color: "#ef4444" }}>▼ {bearish} Sell</Text>
+                      </View>
+                    </View>
+                  )}
+                  {ptConsensus && (
+                    <View style={{ flex: 1 }}>
+                      <Text style={{ fontSize: 6, color: "rgba(255,255,255,0.45)", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>Consensus Price Target</Text>
+                      <Text style={{ fontSize: 13, fontFamily: "Helvetica-Bold", color: "white" }}>${Math.round(ptConsensus)}</Text>
+                      {upside != null && (
+                        <Text style={{ fontSize: 6, color: upside >= 0 ? "#22c55e" : "#ef4444" }}>
+                          {upside >= 0 ? "+" : ""}{upside.toFixed(1)}% vs current{ptHigh && ptLow ? ` · Range $${Math.round(ptLow)}–$${Math.round(ptHigh)}` : ""}
+                        </Text>
+                      )}
+                    </View>
+                  )}
+                </View>
+              );
+            })()}
             {/* Investment frame */}
             {investmentFrame.length > 0 && (
               <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)" }}>
