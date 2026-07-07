@@ -708,20 +708,27 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
   // New sections
   const kpiRaw  = secs["KEY_METRICS_DASHBOARD"] ?? "";
-  const kpiRows = kpiRaw.split("\n").filter(l => l.includes("|")).slice(2).map(l => {
+  const kpiRows = kpiRaw.split("\n").filter(l => l.includes("|")).map(l => {
     const parts = l.split("|").map(p => p.trim()).filter(Boolean);
     return parts.length >= 4 ? { kpi: parts[0], current: parts[1], threshold: parts[2], why: parts[3] } : null;
-  }).filter((r): r is { kpi: string; current: string; threshold: string; why: string } => r !== null && !r.kpi.match(/^[-=]+$/));
+  }).filter((r): r is { kpi: string; current: string; threshold: string; why: string } =>
+    r !== null
+    && !r.kpi.match(/^[-=:]+$/)
+    && r.kpi.toLowerCase() !== "kpi"
+    && r.kpi.toLowerCase() !== "metric"
+    && r.kpi.toLowerCase() !== "key performance indicator"
+  );
 
   const qaRaw  = secs["EARNINGS_CALL_QUESTIONS"] ?? "";
   const qaItems = qaRaw.split("\n")
-    .filter(l => l.trim().match(/^(\d+[\.\)]\s|\*\*Q|\*\*\d|Q\d)/i))
+    .filter(l => l.trim().match(/^(\*{0,2}\d+[\.\)]\s|\*\*Q|\*\*\d|Q\d)/i))
     .map(l => l
-      .replace(/^\d+[\.\)]\s*/, "")
+      .replace(/^\*{0,2}\d+[\.\)]\s*\*{0,2}\s*/, "")
       .replace(/\*\*([^*]+)\*\*/g, "$1")
       .replace(/\*\*/g, "")
+      .replace(/^Q[:\s]+/i, "")
       .trim())
-    .filter(Boolean)
+    .filter(q => q.length > 15)
     .slice(0, 10);
 
   // 5-year summary table
