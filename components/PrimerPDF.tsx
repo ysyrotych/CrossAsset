@@ -221,9 +221,9 @@ function parseSnapshotTable(text: string): { label: string; value: string }[] {
 
 function parseBullets(text: string): string[] {
   return text.split("\n")
-    .filter(l => l.trim().startsWith("•") || l.trim().startsWith("-"))
-    .map(l => l.replace(/^[•\-]\s*/, "").trim())
-    .filter(b => b.length > 3 && b !== "--" && b !== "-");
+    .filter(l => l.trim().startsWith("•") || l.trim().startsWith("-") || /^\d+[\.\)]\s/.test(l.trim()))
+    .map(l => l.replace(/^[•\-]\s*/, "").replace(/^\d+[\.\)]\s+/, "").trim())
+    .filter(b => b.length > 8 && b !== "--" && b !== "-" && !b.match(/^[-=]{3,}/));
 }
 
 function stripMd(s: string): string {
@@ -814,7 +814,9 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 { label: "Market Cap", value: fmtCover(facts.market_cap) },
                 { label: "Revenue (FY)", value: fmtCover(facts.revenue) },
                 { label: "FCF Margin", value: fcfMarginCover != null ? `${fcfMarginCover.toFixed(1)}%` : "N/A" },
+                { label: "EV/EBITDA", value: facts.ev_ebitda != null ? `${facts.ev_ebitda.toFixed(1)}x` : "N/A" },
                 { label: "ROIC", value: facts.roic != null ? `${facts.roic.toFixed(1)}%` : "N/A" },
+                { label: "P/E", value: facts.pe_ratio != null ? `${facts.pe_ratio.toFixed(1)}x` : "N/A" },
               ].map(chip => (
                 <View key={chip.label} style={[S.coverChip, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
                   <Text style={[S.coverChipLabel, { color: "rgba(255,255,255,0.5)" }]}>{chip.label}</Text>
