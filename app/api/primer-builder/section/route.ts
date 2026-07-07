@@ -205,14 +205,25 @@ ${(fmpExtended.earnings_surprises as Array<{date?: string; quarter?: string; act
     : "";
 
   const histBlock = history && Object.keys(history).length > 0 ? `
-HISTORICAL TRENDS (multi-year):
+HISTORICAL TRENDS (multi-year, with YoY growth):
 ${Object.entries(history).map(([metric, years]) => {
   const entries = Object.entries(years as Record<string, number>).sort().slice(-5);
   if (entries.length === 0) return null;
-  return `${metric}: ${entries.map(([y, v]) => {
-    const abs = Math.abs(Number(v));
-    const fmt = abs >= 1e9 ? `${(Number(v) / 1e9).toFixed(1)}B` : abs >= 1e6 ? `${(Number(v) / 1e6).toFixed(0)}M` : abs > 100 ? Number(v).toFixed(0) : Number(v).toFixed(1);
-    return `${y}:${fmt}`;
+  const isPct = metric.includes("margin") || metric.includes("growth") || metric.includes("yield");
+  return `${metric}: ${entries.map(([y, v], i) => {
+    const n = Number(v);
+    const abs = Math.abs(n);
+    let fmt: string;
+    if (isPct) {
+      fmt = `${n.toFixed(1)}%`;
+    } else {
+      fmt = abs >= 1e9 ? `$${(n / 1e9).toFixed(1)}B` : abs >= 1e6 ? `$${(n / 1e6).toFixed(0)}M` : abs > 100 ? n.toFixed(0) : n.toFixed(2);
+    }
+    if (i === 0) return `${y}:${fmt}`;
+    const prev = Number(entries[i - 1][1]);
+    const yoy = prev !== 0 ? ((n - prev) / Math.abs(prev)) * 100 : null;
+    const yoyStr = yoy != null ? `(${yoy >= 0 ? "+" : ""}${yoy.toFixed(0)}%)` : "";
+    return `${y}:${fmt}${yoyStr}`;
   }).join(", ")}`;
 }).filter(Boolean).join("\n")}
 ` : "";
