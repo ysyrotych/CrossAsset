@@ -147,12 +147,14 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 function ConfigureStage({
   sections, setSections, tone, setTone, length, setLength, onNext,
+  ticker, companyName, facts,
 }: {
   sections: SectionDef[];
   setSections: React.Dispatch<React.SetStateAction<SectionDef[]>>;
   tone: Tone; setTone: (t: Tone) => void;
   length: Length; setLength: (l: Length) => void;
   onNext: () => void;
+  ticker?: string; companyName?: string; facts?: Record<string, number | null>;
 }) {
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
@@ -197,8 +199,39 @@ function ConfigureStage({
     { id: "comprehensive", label: "Comprehensive", sub: "~6k words" },
   ];
 
+  const fmtV2 = (v?: number | null) => v == null ? "—" : Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T` : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(2)}`;
+  const contextStats = facts ? [
+    { label: "Stock", value: facts.stock_price != null ? `$${Number(facts.stock_price).toFixed(2)}` : "—" },
+    { label: "Mkt Cap", value: fmtV2(facts.market_cap) },
+    { label: "Revenue", value: fmtV2(facts.revenue) },
+    { label: "FCF", value: fmtV2(facts.free_cash_flow) },
+    { label: "EV/EBITDA", value: facts.ev_ebitda != null ? `${Number(facts.ev_ebitda).toFixed(1)}x` : "—" },
+    { label: "ROIC", value: facts.roic != null ? `${Number(facts.roic).toFixed(1)}%` : "—" },
+    { label: "Gross Mgn", value: facts.gross_margin != null ? `${Number(facts.gross_margin).toFixed(1)}%` : "—" },
+    { label: "P/E", value: facts.pe_ratio != null ? `${Number(facts.pe_ratio).toFixed(1)}x` : "—" },
+  ] : [];
+
   return (
     <div style={{ padding: 24, maxWidth: 900, margin: "0 auto" }}>
+      {/* Company context banner */}
+      {ticker && facts && (
+        <div style={{ background: ACCENT, border: `1px solid ${BORDER}`, borderRadius: 8, padding: "12px 16px", marginBottom: 20, display: "flex", alignItems: "center", gap: 16, flexWrap: "wrap" }}>
+          <div style={{ flexShrink: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 800, color: TEXT }}>{ticker}</div>
+            <div style={{ fontSize: 10, color: MUTED }}>{companyName}</div>
+          </div>
+          <div style={{ width: 1, height: 32, background: BORDER, flexShrink: 0 }} />
+          <div style={{ display: "flex", gap: 16, flexWrap: "wrap", flex: 1 }}>
+            {contextStats.map(s => (
+              <div key={s.label}>
+                <div style={{ fontSize: 8, color: MUTED, letterSpacing: "0.05em", textTransform: "uppercase", marginBottom: 1 }}>{s.label}</div>
+                <div style={{ fontSize: 11, fontWeight: 700, color: TEXT }}>{s.value}</div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
       <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>Configure Your Primer</h2>
       <p style={{ fontSize: 11, color: MUTED, marginBottom: 20 }}>Choose which sections to include, reorder them, and set the tone and depth.</p>
 
@@ -1789,6 +1822,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               tone={tone} setTone={setTone}
               length={length} setLength={setLength}
               onNext={() => setStage("thesis")}
+              ticker={ticker} companyName={companyName} facts={facts}
             />
           )}
           {stage === "thesis" && (
