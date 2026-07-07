@@ -394,26 +394,34 @@ def get_fmp_financials(ticker: str) -> dict:
                     rev_g = _peer_val(km, "revenueGrowthTTM", "revenueGrowth", "revenuePerShareGrowth", "revenueGrowthAnnual")
                     gpm   = _peer_val(km, "grossProfitMarginTTM", "grossProfitMargin", "grossProfitRatio", "grossMargin")
                     rpe   = _peer_val(km, "revenuePerEmployee")
+                    rev   = _peer_val(km, "revenueTTM", "revenue", "totalRevenue", "revenuePerShareTTM")
+                    ev_r  = _peer_val(km, "priceToSalesRatioTTM", "priceToSalesRatio", "evToRevenue", "evToSales", "evSales")
                     mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
                     # Fallback: compute PE from marketCap / netIncome if km doesn't have it
                     if not pe and mc and km:
                         ni_km = safe_float(km.get("netIncome") or km.get("netIncomePerShare"))
                         shares = safe_float(km.get("sharesOutstanding") or km.get("weightedAverageSharesDiluted"))
-                        pr_price = safe_float(pr.get("price"))
                         if ni_km and shares and shares > 0:
                             pe = round(mc / (ni_km * shares), 1) if ni_km < 1000 else round(mc / ni_km, 1)
+                    # If revenueTTM looks like per-share, scale by shares
+                    if rev and rev < 10000 and mc:
+                        shares_pr = safe_float(km.get("sharesOutstanding") or km.get("weightedAverageSharesDiluted"))
+                        if shares_pr and shares_pr > 1e6:
+                            rev = rev * shares_pr
                     peer_comparison.append({
-                        "symbol":       sym,
-                        "name":         pr.get("companyName", sym),
-                        "pe":           round(pe, 1) if pe else None,
-                        "ev_ebitda":    round(ev_e, 1) if ev_e else None,
-                        "p_fcf":        round(p_fcf, 1) if p_fcf else None,
-                        "roic":         round(roic * 100, 1) if roic is not None else None,
-                        "net_margin":   round(npm * 100, 1) if npm is not None else None,
-                        "gross_margin": round(gpm * 100, 1) if gpm is not None else None,
-                        "rev_per_emp":  round(rpe / 1000, 0) if rpe is not None else None,  # in $K
-                        "market_cap":   mc,
-                        "revenue_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
+                        "symbol":         sym,
+                        "name":           pr.get("companyName", sym),
+                        "pe":             round(pe, 1) if pe else None,
+                        "ev_ebitda":      round(ev_e, 1) if ev_e else None,
+                        "p_fcf":          round(p_fcf, 1) if p_fcf else None,
+                        "ev_revenue":     round(ev_r, 1) if ev_r else None,
+                        "roic":           round(roic * 100, 1) if roic is not None else None,
+                        "net_margin":     round(npm * 100, 1) if npm is not None else None,
+                        "gross_margin":   round(gpm * 100, 1) if gpm is not None else None,
+                        "rev_per_emp":    round(rpe / 1000, 0) if rpe is not None else None,  # in $K
+                        "market_cap":     mc,
+                        "revenue":        round(rev, 0) if rev and rev > 1e6 else None,
+                        "revenue_growth": round(rev_g * 100, 1) if rev_g is not None else None,
                     })
 
         # ── yfinance peer fallback when FMP returns no peers ─────────────────
@@ -443,19 +451,22 @@ def get_fmp_financials(ticker: str) -> dict:
                         rev  = safe_float(info.get("totalRevenue") or info.get("revenue"))
                         emp  = safe_float(info.get("fullTimeEmployees"))
                         rpe  = round(rev / emp / 1000, 0) if rev and emp and emp > 0 else None
+                        ev_r = safe_float(info.get("enterpriseToRevenue") or info.get("priceToSalesTrailing12Months"))
                         name = info.get("longName") or info.get("shortName") or sym
                         return {
-                            "symbol":       sym,
-                            "name":         name,
-                            "pe":           round(pe, 1) if pe and pe > 0 else None,
-                            "ev_ebitda":    round(ev_e, 1) if ev_e and ev_e > 0 else None,
-                            "p_fcf":        round(p_fcf, 1) if p_fcf and p_fcf > 0 else None,
-                            "roic":         round(roic * 100, 1) if roic else None,
-                            "net_margin":   round(npm * 100, 1) if npm else None,
-                            "gross_margin": round(gpm * 100, 1) if gpm else None,
-                            "rev_per_emp":  rpe,
-                            "market_cap":   mc,
-                            "revenue_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
+                            "symbol":         sym,
+                            "name":           name,
+                            "pe":             round(pe, 1) if pe and pe > 0 else None,
+                            "ev_ebitda":      round(ev_e, 1) if ev_e and ev_e > 0 else None,
+                            "p_fcf":          round(p_fcf, 1) if p_fcf and p_fcf > 0 else None,
+                            "ev_revenue":     round(ev_r, 1) if ev_r and ev_r > 0 else None,
+                            "roic":           round(roic * 100, 1) if roic else None,
+                            "net_margin":     round(npm * 100, 1) if npm else None,
+                            "gross_margin":   round(gpm * 100, 1) if gpm else None,
+                            "rev_per_emp":    rpe,
+                            "market_cap":     mc,
+                            "revenue":        round(rev, 0) if rev and rev > 1e6 else None,
+                            "revenue_growth": round(rev_g * 100, 1) if rev_g is not None else None,
                         }
                     except Exception as e:
                         print(f"yfinance peer error for {sym}: {e}")

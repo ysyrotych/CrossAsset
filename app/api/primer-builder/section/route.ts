@@ -207,16 +207,16 @@ ${Object.entries(history).map(([metric, years]) => {
     ? (() => {
         const peers = fmpExtended.peer_comparison as Array<{
           symbol?: string; name?: string; market_cap?: number;
-          pe?: number; ev_ebitda?: number; p_fcf?: number;
+          pe?: number; ev_ebitda?: number; p_fcf?: number; ev_revenue?: number;
           gross_margin?: number; net_margin?: number; roic?: number;
           revenue_growth?: number; revenue?: number;
         }>;
         const fmtM = (v?: number | null) => v == null ? "—" : Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T` : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
         const fmtPct2 = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
         const fmtX = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}x`;
-        const header = `Symbol | Mkt Cap | P/E | EV/EBITDA | P/FCF | Gross Mgn | ROIC | Rev Growth`;
+        const header = `Symbol | Revenue | Mkt Cap | P/E | EV/EBITDA | EV/Rev | Gross Mgn | ROIC | Rev Growth`;
         const rows = peers.slice(0, 6).map(p =>
-          `${p.symbol ?? "?"} (${p.name ? p.name.slice(0, 18) : "?"}) | ${fmtM(p.market_cap)} | ${fmtX(p.pe)} | ${fmtX(p.ev_ebitda)} | ${fmtX(p.p_fcf)} | ${fmtPct2(p.gross_margin)} | ${fmtPct2(p.roic)} | ${fmtPct2(p.revenue_growth)}`
+          `${p.symbol ?? "?"} (${p.name ? p.name.slice(0, 18) : "?"}) | ${fmtM(p.revenue)} | ${fmtM(p.market_cap)} | ${fmtX(p.pe)} | ${fmtX(p.ev_ebitda)} | ${fmtX(p.ev_revenue)} | ${fmtPct2(p.gross_margin)} | ${fmtPct2(p.roic)} | ${fmtPct2(p.revenue_growth)}`
         );
         return `\nPEER COMPARISON (use these exact numbers — reference peers by name in your analysis):\n${header}\n${rows.join("\n")}\n`;
       })()
