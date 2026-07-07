@@ -20,7 +20,7 @@ const SECTION_PROMPTS: Record<string, string> = {
     "Write a rigorous financial analysis that integrates the computed metrics provided. REQUIRED: (1) Lead with revenue trajectory — use the CAGR from HISTORICAL TRENDS, call out if it is accelerating or decelerating. (2) Gross margin story — is pricing power growing or eroding? (3) Operating leverage — explicitly compare revenue growth to OpEx growth rates from the historical data. (4) Earnings quality — use the accrual ratio or OCF/Net Income ratio from computed metrics; if OCF > net income, say why and by how much. (5) Balance sheet durability — use Net Debt/EBITDA ratio from computed metrics, reference debt maturity if known. (6) FCF conversion — what % of EBITDA converts to FCF and why. Every paragraph must cite at least one specific dollar amount and one percentage from the data provided.",
 
   valuation:
-    "Write a valuation framework that shows explicit math. REQUIRED: (1) Current trading multiples vs the 3-year average — quote P/E, EV/EBITDA, EV/Rev, and FCF yield. (2) PEER MULTIPLES TABLE: use the PEER COMPARISON data to show how this company's P/E, EV/EBITDA, and gross margin compare to each named peer — identify whether the company trades at a premium or discount and explicitly justify or challenge that spread. (3) What the current multiple mathematically implies about expected growth — show the algebra. (4) Three explicit price target scenarios using the format: [Bear: $X revenue × Y EV/EBITDA multiple ± $Z net cash/debt ÷ N shares = $TT]. [Base: same format]. [Bull: same format]. Use the shares outstanding and net debt/cash from the data. (5) Conclude with which scenario you weight most heavily and the single number that would cause you to move between scenarios.",
+    "Write a valuation framework that shows explicit math. REQUIRED: (1) NTM MULTIPLES FIRST — use ANALYST FORWARD ESTIMATES to compute NTM EV/EBITDA and NTM P/E (show the math: EV ÷ NTM EBITDA estimate = Xx); compare vs the 3-year LTM average to establish premium/discount. (2) PEER BENCHMARKING: use PEER COMPARISON data to show how this company's P/E, EV/EBITDA, and gross margin compare to each named peer — explicitly justify or challenge the premium/discount. (3) What the current NTM multiple mathematically implies about expected revenue growth — show the algebra: if the market pays Xx EV/EBITDA, what EBITDA margin and revenue growth does that embed? (4) Three explicit price target scenarios in this format: Bear Case ($XX): NTM revenue $XB × X% EBITDA margin = $XB EBITDA × Xx EV/EBITDA − $XM net debt ÷ XM shares = $XX. Base Case: same format. Bull Case: same format. (5) Conclude with which scenario you weight most heavily and the exact metric that would cause you to shift.",
 
   management_commentary:
     "Write management commentary. Use the EARNINGS SURPRISE HISTORY to assess guidance credibility — what is the beat rate, is it consistent or deteriorating, are beats driven by real upside or just sandbagging? Cover what leadership has communicated about business trends with specific guidance numbers, what sell-side analysts are focused on heading into the next print based on recent news/commentary, and any notable capital allocation language shifts. Reference specific quarters by name.",
@@ -133,6 +133,37 @@ ${(fmpExtended.earnings_surprises as Array<{date?: string; quarter?: string; act
 `
     : "";
 
+  // Forward analyst estimates — critical for valuation section
+  const estimateSections = ["valuation", "investment_thesis", "executive_summary", "financial_analysis"];
+  const estimatesBlock = estimateSections.includes(sectionId) && Array.isArray(fmpExtended?.analyst_estimates) && (fmpExtended.analyst_estimates as any[]).length > 0
+    ? (() => {
+        const ests = fmpExtended.analyst_estimates as Array<{
+          date?: string; rev_avg?: number; eps_avg?: number; ebitda_avg?: number; num_analysts?: number;
+        }>;
+        const fmtM2 = (v?: number | null) => v == null ? "N/A" : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(2)}B` : `$${(v/1e6).toFixed(0)}M`;
+        const lines = ests.slice(0, 4).map(e =>
+          `${e.date ?? "?"}: Rev ${fmtM2(e.rev_avg)} | EPS ${e.eps_avg != null ? `$${e.eps_avg.toFixed(2)}` : "N/A"} | EBITDA ${fmtM2(e.ebitda_avg)} (${e.num_analysts ?? "?"} analysts)`
+        );
+        // Compute implied NTM EV/EBITDA if we have the data
+        const ntm = ests[0];
+        const ntmEvEbitda = ntm?.ebitda_avg && facts?.enterprise_value ? (facts.enterprise_value / ntm.ebitda_avg).toFixed(1) + "x" : null;
+        const ntmPE = ntm?.eps_avg && facts?.stock_price ? (facts.stock_price / ntm.eps_avg).toFixed(1) + "x" : null;
+        return `\nANALYST FORWARD ESTIMATES (use NTM multiples in valuation):\n${lines.join("\n")}\n${ntmEvEbitda ? `Implied NTM EV/EBITDA: ${ntmEvEbitda}` : ""}${ntmPE ? ` | Implied NTM P/E: ${ntmPE}` : ""}\n`;
+      })()
+    : "";
+
+  // Geographic revenue segments — for business overview
+  const geoSections = ["business_overview", "company_snapshot"];
+  const geoBlock = geoSections.includes(sectionId) && Array.isArray(fmpExtended?.geo_segments) && (fmpExtended.geo_segments as any[]).length > 0
+    ? (() => {
+        const geo = fmpExtended.geo_segments as Array<{ segment?: string; revenue?: number; pct?: number }>;
+        const lines = geo.slice(0, 8).map(g =>
+          `${g.segment ?? "?"}: $${g.revenue != null ? (Math.abs(g.revenue) >= 1e9 ? (g.revenue/1e9).toFixed(1) + "B" : (g.revenue/1e6).toFixed(0) + "M") : "N/A"}${g.pct != null ? ` (${g.pct.toFixed(0)}%)` : ""}`
+        );
+        return `\nGEOGRAPHIC REVENUE MIX:\n${lines.join("\n")}\n`;
+      })()
+    : "";
+
   // Analyst rec breakdown for thesis/investment sections
   const analysisSections = ["investment_thesis", "executive_summary", "key_risks"];
   const analystRecBlock = analysisSections.includes(sectionId) && fmpExtended?.analyst_rec != null
@@ -220,7 +251,7 @@ ${thesis || "Write from a balanced, analytical perspective with a clear bottom-l
 
 TONE: ${tone ?? "analytical"}
 
-${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${segmentBlock}${insiderBlock}${surpriseBlock}${analystRecBlock}${peerBlock}${newsBlock}
+${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${segmentBlock}${geoBlock}${insiderBlock}${surpriseBlock}${analystRecBlock}${estimatesBlock}${peerBlock}${newsBlock}
 TASK: ${sectionGuidance}
 
 FORMATTING:
