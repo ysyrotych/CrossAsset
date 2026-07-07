@@ -1526,6 +1526,46 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 {callHighlights.length > 0 && <><SubSectionHdr title="Earnings Call Highlights" />{callHighlights.map((p,i) => <Para key={i} text={p} />)}</>}
                 {fwdGuidance.length > 0 && <><SubSectionHdr title="Forward Guidance & Outlook" />{fwdGuidance.map((p,i) => <Para key={i} text={p} />)}</>}
                 {!hasSubsections && mgmtFallback.map((p,i) => <Para key={i} text={p} />)}
+                {/* Earnings Beat/Miss History Table */}
+                {Array.isArray(fmpExtended?.earnings_surprises) && (fmpExtended!.earnings_surprises as {date?: string; actual_eps?: number; estimated_eps?: number; surprise_pct?: number}[]).length > 0 && (() => {
+                  const surps = (fmpExtended!.earnings_surprises as {date?: string; actual_eps?: number; estimated_eps?: number; surprise_pct?: number}[]).slice(0, 8);
+                  const beats = surps.filter(s => (s.surprise_pct ?? 0) > 0).length;
+                  const beatRate = surps.length > 0 ? (beats / surps.length * 100).toFixed(0) : "?";
+                  const avgSurp = surps.length > 0 ? surps.reduce((a, s) => a + (s.surprise_pct ?? 0), 0) / surps.length : null;
+                  return (
+                    <View style={{ marginTop: 10, marginBottom: 4 }}>
+                      <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 5 }}>
+                        <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: NAVY, textTransform: "uppercase", letterSpacing: 0.6 }}>EPS Beat/Miss History</Text>
+                        <View style={{ backgroundColor: beats >= surps.length * 0.7 ? GREEN : beats >= surps.length * 0.5 ? AMBER : RED, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 2 }}>
+                          <Text style={{ fontSize: 5.5, color: "white", fontFamily: "Helvetica-Bold" }}>{beatRate}% BEAT RATE ({beats}/{surps.length})</Text>
+                        </View>
+                        {avgSurp != null && (
+                          <Text style={{ fontSize: 6, color: avgSurp >= 0 ? GREEN : RED }}>Avg {avgSurp >= 0 ? "+" : ""}{avgSurp.toFixed(1)}% vs consensus</Text>
+                        )}
+                      </View>
+                      <View style={S.table}>
+                        <View style={[S.tableHeader, { backgroundColor: NAVY2 }]}>
+                          {["Period", "Actual EPS", "Consensus", "Surprise"].map((h, hi) => (
+                            <Text key={hi} style={[S.tableHeaderCell, { flex: hi === 0 ? 2 : 1, textAlign: hi === 0 ? "left" : "right" }]}>{h}</Text>
+                          ))}
+                        </View>
+                        {surps.map((e, ei) => {
+                          const isPos = (e.surprise_pct ?? 0) >= 0;
+                          return (
+                            <View key={ei} style={[S.tableRow, { backgroundColor: ei % 2 === 0 ? "white" : LGRAY }]}>
+                              <Text style={[S.tableCell, { flex: 2 }]}>{e.date?.slice(0, 7) ?? "—"}</Text>
+                              <Text style={[S.tableCell, { flex: 1, textAlign: "right" }]}>{e.actual_eps != null ? `$${e.actual_eps.toFixed(2)}` : "—"}</Text>
+                              <Text style={[S.tableCell, { flex: 1, textAlign: "right" }]}>{e.estimated_eps != null ? `$${e.estimated_eps.toFixed(2)}` : "—"}</Text>
+                              <Text style={[S.tableCell, { flex: 1, textAlign: "right", color: isPos ? GREEN : RED, fontFamily: "Helvetica-Bold" }]}>
+                                {e.surprise_pct != null ? `${isPos ? "+" : ""}${e.surprise_pct.toFixed(1)}%` : "—"}
+                              </Text>
+                            </View>
+                          );
+                        })}
+                      </View>
+                    </View>
+                  );
+                })()}
               </>
             );
           })()}

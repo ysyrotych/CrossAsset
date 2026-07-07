@@ -1034,7 +1034,7 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
             surp = None
             if actual is not None and est is not None and est != 0:
                 surp = round((actual - est) / abs(est) * 100, 1)
-            surprises.append({"date": dt, "eps_actual": actual, "eps_est": est, "surprise_pct": surp})
+            surprises.append({"date": dt, "actual_eps": actual, "estimated_eps": est, "surprise_pct": surp})
         if surprises:
             fmp_ext["earnings_surprises"] = surprises
 
