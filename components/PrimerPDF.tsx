@@ -1134,8 +1134,8 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           <SectionHdr title="II. Company Snapshot" accentColor={ACCENT.primary} />
           {snapshotRows.length > 0 && <SnapshotTable rows={snapshotRows} />}
 
-          {/* Quality signal row — ROIC/WACC, leverage, earnings quality */}
-          {(() => {
+          {/* Quality signal row — ROIC/WACC, leverage, earnings quality (controlled by positioning chart toggle) */}
+          {showChart("positioning") && (() => {
             const nd = facts.net_debt; const eb = facts.ebitda;
             const ndEb = nd != null && eb != null && eb !== 0 ? nd / eb : null;
             const roicSpread2 = facts.roic != null ? facts.roic - 9 : null;

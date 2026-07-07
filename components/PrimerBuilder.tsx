@@ -1197,8 +1197,11 @@ function BuildStage({
 
   async function generateAll() {
     setGeneratingAll(true);
-    for (const sec of included.filter(s => !s.generated && !s.userEdited)) {
-      await generateSection(sec.id);
+    const toGenerate = included.filter(s => !s.generated && !s.userEdited);
+    // Run in parallel batches of 3 — dramatically faster than sequential
+    const BATCH = 3;
+    for (let i = 0; i < toGenerate.length; i += BATCH) {
+      await Promise.all(toGenerate.slice(i, i + BATCH).map(s => generateSection(s.id)));
     }
     setGeneratingAll(false);
   }
@@ -1215,9 +1218,9 @@ function BuildStage({
           <div style={{ height: "100%", background: BLUE, borderRadius: 2, width: `${included.length > 0 ? (generated / included.length) * 100 : 0}%`, transition: "width 0.5s" }} />
         </div>
         <button onClick={generateAll} disabled={generatingAll || generated === included.length}
-          style={{ display: "flex", alignItems: "center", gap: 6, background: ACCENT, border: `1px solid ${BLUE}60`, borderRadius: 8, padding: "8px 14px", cursor: generatingAll ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, color: TEXT }}>
+          style={{ display: "flex", alignItems: "center", gap: 6, background: generatingAll ? ACCENT : BLUE, border: "none", borderRadius: 8, padding: "8px 16px", cursor: generatingAll ? "not-allowed" : "pointer", fontSize: 11, fontWeight: 700, color: "white" }}>
           <Sparkles size={12} style={{ animation: generatingAll ? "spin 1s linear infinite" : "none" }} />
-          {generatingAll ? "Generating…" : "Generate All"}
+          {generatingAll ? `Generating… (${generated}/${included.length})` : "Generate All (3× parallel)"}
         </button>
       </div>
 
