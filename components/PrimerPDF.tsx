@@ -1885,17 +1885,53 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {(riskItems.length > 0 || risks.length > 0) && (
             <>
               <SectionHdr title="IX. Key Risks" accentColor={RED} pageBreak />
-              {riskItems.length > 0
-                ? riskItems.map((r, i) => (
-                    <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: i < 2 ? RED : i < 4 ? AMBER : GRAY }}>
-                      {r.title ? (
-                        <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: i < 2 ? RED : NAVY, marginBottom: 3 }}>
-                          {r.title}
-                        </Text>
-                      ) : null}
-                      {r.body ? <Text style={S.para}>{r.body.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text> : null}
+              {/* Risk Heatmap — categorize by HIGH/MEDIUM/LOW probability parsed from body */}
+              {riskItems.length > 0 && (() => {
+                const categorized = riskItems.map(r => {
+                  const m = r.body.match(/\[\s*(HIGH|MEDIUM|LOW)\s*\]\s*probability/i);
+                  return { title: r.title, prob: m ? m[1].toUpperCase() : null };
+                });
+                const high   = categorized.filter(r => r.prob === "HIGH");
+                const medium = categorized.filter(r => r.prob === "MEDIUM");
+                const low    = categorized.filter(r => r.prob === "LOW");
+                const other  = categorized.filter(r => r.prob === null);
+                if (high.length + medium.length + low.length === 0) return null;
+                return (
+                  <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 14, backgroundColor: LGRAY }}>
+                    <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: DGRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>Risk Probability Heatmap</Text>
+                    <View style={{ flexDirection: "row", gap: 8 }}>
+                      {[
+                        { label: "HIGH", items: high,   color: RED,   bg: "#fff5f5" },
+                        { label: "MEDIUM", items: medium, color: AMBER, bg: "#fffbeb" },
+                        { label: "LOW", items: low,     color: GRAY,  bg: "#f9fafb" },
+                        ...(other.length > 0 ? [{ label: "UNRATED", items: other, color: GRAY, bg: "#f9fafb" }] : []),
+                      ].map(col => col.items.length === 0 ? null : (
+                        <View key={col.label} style={{ flex: col.items.length, backgroundColor: col.bg, borderRadius: 2, padding: 6, borderTopWidth: 2, borderTopColor: col.color }}>
+                          <Text style={{ fontSize: 5.5, fontFamily: "Helvetica-Bold", color: col.color, letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>{col.label} ({col.items.length})</Text>
+                          {col.items.map((r, j) => (
+                            <Text key={j} style={{ fontSize: 6.5, color: DGRAY, marginBottom: 2 }}>• {r.title || `Risk ${j+1}`}</Text>
+                          ))}
+                        </View>
+                      ))}
                     </View>
-                  ))
+                  </View>
+                );
+              })()}
+              {riskItems.length > 0
+                ? riskItems.map((r, i) => {
+                    const prob = r.body.match(/\[\s*(HIGH|MEDIUM|LOW)\s*\]\s*probability/i)?.[1]?.toUpperCase();
+                    const accentColor = prob === "HIGH" ? RED : prob === "MEDIUM" ? AMBER : GRAY;
+                    return (
+                      <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: accentColor }}>
+                        {r.title ? (
+                          <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: accentColor === RED ? RED : NAVY, marginBottom: 3 }}>
+                            {r.title}
+                          </Text>
+                        ) : null}
+                        {r.body ? <Text style={S.para}>{r.body.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text> : null}
+                      </View>
+                    );
+                  })
                 : <Bullets items={risks} color={RED} />
               }
             </>
