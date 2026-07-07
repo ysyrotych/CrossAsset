@@ -5,7 +5,7 @@ export const maxDuration = 120;
 
 const SECTION_PROMPTS: Record<string, string> = {
   executive_summary:
-    "Write a high-conviction executive summary AS A BULLET LIST — use '•' bullets, one per idea. Required bullets in order: (1) Open with the single most important thing an investor needs to know right now — cite the specific ROIC-WACC spread or FCF yield vs risk-free rate from computed metrics; (2) What the business does and WHY the model generates above-average returns (or why it doesn't); (3) Financial quality argument anchored in Rule of 40 score and Piotroski F-Score with specific numbers; (4) Valuation — current multiple vs what growth that implies; (5) Bull case in one sentence with a specific number; (6) Bear case in one sentence with a specific number; (7) Bottom line stance. No hedging on bullet 7 — it must be a clear directional view. Every bullet must contain at least one number.",
+    "Write a high-conviction executive summary AS A BULLET LIST — use '•' bullets, one per idea. Required bullets in order: (1) Open with the single most important thing an investor needs to know right now — cite the specific ROIC-WACC spread or FCF yield vs risk-free rate from COMPUTED QUALITY METRICS; (2) What the business does and WHY the model generates above-average returns (or why it doesn't) — name the specific structural advantage; (3) Financial quality argument: FCF margin trajectory, OCF/NI earnings quality ratio, and operating leverage evidence with specific dollar amounts from HISTORICAL TRENDS; (4) Valuation — NTM multiple from ANALYST FORWARD ESTIMATES vs what revenue growth and margin that embeds; (5) Bull case in one sentence with a specific price target and the key catalyst; (6) Bear case in one sentence with a specific downside number and what triggers it; (7) Bottom line stance — explicit BUY/HOLD/SELL with a one-year price target. No hedging on bullet 7. Every bullet must contain at least one number.",
 
   company_snapshot:
     "Write a company snapshot as a PIPE-DELIMITED TABLE with rows in this format: 'Field | Value'. Required rows: Ticker, Company, Sector/Industry, Headquarters, Founded/IPO, CEO (name + years in role), Employees, Business Model (2-3 words), Primary Revenue Drivers, Top Customers / Markets, Geographic Mix, Key Products/Services, Investment Frame (the single most important question for this stock right now). Each value should be specific and data-driven — never 'N/A' if you can derive it. The Investment Frame row is the most important — it should pose the exact analytical question that determines whether the stock works.",
@@ -35,10 +35,10 @@ const SECTION_PROMPTS: Record<string, string> = {
     "Write a structured news flow analysis using EXACTLY these 5 numbered headers in order:\n1. EVENTS SCORECARD — tally the news by category (Earnings X, Analyst Actions X, Regulatory X, etc.), identify the dominant theme, and rate overall news flow as [BULLISH/BEARISH/MIXED] with a one-sentence conviction statement.\n2. SENTIMENT TRAJECTORY — how has market narrative shifted in the last 30 days vs prior 60? Reference specific stock price reactions to headline events (use the stock_change % where provided). Label the pattern: [Cluster Break / Deterioration / Recovery / Debate / Normal].\n3. ANALYST POSITIONING — what are sell-side analysts doing (upgrades/downgrades/initiations)? Where is the consensus debate concentrated? Name specific firms if visible in the data.\n4. WHAT'S PRICED IN — based on stock reactions, what does the market appear to have priced in already? What appears NOT priced in that could be a catalyst? Start with: 'The market appears to have already priced in...' and then 'What appears NOT yet priced in is...'\n5. NEAR-TERM CATALYSTS — list 3 specific upcoming catalysts with format: 1. [Catalyst name] | Timing estimate | Bull outcome vs Bear outcome.\nEvery section must reference specific headlines with dates.",
 
   investment_thesis:
-    "Write a bull/bear investment thesis. BULL CASE: 4-5 specific bullets — each must name a catalyst, a timeline, and a specific metric that would confirm the thesis. End with an explicit price target showing the math. BEAR CASE: 4-5 specific bullets — each must name what specifically breaks, the magnitude of the downside, and the specific trigger. End with an explicit downside price target. Then write a 2-paragraph conviction statement: which case you find more compelling based on the data, and precisely what single data point would cause you to flip.",
+    "Write a bull/bear investment thesis using EXACTLY these ### headers in order:\n### BULL CASE\nWrite 4-5 specific bullets using '•' prefix — each must name a catalyst, a timeline, and a specific metric that would confirm the thesis. Final bullet: explicit price target with the math (NTM EV/EBITDA × estimate = equity value ÷ shares = $XX).\n### BEAR CASE\nWrite 4-5 specific bullets using '•' prefix — each must name what specifically breaks, the magnitude of the downside, and the specific trigger. Final bullet: explicit downside price target with the math.\n### CONVICTION STATEMENT\nTwo paragraphs: which case is more compelling and precisely what single data point would cause you to flip. Reference the ANALYST CONSENSUS and PEER COMPARISON data in your conviction statement.",
 
   key_metrics:
-    "Write a key metrics dashboard. For 7-8 KPIs: current value, the specific watch threshold that would change your thesis, and why this metric matters for THIS business model more than others. Include metrics specific to this company's business model — not generic EPS. Consider: revenue CAGR, gross margin trajectory, FCF conversion, Rule of 40, Net Debt/EBITDA, key operational KPI (ARR/NRR for SaaS, same-store sales for retail, book-to-bill for semiconductors, etc.). Format strictly as a table: KPI | Current Value | Watch Threshold | Why It Matters Here.",
+    "Write a key metrics dashboard for 7-8 KPIs specific to THIS business model. Current value, specific watch threshold that changes the thesis, and why this metric matters more than standard metrics for this company. NEVER include Rule of 40 or Piotroski F-Score — these are screener metrics, not PM-grade analytics. Use business-model-specific KPIs: for marketplaces use take rate / gross bookings growth; for SaaS use NRR / ARR; for financials use NIM / efficiency ratio; for industrials use book-to-bill. Always include: (1) Revenue CAGR trend, (2) Gross margin trajectory, (3) FCF conversion (OCF/NI), (4) ROIC/WACC spread, (5) CapEx intensity, (6) Net Debt/EBITDA, (7-8) business-model-specific KPIs. Format strictly as a table: KPI | Current Value | Watch Threshold | Why It Matters Here.",
 
   earnings_questions:
     "Write 10 institutional-grade questions for the next earnings call. Use the EARNINGS SURPRISE HISTORY to probe guidance credibility — note specific quarters where beats/misses occurred. Questions must probe specific inconsistencies in the data, test management credibility on guidance numbers, or seek clarification on unusual accounting items. Phrase each question as if you've read the last 4 transcripts and noticed something specific. No softballs. Avoid generic questions about 'the macro environment' or 'competitive dynamics.'"
@@ -98,7 +98,6 @@ ROIC vs WACC: ${roicWaccSpread != null ? `${roicWaccSpread >= 0 ? "+" : ""}${roi
 FCF Yield: ${fcfYield != null ? `${fcfYield.toFixed(1)}% vs 3.5% RF (ERP: ${fcfYieldErp != null ? (fcfYieldErp >= 0 ? "+" : "") + fcfYieldErp.toFixed(1) + "pp" : "N/A"})` : "N/A"}
 Earnings Quality (OCF/NI): ${ocfNiRatio != null ? `${ocfNiRatio.toFixed(2)}x — ${ocfNiRatio > 1.2 ? "HIGH QUALITY (OCF > earnings)" : ocfNiRatio > 0.8 ? "MODERATE" : "LOW QUALITY (earnings outrun cash)"}` : "N/A"}
 Net Debt / EBITDA: ${netDebtEbitda != null ? `${netDebtEbitda.toFixed(1)}x — ${netDebtEbitda < 0 ? "NET CASH" : netDebtEbitda < 1 ? "LOW LEVERAGE" : netDebtEbitda < 3 ? "MODERATE" : "ELEVATED"}` : "N/A"}
-Rule of 40: ${ruleOf40.toFixed(0)} (rev growth + FCF margin) — ${ruleOf40 >= 40 ? "ABOVE threshold (efficiency + growth)" : ruleOf40 >= 25 ? "BELOW threshold but approaching" : "WELL BELOW threshold — growth/profitability tension"}
 ` : "";
 
   const extBlock = fmpExtended ? `
@@ -233,16 +232,17 @@ ${(fmpExtended.news_combined as Array<{date?: string; title: string; summary?: s
   .join("\n")}
 ` : "";
 
-  const systemPrompt = `You are a senior equity research analyst at a top-tier institutional fund. You write with the precision of Goldman Sachs research and the directness of a hedge fund PM. Your analysis is used by professionals who read 50+ pages of research daily — they have zero patience for filler.
+  const systemPrompt = `You are a managing director-level portfolio manager at a $20B+ long/short equity fund. You write with the precision of Goldman Sachs equity research and the directness of a Citadel PM. Your work goes directly to a CIO who has read 50 pages of research today — every sentence must earn its place.
 
-Style rules (MANDATORY):
+Style rules (NON-NEGOTIABLE):
 - Every paragraph contains at least one specific dollar amount OR percentage OR named date
 - Active voice only: "Revenue grew 23%" not "Revenue was seen to grow"
-- Never use: "it is worth noting", "importantly", "going forward", "significant", "robust", "landscape", "headwinds/tailwinds", "value creation", "synergies", "leverage the", "in the coming quarters"
+- Never use these words: "it is worth noting", "importantly", "going forward", "significant", "robust", "landscape", "headwinds/tailwinds", "value creation", "synergies", "leverage the", "in the coming quarters", "Rule of 40", "Piotroski"
 - Name specific products, segments, competitors, and customers — no generic references
 - If you make a directional claim, back it with a number within the same sentence
-- Write for someone who already knows what ${ticker} does — skip the obvious
-- Target length: ${wordTarget} words — if you hit the floor, stop. Don't pad.`;
+- ZERO REPETITION: Each section covers new ground. If ROIC/WACC spread has been stated once, do not restate it — reference it briefly and move on
+- Write for someone who already knows what ${ticker} does — skip the obvious setup
+- Target length: ${wordTarget} words — stop at the floor, do not pad`;
 
   const userPrompt = `Write the "${sectionTitle}" section for ${ticker} (${companyName}).
 

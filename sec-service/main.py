@@ -368,13 +368,13 @@ def get_fmp_financials(ticker: str) -> dict:
                 km = pd.get("km", {})
                 pr = pd.get("pr", {})
                 if km or pr:
-                    pe    = _peer_val(km, "peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio")
-                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "enterpriseValueMultiple")
-                    p_fcf = _peer_val(km, "pfcfRatio", "priceToFreeCashFlowsRatio", "priceToFreeCashFlow")
-                    roic  = _peer_val(km, "roic", "returnOnInvestedCapital")
-                    npm   = _peer_val(km, "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage")
-                    rev_g = _peer_val(km, "revenueGrowth", "revenuePerShareGrowth")
-                    gpm   = _peer_val(km, "grossProfitMargin", "grossProfitRatio", "grossProfitMarginTTM")
+                    pe    = _peer_val(km, "peRatioTTM", "peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio")
+                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDATTM", "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "enterpriseValueMultiple")
+                    p_fcf = _peer_val(km, "pfcfRatioTTM", "pfcfRatio", "priceToFreeCashFlowsRatio", "priceToFreeCashFlow")
+                    roic  = _peer_val(km, "roicTTM", "roic", "returnOnInvestedCapital")
+                    npm   = _peer_val(km, "netProfitMarginTTM", "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage")
+                    rev_g = _peer_val(km, "revenueGrowthTTM", "revenueGrowth", "revenuePerShareGrowth")
+                    gpm   = _peer_val(km, "grossProfitMarginTTM", "grossProfitMargin", "grossProfitRatio")
                     rpe   = _peer_val(km, "revenuePerEmployee")
                     mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
                     # Fallback: compute PE from marketCap / netIncome if km doesn't have it
@@ -395,7 +395,7 @@ def get_fmp_financials(ticker: str) -> dict:
                         "gross_margin": round(gpm * 100, 1) if gpm is not None else None,
                         "rev_per_emp":  round(rpe / 1000, 0) if rpe is not None else None,  # in $K
                         "market_cap":   mc,
-                        "rev_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
+                        "revenue_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
                     })
 
         # ── yfinance peer fallback when FMP returns no peers ─────────────────
@@ -437,7 +437,7 @@ def get_fmp_financials(ticker: str) -> dict:
                             "gross_margin": round(gpm * 100, 1) if gpm else None,
                             "rev_per_emp":  rpe,
                             "market_cap":   mc,
-                            "rev_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
+                            "revenue_growth":   round(rev_g * 100, 1) if rev_g is not None else None,
                         }
                     except Exception as e:
                         print(f"yfinance peer error for {sym}: {e}")
@@ -907,7 +907,7 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
         for p in growth_list[:6]:
             gh.append({
                 "date": p.get("date","")[:10],
-                "rev_growth": round((safe_float(p.get("revenueGrowth")) or 0) * 100, 1),
+                "revenue_growth": round((safe_float(p.get("revenueGrowth")) or 0) * 100, 1),
                 "eps_growth": round((safe_float(p.get("epsgrowth")) or 0) * 100, 1),
                 "fcf_growth": round((safe_float(p.get("freeCashFlowGrowth")) or 0) * 100, 1),
             })
@@ -934,7 +934,7 @@ def build_from_fmp(fmp: dict) -> tuple[dict, dict, dict, dict, str, dict, str]:
                 return 0.0
             gh_computed.append({
                 "date": dt,
-                "rev_growth": _g(rev_c, rev_p),
+                "revenue_growth": _g(rev_c, rev_p),
                 "eps_growth": _g(eps_c, eps_p),
                 "fcf_growth": _g(fcf_c, fcf_p),
             })

@@ -602,12 +602,20 @@ function Bullets({ items, color }: { items: string[]; color?: string }) {
   );
 }
 function SnapshotTable({ rows }: { rows: { label: string; value: string }[] }) {
+  const pairs: { label: string; value: string }[][] = [];
+  for (let i = 0; i < rows.length; i += 2) {
+    pairs.push(rows[i + 1] ? [rows[i], rows[i + 1]] : [rows[i]]);
+  }
   return (
-    <View style={S.snapshotGrid}>
-      {rows.map((r, i) => (
-        <View key={i} style={S.snapshotCell}>
-          <Text style={S.snapshotLabel}>{r.label}</Text>
-          <Text style={S.snapshotValue}>{r.value}</Text>
+    <View style={{ marginBottom: 16 }}>
+      {pairs.map((pair, pi) => (
+        <View key={pi} style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 22 }}>
+          {pair.map((r, ri) => (
+            <View key={ri} style={{ flex: 1, flexDirection: "row", paddingVertical: 5, paddingRight: ri === 0 && pair.length > 1 ? 10 : 0, paddingLeft: ri === 1 ? 10 : 0, borderLeftWidth: ri === 1 ? 1 : 0, borderLeftColor: BORDER }}>
+              <Text style={{ width: "48%", fontSize: 7.5, color: GRAY, lineHeight: 1.4 }}>{r.label}</Text>
+              <Text style={{ flex: 1, fontSize: 7.5, color: NAVY, fontFamily: "Helvetica-Bold", textAlign: "right", lineHeight: 1.4 }}>{r.value}</Text>
+            </View>
+          ))}
         </View>
       ))}
     </View>
@@ -873,36 +881,34 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             );
           })()}
 
-          {/* Investment Signal Cards — Rule of 40 / Leverage / Piotroski */}
+          {/* Incremental margin / leverage signal row */}
           {(() => {
-            const revGrowth = facts.revenue_growth ?? 0;
-            const fcfMgn = facts.free_cash_flow != null && facts.revenue != null && facts.revenue !== 0
-              ? (facts.free_cash_flow / facts.revenue) * 100 : 0;
-            const ruleOf40 = revGrowth + fcfMgn;
-            const netDebtEbitda = facts.net_debt != null && facts.ebitda != null && facts.ebitda !== 0
-              ? facts.net_debt / facts.ebitda : null;
-            const pRow = snapshotRows.find(r => r.label.toLowerCase().includes("piotroski"));
-            const pScore = pRow ? parseInt(pRow.value.match(/\d+/)?.[0] ?? "") : null;
+            const nd = facts.net_debt; const eb = facts.ebitda;
+            const ndEb = nd != null && eb != null && eb !== 0 ? nd / eb : null;
+            const roicSpread2 = facts.roic != null ? facts.roic - 9 : null;
+            const fcfConv = facts.operating_cf && facts.net_income && facts.net_income !== 0
+              ? facts.operating_cf / facts.net_income : null;
             const signals = [
               {
-                label: "Rule of 40", value: `${ruleOf40.toFixed(0)}`,
-                badge: ruleOf40 >= 40 ? "PASS" : ruleOf40 >= 25 ? "NEAR" : "FAIL",
-                color: ruleOf40 >= 40 ? GREEN : ruleOf40 >= 25 ? AMBER : RED,
-                desc: "Rev growth + FCF margin. ≥40 target",
+                label: "ROIC / WACC Spread",
+                value: roicSpread2 != null ? `${roicSpread2 >= 0 ? "+" : ""}${roicSpread2.toFixed(1)}pp` : "—",
+                badge: roicSpread2 == null ? "N/A" : roicSpread2 >= 10 ? "STRONG" : roicSpread2 >= 0 ? "POSITIVE" : "NEGATIVE",
+                color: roicSpread2 == null ? GRAY : roicSpread2 >= 10 ? GREEN : roicSpread2 >= 0 ? AMBER : RED,
+                desc: facts.roic != null ? `${facts.roic.toFixed(1)}% ROIC vs 9% WACC hurdle` : "Capital return vs cost",
               },
               {
                 label: "Net Debt / EBITDA",
-                value: netDebtEbitda != null ? `${netDebtEbitda.toFixed(1)}x` : "—",
-                badge: netDebtEbitda == null ? "N/A" : netDebtEbitda < 0 ? "NET CASH" : netDebtEbitda < 1 ? "LOW" : netDebtEbitda < 3 ? "MOD" : "HIGH",
-                color: netDebtEbitda == null ? GRAY : netDebtEbitda < 1 ? GREEN : netDebtEbitda < 3 ? AMBER : RED,
-                desc: "Financial leverage. <1x conservative",
+                value: ndEb != null ? (ndEb < 0 ? "Net Cash" : `${ndEb.toFixed(1)}x`) : "—",
+                badge: ndEb == null ? "N/A" : ndEb < 0 ? "NET CASH" : ndEb < 1 ? "LOW" : ndEb < 3 ? "MOD" : "HIGH",
+                color: ndEb == null ? GRAY : ndEb < 1 ? GREEN : ndEb < 3 ? AMBER : RED,
+                desc: "Financial leverage vs operating earnings",
               },
               {
-                label: "Piotroski F-Score",
-                value: pScore != null ? `${pScore}/9` : "—",
-                badge: pScore == null ? "N/A" : pScore >= 7 ? "STRONG" : pScore >= 4 ? "MOD" : "WEAK",
-                color: pScore == null ? GRAY : pScore >= 7 ? GREEN : pScore >= 4 ? AMBER : RED,
-                desc: "9-factor financial health. ≥7 strong",
+                label: "Earnings Quality",
+                value: fcfConv != null ? `${fcfConv.toFixed(2)}x` : "—",
+                badge: fcfConv == null ? "N/A" : fcfConv > 1.1 ? "HIGH" : fcfConv > 0.8 ? "MOD" : "LOW",
+                color: fcfConv == null ? GRAY : fcfConv > 1.1 ? GREEN : fcfConv > 0.8 ? AMBER : RED,
+                desc: "OCF/Net Income — cash backing reported earnings",
               },
             ];
             return (
@@ -1419,13 +1425,32 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           <View style={S.twoCols}>
             <View style={S.col}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
-              <Bullets items={bull} color={GREEN} />
+              {bull.length > 0
+                ? <Bullets items={bull} color={GREEN} />
+                : <Text style={[S.para, { color: GRAY, fontFamily: "Helvetica-Oblique" }]}>See investment thesis content above</Text>
+              }
             </View>
             <View style={S.col}>
               <Text style={S.colHeaderBear}>Bear Case</Text>
-              <Bullets items={bear} color={RED} />
+              {bear.length > 0
+                ? <Bullets items={bear} color={RED} />
+                : <Text style={[S.para, { color: GRAY, fontFamily: "Helvetica-Oblique" }]}>See investment thesis content above</Text>
+              }
             </View>
           </View>
+          {/* Conviction statement */}
+          {(() => {
+            const conviction = parseParas(secs["CONVICTION_STATEMENT"] ?? "");
+            if (conviction.length > 0) {
+              return (
+                <View style={[S.noteBox, { marginTop: 10 }]}>
+                  <Text style={S.noteLabel}>Analyst Conviction</Text>
+                  {conviction.map((p, i) => <Text key={i} style={S.noteText}>{p.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>)}
+                </View>
+              );
+            }
+            return null;
+          })()}
           {note.length > 0 && (
             <View style={S.noteBox}>
               <Text style={S.noteLabel}>Analyst Note</Text>
