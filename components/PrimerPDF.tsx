@@ -1134,7 +1134,20 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               </View>
             )}
             {/* Date */}
-            <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 6.5, marginTop: 12, textAlign: "right" }}>{headerDate} · Edgewood Management · For institutional use only</Text>
+            <Text style={{ color: "rgba(255,255,255,0.35)", fontSize: 6.5, marginTop: 12, textAlign: "right" }}>{headerDate} · Edgewood Management</Text>
+          </View>
+        </View>
+
+        {/* Institutional Disclaimer Bar */}
+        <View style={{ backgroundColor: "#1a1a1a", paddingHorizontal: 36, paddingVertical: 7, flexDirection: "row", alignItems: "center", gap: 8 }}>
+          <View style={{ width: 3, height: 26, backgroundColor: "#c9a227", borderRadius: 1, flexShrink: 0 }} />
+          <View style={{ flex: 1 }}>
+            <Text style={{ fontSize: 6, fontFamily: "Helvetica-Bold", color: "#c9a227", letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 2 }}>
+              STRICTLY CONFIDENTIAL — FOR INSTITUTIONAL USE ONLY
+            </Text>
+            <Text style={{ fontSize: 5.5, color: "rgba(255,255,255,0.5)", lineHeight: 1.5 }}>
+              {`This document is prepared by Edgewood Management and is intended solely for institutional investors. It does not constitute investment advice, a solicitation, or an offer to buy or sell any security. Past performance is not indicative of future results. All data is sourced from public filings and third-party data providers; accuracy cannot be guaranteed. Not for redistribution.`}
+            </Text>
           </View>
         </View>
 

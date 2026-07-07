@@ -124,8 +124,8 @@ CEO: ${fmpExtended.ceo ?? "N/A"} | Employees: ${fmpExtended.employees != null ? 
 Analyst Rating: ${fmpExtended.fmp_rating ?? "N/A"} | Description: ${typeof fmpExtended.description === "string" ? fmpExtended.description.slice(0, 300) : "N/A"}
 ` : "";
 
-  // Insider trading block for management/governance sections
-  const insiderSections = ["management_governance", "management_commentary", "key_risks"];
+  // Insider trading block for management/governance sections and thesis sections
+  const insiderSections = ["management_governance", "management_commentary", "key_risks", "executive_summary", "investment_thesis"];
   const insiderBlock = insiderSections.includes(sectionId) && Array.isArray(fmpExtended?.insider_trading) && fmpExtended.insider_trading.length > 0
     ? `\nINSIDER TRADING (last ${Math.min((fmpExtended.insider_trading as any[]).length, 10)} transactions):
 ${(fmpExtended.insider_trading as Array<{name?: string; title?: string; transaction?: string; shares?: number; price?: number; value?: number; date?: string}>)
@@ -251,11 +251,13 @@ ${Object.entries(history).map(([metric, years]) => {
 
   // Include news for sections that benefit from it
   const newsRelated = ["executive_summary", "news_analysis", "key_risks", "investment_thesis", "management_commentary", "industry_analysis"];
+  // Give news_analysis more items so it can do a proper event scorecard
+  const newsLimit = sectionId === "news_analysis" ? 30 : 15;
   const newsBlock = newsRelated.includes(sectionId) && fmpExtended?.news_combined
     ? `
 RECENT NEWS (${(fmpExtended.news_combined as unknown[]).length} items, use for this section):
 ${(fmpExtended.news_combined as Array<{date?: string; title: string; summary?: string; category?: string; stock_change?: number | string | null}>)
-  .slice(0, 15)
+  .slice(0, newsLimit)
   .map(n => {
     const sc = n.stock_change;
     let scStr = "";
