@@ -571,7 +571,20 @@ function BuildStage({
   function buildDocumentContext(upToId: string): string {
     const relevant = sections.filter(s => s.included && s.generated && s.content && s.id !== upToId);
     if (relevant.length === 0) return "";
-    return relevant.map(s => `## ${s.title}\n${s.content.slice(0, 1000)}${s.content.length > 1000 ? "…" : ""}`).join("\n\n");
+    // Extract key numbers already cited to prevent repetition — pass short summaries, not full text
+    const snippets = relevant.map(s => {
+      const text = s.content;
+      // Pull out any dollar amounts, percentages, and named metrics cited
+      const dollars = (text.match(/\$[\d,.]+[BMK]?/g) ?? []).slice(0, 4);
+      const pcts    = (text.match(/[\d.]+%/g) ?? []).slice(0, 4);
+      const bullets = text.split("\n").filter(l => l.trim().startsWith("•")).slice(0, 3).map(l => l.trim().slice(0, 80));
+      const citedNumbers = [...dollars, ...pcts].join(", ");
+      const preview = bullets.length > 0
+        ? bullets.join(" | ")
+        : text.slice(0, 200).replace(/\n/g, " ").trim();
+      return `## ${s.title} [already written — do NOT repeat these facts: ${citedNumbers}]\n${preview}`;
+    });
+    return snippets.join("\n\n");
   }
 
   async function generateSection(id: string) {

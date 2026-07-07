@@ -20,7 +20,7 @@ const SECTION_PROMPTS: Record<string, string> = {
     "Write a rigorous financial analysis using EXACTLY these ### subsection headers in order:\n### Revenue & Profitability Trends\nRevenue trajectory using the CAGR from HISTORICAL TRENDS — is it accelerating or decelerating quarter-to-quarter? Gross margin story: is pricing power growing or eroding YoY? Operating leverage: explicitly compare revenue growth % to OpEx growth % from historical data.\n### Balance Sheet & Capital Allocation\nNet Debt/EBITDA ratio from computed metrics. Debt maturity profile if discernible. Cash generation vs debt service coverage. Capital allocation priorities (buybacks, M&A, dividends) with specific dollar amounts from the data.\n### Free Cash Flow & CapEx\nFCF conversion: what % of EBITDA converts to FCF and why. CapEx intensity trend. What is maintenance vs growth CapEx (estimate if necessary). FCF per share trajectory.\n### Quality of Earnings & Cash Conversion\nOCF/Net Income ratio from computed metrics — characterize HIGH/MODERATE/LOW. Are SBC charges inflating reported earnings? Accrual ratio signal. Every paragraph in all subsections must cite at least one specific dollar amount and one percentage.",
 
   valuation:
-    "Write a valuation framework that shows explicit math. REQUIRED: (1) NTM MULTIPLES FIRST — use ANALYST FORWARD ESTIMATES to compute NTM EV/EBITDA and NTM P/E (show the math: EV ÷ NTM EBITDA estimate = Xx); compare vs the 3-year LTM average to establish premium/discount. (2) PEER BENCHMARKING: use PEER COMPARISON data to show how this company's P/E, EV/EBITDA, and gross margin compare to each named peer — explicitly justify or challenge the premium/discount. (3) What the current NTM multiple mathematically implies about expected revenue growth — show the algebra: if the market pays Xx EV/EBITDA, what EBITDA margin and revenue growth does that embed? (4) Three explicit price target scenarios in this format: Bear Case ($XX): NTM revenue $XB × X% EBITDA margin = $XB EBITDA × Xx EV/EBITDA − $XM net debt ÷ XM shares = $XX. Base Case: same format. Bull Case: same format. (5) Conclude with which scenario you weight most heavily and the exact metric that would cause you to shift.",
+    "Write a valuation framework using EXACTLY these ### subsection headers in order:\n### Current Valuation vs. Historical Range\nStart with the NTM multiples derived from ANALYST FORWARD ESTIMATES: show the math explicitly (EV ÷ NTM EBITDA = Xx; Stock ÷ NTM EPS = Xx). Compare these NTM multiples to the 3-year LTM average to quantify whether the stock trades at a premium or discount and what justifies it. State whether you view current valuation as cheap, fair, or expensive relative to history.\n### Peer Valuation Context\nUse PEER COMPARISON data to benchmark this company's P/E, EV/EBITDA, P/FCF, and gross margin against each named peer. For every peer, explicitly state whether it trades at a premium or discount to the subject company AND why the market assigns that spread. Conclude with a 1-sentence verdict on whether the subject's premium/discount is warranted.\n### Implied Scenarios\nThree explicit price target scenarios — use EXACTLY this format for each:\nBear Case ($XX): [NTM revenue estimate × EBITDA margin = EBITDA × EV/EBITDA multiple − net debt ÷ shares = $XX]. [Narrative: what breaks.]\nBase Case ($XX): [same math structure]. [Narrative: what happens.]\nBull Case ($XX): [same math structure]. [Narrative: what accelerates.]\nConclude with which scenario you weight most heavily (assign a probability) and the exact single metric that would cause you to upgrade or downgrade your view.",
 
   management_commentary:
     "Write management commentary using EXACTLY these ### subsection headers:\n### Earnings Call Highlights\nLead with the earnings beat/miss rate from EARNINGS SURPRISE HISTORY — quote the exact percentages. Name 2-3 specific things management said on the most recent call that moved the stock. Quote revenue or EPS guidance numbers directly. Flag any tone shift vs the prior quarter.\n### Forward Guidance & Outlook\nWhat management is guiding for next quarter and FY — use exact dollar amounts if available. What are the sell-side debate points heading into the next print based on RECENT NEWS? What did consensus miss last time? One clear sentence on whether guidance is conservative, in-line, or aggressive based on the beat rate.",
@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     thesis, tone, length, facts, history, fmpExtended, documentContext,
   } = await req.json();
 
-  const wordTarget = length === "brief" ? "350-450" : length === "comprehensive" ? "750-950" : "550-700";
+  const wordTarget = length === "brief" ? "450-600" : length === "comprehensive" ? "900-1200" : "650-850";
   const sectionGuidance = SECTION_PROMPTS[sectionId] ?? sectionDescription ?? `Write the ${sectionTitle} section.`;
 
   const fmtV = (v: number | null | undefined) => {
@@ -268,7 +268,7 @@ FORMATTING:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 3000,
+      max_tokens: 4000,
       stream: true,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],

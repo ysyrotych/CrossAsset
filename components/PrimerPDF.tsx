@@ -343,7 +343,7 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
 
   return (
     <View style={{ marginBottom: 2 }}>
-      <Text style={S.chartLabel}>Revenue (■) vs Free Cash Flow (■) — 5-Year</Text>
+      <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
       <Svg width={CHART_W} height={CHART_H + LABEL_H + 2}>
         <Line x1={0} y1={PLOT_H} x2={CHART_W} y2={PLOT_H} stroke={BORDER} strokeWidth={0.5} />
         {years.map((yr, i) => {
@@ -660,6 +660,17 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const execBullets  = parseBullets(secs["EXECUTIVE_SUMMARY"] ?? "");
   const snapshotRows = parseSnapshotTable(secs["COMPANY_SNAPSHOT"] ?? "");
 
+  const execBulletsText = execBullets.join(" ");
+  const ratingMatch = execBulletsText.match(/\b(STRONG BUY|STRONG SELL|OUTPERFORM|UNDERPERFORM|BUY|SELL|HOLD|NEUTRAL)\b/i);
+  const ratingText  = ratingMatch ? ratingMatch[1].toUpperCase() : null;
+  const ratingColor = ratingText
+    ? (["STRONG BUY","BUY","OUTPERFORM"].includes(ratingText) ? GREEN
+      : ["STRONG SELL","SELL","UNDERPERFORM"].includes(ratingText) ? RED : AMBER)
+    : null;
+  const ptMatch = execBulletsText.match(/(?:(?:12[- ]?month|one[- ]?year|1[- ]?yr?)[- ]?(?:price )?target|price target|target price)[^\$]{0,20}\$\s*(\d+(?:\.\d{1,2})?)/i)
+    ?? execBulletsText.match(/(?:target)[^\$]{0,10}\$\s*(\d+(?:\.\d{1,2})?)/i);
+  const priceTarget = ptMatch ? `$${Math.round(parseFloat(ptMatch[1]))}` : null;
+
   const bg   = parseParas(secs["COMPANY_BACKGROUND"] ?? "");
   const pp   = parseParas(secs["PRODUCT_PORTFOLIO_&_REVENUE_MIX"] ?? "");
   const cust = parseParas(secs["CUSTOMERS,_END_MARKETS_&_GEOGRAPHIC_EXPOSURE"] ?? "");
@@ -773,6 +784,22 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <Text style={{ color: "rgba(255,255,255,0.8)", fontSize: 8.5, lineHeight: 1.5, borderLeftWidth: 2, borderLeftColor: ACCENT.primary, paddingLeft: 8, marginBottom: 10 }}>
                 {execTagline}
               </Text>
+            )}
+            {/* Rating badge */}
+            {(ratingText || priceTarget) && (
+              <View style={{ flexDirection: "row", gap: 8, marginBottom: 10 }}>
+                {ratingText && (
+                  <View style={{ backgroundColor: ratingColor ?? AMBER, paddingHorizontal: 14, paddingVertical: 5, borderRadius: 2 }}>
+                    <Text style={{ color: "white", fontSize: 10, fontFamily: "Helvetica-Bold", letterSpacing: 1 }}>{ratingText}</Text>
+                  </View>
+                )}
+                {priceTarget && (
+                  <View style={{ backgroundColor: "rgba(255,255,255,0.12)", paddingHorizontal: 12, paddingVertical: 5, borderRadius: 2, borderWidth: 1, borderColor: "rgba(255,255,255,0.25)" }}>
+                    <Text style={{ color: "rgba(255,255,255,0.55)", fontSize: 6, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 1 }}>12M Price Target</Text>
+                    <Text style={{ color: "white", fontSize: 11, fontFamily: "Helvetica-Bold" }}>{priceTarget}</Text>
+                  </View>
+                )}
+              </View>
             )}
             {/* Key stat chips */}
             <View style={S.coverChips}>
@@ -1072,6 +1099,8 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 }
                 return null;
               })()}
+              {showChart("revenue_fcf") && <RevenueBarChart history={history} />}
+              {showChart("margins") && <MarginLineChart history={history} />}
             </>
           )}
           {bal.length > 0 && (
@@ -1097,7 +1126,13 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               })()}
             </>
           )}
-          {fcf.length > 0 && <><SubSectionHdr title="Free Cash Flow & CapEx" />{fcf.map((p,i) => <Para key={i} text={p} />)}</>}
+          {fcf.length > 0 && (
+            <>
+              <SubSectionHdr title="Free Cash Flow & CapEx" />
+              {fcf.map((p,i) => <Para key={i} text={p} />)}
+              {showChart("eps") && <EpsBarChart history={history} />}
+            </>
+          )}
           {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}
           {qoe.length > 0 && <><SubSectionHdr title="Quality of Earnings & Cash Conversion" />{qoe.map((p,i) => <Para key={i} text={p} />)}</>}
 
