@@ -2039,6 +2039,67 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* XI. Investment Thesis */}
           <SectionHdr title="XI. Investment Thesis" accentColor={ACCENT.primary} pageBreak />
+          {/* Probability-weighted return bar */}
+          {(() => {
+            const convText = secs["CONVICTION_STATEMENT"] ?? itText;
+            // Parse: Bull X% / Base X% / Bear X% or Bull: X% / Base: X% / Bear: X%
+            const bullPctM = convText.match(/bull\s*:?\s*(\d{1,2})%/i);
+            const basePctM = convText.match(/base\s*:?\s*(\d{1,2})%/i);
+            const bearPctM = convText.match(/bear\s*:?\s*(\d{1,2})%/i);
+            // Parse price targets from bull/bear bullets (last bullet has the math format)
+            const bullPT = (secs["BULL_CASE"] ?? itText).match(/\$\s*(\d{2,5}(?:\.\d{1,2})?)\s*(?:price target|PT|upside)/i)
+              ?? (secs["BULL_CASE"] ?? itText).match(/=\s*\$\s*(\d{2,5})/i);
+            const bearPT = (secs["BEAR_CASE"] ?? "").match(/\$\s*(\d{2,5}(?:\.\d{1,2})?)\s*(?:downside|price target)/i)
+              ?? (secs["BEAR_CASE"] ?? "").match(/=\s*\$\s*(\d{2,5})/i);
+            const bullWt = bullPctM ? parseInt(bullPctM[1]) : null;
+            const baseWt = basePctM ? parseInt(basePctM[1]) : null;
+            const bearWt = bearPctM ? parseInt(bearPctM[1]) : null;
+            const cur = facts.stock_price;
+            const bullPrice = bullPT ? parseFloat(bullPT[1]) : null;
+            const bearPrice = bearPT ? parseFloat(bearPT[1]) : null;
+            const basePrice = cur; // fallback to current if no base PT
+            if (!bullWt && !baseWt && !bearWt) return null;
+            const total = (bullWt ?? 0) + (baseWt ?? 0) + (bearWt ?? 0);
+            if (total === 0) return null;
+            const bullRet = bullPrice && cur ? ((bullPrice / cur) - 1) * 100 : null;
+            const bearRet = bearPrice && cur ? ((bearPrice / cur) - 1) * 100 : null;
+            const wtdReturn = (bullWt && bullRet != null ? bullWt * bullRet / 100 : 0)
+              + (bearWt && bearRet != null ? bearWt * bearRet / 100 : 0);
+            return (
+              <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 12, backgroundColor: LGRAY }}>
+                <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: DGRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>Scenario Probability Weights</Text>
+                {/* Probability bar */}
+                <View style={{ flexDirection: "row", height: 10, borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
+                  {bearWt ? <View style={{ flex: bearWt, backgroundColor: RED }} /> : null}
+                  {baseWt ? <View style={{ flex: baseWt, backgroundColor: AMBER }} /> : null}
+                  {bullWt ? <View style={{ flex: bullWt, backgroundColor: GREEN }} /> : null}
+                </View>
+                <View style={{ flexDirection: "row", gap: 12 }}>
+                  {bearWt ? <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: RED }} />
+                    <Text style={{ fontSize: 6.5, color: RED, fontFamily: "Helvetica-Bold" }}>Bear {bearWt}%</Text>
+                    {bearPrice ? <Text style={{ fontSize: 6, color: GRAY }}>{` ($${Math.round(bearPrice)})`}</Text> : null}
+                  </View> : null}
+                  {baseWt ? <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: AMBER }} />
+                    <Text style={{ fontSize: 6.5, color: AMBER, fontFamily: "Helvetica-Bold" }}>Base {baseWt}%</Text>
+                  </View> : null}
+                  {bullWt ? <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+                    <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: GREEN }} />
+                    <Text style={{ fontSize: 6.5, color: GREEN, fontFamily: "Helvetica-Bold" }}>Bull {bullWt}%</Text>
+                    {bullPrice ? <Text style={{ fontSize: 6, color: GRAY }}>{` ($${Math.round(bullPrice)})`}</Text> : null}
+                  </View> : null}
+                  {wtdReturn !== 0 && (
+                    <View style={{ marginLeft: "auto", backgroundColor: wtdReturn > 0 ? "#dcfce7" : "#fee2e2", paddingHorizontal: 8, paddingVertical: 3, borderRadius: 3 }}>
+                      <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: wtdReturn > 0 ? GREEN : RED }}>
+                        {`Wtd Return: ${wtdReturn >= 0 ? "+" : ""}${wtdReturn.toFixed(1)}%`}
+                      </Text>
+                    </View>
+                  )}
+                </View>
+              </View>
+            );
+          })()}
           {bull.length > 0 && (
             <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
