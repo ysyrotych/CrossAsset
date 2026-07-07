@@ -1481,6 +1481,40 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   </>
                 );
               })()}
+              {/* Forward Analyst Estimates Table */}
+              {Array.isArray(fmpExtended?.analyst_estimates) && (fmpExtended!.analyst_estimates as {date?: string; rev_avg?: number; eps_avg?: number; ebitda_avg?: number; num_analysts?: number}[]).length > 0 && (() => {
+                const ests = (fmpExtended!.analyst_estimates as {date?: string; rev_avg?: number; eps_avg?: number; ebitda_avg?: number; num_analysts?: number}[]).slice(0, 4);
+                const fmtE = (v?: number | null) => v == null ? "—" : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(2)}B` : Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(2)}`;
+                const ntm = ests[0];
+                const ntmEvEbitda = ntm?.ebitda_avg && facts.enterprise_value ? `${(facts.enterprise_value / ntm.ebitda_avg).toFixed(1)}x` : null;
+                const ntmPE = ntm?.eps_avg && facts.stock_price && ntm.eps_avg > 0 ? `${(facts.stock_price / ntm.eps_avg).toFixed(1)}x` : null;
+                return (
+                  <>
+                    <SubSectionHdr title="Sell-Side Forward Estimates (Consensus)" />
+                    <View style={S.table}>
+                      <View style={[S.tableHeader, { backgroundColor: NAVY2 }]}>
+                        {["Period", "Revenue Est.", "EPS Est.", "EBITDA Est.", "# Analysts"].map((h, hi) => (
+                          <Text key={h} style={[S.tableHeaderCell, { flex: hi === 0 ? 1.5 : 1, textAlign: hi === 0 ? "left" : "right" }]}>{h}</Text>
+                        ))}
+                      </View>
+                      {ests.map((e, ei) => (
+                        <View key={ei} style={[ei % 2 === 0 ? S.tableRow : S.tableRowAlt]}>
+                          <Text style={[S.tableCell, { flex: 1.5 }]}>{e.date ?? "—"}</Text>
+                          <Text style={[S.tableCellNum, { flex: 1 }]}>{fmtE(e.rev_avg)}</Text>
+                          <Text style={[S.tableCellNum, { flex: 1 }]}>{e.eps_avg != null ? `$${e.eps_avg.toFixed(2)}` : "—"}</Text>
+                          <Text style={[S.tableCellNum, { flex: 1 }]}>{fmtE(e.ebitda_avg)}</Text>
+                          <Text style={[S.tableCellNum, { flex: 1 }]}>{e.num_analysts != null ? Math.round(e.num_analysts) : "—"}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    {(ntmEvEbitda || ntmPE) && (
+                      <Text style={{ fontSize: 6.5, color: GRAY, marginTop: 3 }}>
+                        NTM implied: {ntmEvEbitda ? `EV/EBITDA ${ntmEvEbitda}` : ""}{ntmEvEbitda && ntmPE ? " · " : ""}{ntmPE ? `P/E ${ntmPE}` : ""}. Source: FMP consensus.
+                      </Text>
+                    )}
+                  </>
+                );
+              })()}
               {valPeer.length > 0 && <><SubSectionHdr title="Peer Valuation Context" />{valPeer.map((p,i) => <Para key={i} text={p} />)}</>}
               {valScen.length > 0 && (
                 <>
