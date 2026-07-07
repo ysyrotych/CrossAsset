@@ -624,6 +624,12 @@ function PageFooter({ ticker, company, date }: { ticker: string; company: string
 
 // ── Main Document ─────────────────────────────────────────────────────────────
 
+interface PeerRow {
+  symbol?: string; name?: string; market_cap?: number;
+  pe?: number; ev_ebitda?: number; p_fcf?: number;
+  gross_margin?: number; roic?: number; revenue_growth?: number;
+}
+
 interface PrimerPDFProps {
   ticker: string;
   companyName: string;
@@ -634,11 +640,12 @@ interface PrimerPDFProps {
   facts: Record<string, number>;
   sector?: string;
   selectedCharts?: string[];
+  fmpExtended?: Record<string, unknown>;
 }
 
 const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"];
 
-export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts }: PrimerPDFProps) {
+export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts, fmpExtended }: PrimerPDFProps) {
   const showChart = (id: string) => !selectedCharts || selectedCharts.length === 0 || selectedCharts.includes(id);
   const secs = parsePrimerSections(content);
 
@@ -1089,10 +1096,60 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {qoe.length > 0 && <><SubSectionHdr title="Quality of Earnings & Cash Conversion" />{qoe.map((p,i) => <Para key={i} text={p} />)}</>}
 
           {/* VI. Valuation Framework */}
-          {(valCurrHist.length > 0 || valPeer.length > 0 || valScen.length > 0) && (
+          {(valCurrHist.length > 0 || valPeer.length > 0 || valScen.length > 0 || (Array.isArray(fmpExtended?.peer_comparison) && (fmpExtended!.peer_comparison as PeerRow[]).length > 0)) && (
             <>
               <SectionHdr title="VI. Valuation Framework" accentColor={ACCENT.primary} pageBreak />
               {valCurrHist.length > 0 && <><SubSectionHdr title="Current Valuation vs. Historical Range" />{valCurrHist.map((p,i) => <Para key={i} text={p} />)}</>}
+              {/* Peer comparison table — rendered from fmpExtended data, not from LLM text */}
+              {Array.isArray(fmpExtended?.peer_comparison) && (fmpExtended!.peer_comparison as PeerRow[]).length > 0 && (() => {
+                const peers = fmpExtended!.peer_comparison as PeerRow[];
+                const fmtX = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}x`;
+                const fmtPct3 = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
+                const subjectPe = facts.pe_ratio; const subjectEv = facts.ev_ebitda;
+                return (
+                  <>
+                    <SubSectionHdr title="Peer Valuation Benchmarking" />
+                    <View style={S.table}>
+                      <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
+                        {[["Company", "22%"], ["Mkt Cap", "12%"], ["P/E", "9%"], ["EV/EBITDA", "11%"], ["P/FCF", "9%"], ["Gross Mgn", "11%"], ["ROIC", "9%"], ["Rev Gr", "9%"]].map(([h, w]) => (
+                          <Text key={h} style={[S.tableHeaderCell, { width: w, textAlign: h === "Company" ? "left" : "right" }]}>{h}</Text>
+                        ))}
+                      </View>
+                      {/* Subject company row */}
+                      {(() => {
+                        const fcfYld2 = facts.free_cash_flow && facts.market_cap ? facts.market_cap / facts.free_cash_flow : null;
+                        return (
+                          <View style={[S.tableRow, { backgroundColor: ACCENT.light }]}>
+                            <Text style={[S.tableCellBold, { width: "22%", color: ACCENT.primary }]}>{ticker} ◀</Text>
+                            <Text style={[S.tableCellNum, { width: "12%", fontFamily: "Helvetica-Bold", color: NAVY }]}>
+                              {facts.market_cap ? `$${(facts.market_cap/1e9).toFixed(1)}B` : "—"}
+                            </Text>
+                            <Text style={[S.tableCellNum, { width: "9%", fontFamily: "Helvetica-Bold" }]}>{fmtX(subjectPe)}</Text>
+                            <Text style={[S.tableCellNum, { width: "11%", fontFamily: "Helvetica-Bold" }]}>{fmtX(subjectEv)}</Text>
+                            <Text style={[S.tableCellNum, { width: "9%", fontFamily: "Helvetica-Bold" }]}>{fmtX(fcfYld2)}</Text>
+                            <Text style={[S.tableCellNum, { width: "11%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.gross_margin)}</Text>
+                            <Text style={[S.tableCellNum, { width: "9%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.roic)}</Text>
+                            <Text style={[S.tableCellNum, { width: "9%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.revenue_growth)}</Text>
+                          </View>
+                        );
+                      })()}
+                      {peers.slice(0, 6).map((p, i) => (
+                        <View key={i} style={i % 2 === 0 ? S.tableRow : S.tableRowAlt}>
+                          <Text style={[S.tableCell, { width: "22%" }]}>{p.symbol} {p.name ? `(${p.name.slice(0,12)})` : ""}</Text>
+                          <Text style={[S.tableCellNum, { width: "12%" }]}>{p.market_cap ? `$${(p.market_cap/1e9).toFixed(1)}B` : "—"}</Text>
+                          <Text style={[S.tableCellNum, { width: "9%", color: subjectPe && p.pe ? (p.pe < subjectPe ? GREEN : RED) : DGRAY }]}>{fmtX(p.pe)}</Text>
+                          <Text style={[S.tableCellNum, { width: "11%", color: subjectEv && p.ev_ebitda ? (p.ev_ebitda < subjectEv ? GREEN : RED) : DGRAY }]}>{fmtX(p.ev_ebitda)}</Text>
+                          <Text style={[S.tableCellNum, { width: "9%" }]}>{fmtX(p.p_fcf)}</Text>
+                          <Text style={[S.tableCellNum, { width: "11%", color: facts.gross_margin && p.gross_margin ? (p.gross_margin < facts.gross_margin ? GREEN : RED) : DGRAY }]}>{fmtPct3(p.gross_margin)}</Text>
+                          <Text style={[S.tableCellNum, { width: "9%" }]}>{fmtPct3(p.roic)}</Text>
+                          <Text style={[S.tableCellNum, { width: "9%" }]}>{fmtPct3(p.revenue_growth)}</Text>
+                        </View>
+                      ))}
+                    </View>
+                    <Text style={{ fontSize: 6.5, color: GRAY, marginTop: 4 }}>Green = peer cheaper than subject; Red = peer more expensive. Source: FMP / yfinance.</Text>
+                  </>
+                );
+              })()}
               {valPeer.length > 0 && <><SubSectionHdr title="Peer Valuation Context" />{valPeer.map((p,i) => <Para key={i} text={p} />)}</>}
               {valScen.length > 0 && (
                 <>

@@ -751,7 +751,7 @@ interface SynthesisResult {
 }
 
 function ReviewStage({
-  ticker, companyName, industry, sections, selectedThesis, facts, history, sector, selectedCharts,
+  ticker, companyName, industry, sections, selectedThesis, facts, history, sector, selectedCharts, fmpExtended,
   onBack, onEditSection, onRestart,
 }: {
   ticker: string; companyName: string; industry: string;
@@ -761,6 +761,7 @@ function ReviewStage({
   history: Record<string, Record<string, number>>;
   sector: string;
   selectedCharts?: string[];
+  fmpExtended?: Record<string, unknown>;
   onBack: () => void; onEditSection: (sectionId: string) => void; onRestart: () => void;
 }) {
   const [copied, setCopied] = useState(false);
@@ -821,6 +822,7 @@ function ReviewStage({
           facts={facts as Record<string, number>}
           sector={sector}
           selectedCharts={selectedCharts}
+          fmpExtended={fmpExtended as Record<string, unknown>}
         />
         <button onClick={onBack}
           style={{ background: CARD, border: `1px solid ${BORDER}`, borderRadius: 6, padding: "7px 14px", cursor: "pointer", fontSize: 11, color: MUTED }}>
@@ -1218,6 +1220,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               ticker={ticker} companyName={companyName} industry={industry}
               sections={sections} selectedThesis={selectedThesis} facts={facts} history={history} sector={sector}
               selectedCharts={selectedCharts}
+              fmpExtended={fmpExtended as Record<string, unknown>}
               onBack={() => setStage("build")}
               onEditSection={(sectionId) => { setEditTargetId(sectionId); setStage("build"); }}
               onRestart={restart}
