@@ -5,7 +5,7 @@ import {
   CheckCircle2, ChevronUp, ChevronDown, Lock, Unlock,
   Pencil, RefreshCw, Sparkles, Send, Copy, FileDown,
   Plus, Trash2, X, ArrowRight, Wand2, MessageSquare,
-  LayoutList, Lightbulb, Hammer, Eye, Check,
+  LayoutList, Lightbulb, Hammer, Eye, Check, BarChart2,
 } from "lucide-react";
 
 const PrimerDownloadButton = dynamic(
@@ -15,7 +15,7 @@ const PrimerDownloadButton = dynamic(
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
-type BuildStage = "configure" | "thesis" | "build" | "review";
+type BuildStage = "configure" | "thesis" | "charts" | "build" | "review";
 type Tone = "analytical" | "bullish" | "bearish" | "balanced";
 type Length = "brief" | "standard" | "comprehensive";
 
@@ -86,6 +86,7 @@ function StageIndicator({ stage, setStage, sections }: { stage: BuildStage; setS
   const stages: { id: BuildStage; label: string; icon: React.ReactNode }[] = [
     { id: "configure", label: "Configure", icon: <LayoutList size={13} /> },
     { id: "thesis", label: "Thesis", icon: <Lightbulb size={13} /> },
+    { id: "charts", label: "Charts", icon: <BarChart2 size={13} /> },
     { id: "build", label: "Build", icon: <Hammer size={13} /> },
     { id: "review", label: "Review", icon: <Eye size={13} /> },
   ];
@@ -153,23 +154,14 @@ const CHART_OPTIONS = [
 ];
 
 function ConfigureStage({
-  sections, setSections, tone, setTone, length, setLength,
-  selectedCharts, setSelectedCharts, onNext,
+  sections, setSections, tone, setTone, length, setLength, onNext,
 }: {
   sections: SectionDef[];
   setSections: React.Dispatch<React.SetStateAction<SectionDef[]>>;
   tone: Tone; setTone: (t: Tone) => void;
   length: Length; setLength: (l: Length) => void;
-  selectedCharts: string[]; setSelectedCharts: (c: string[]) => void;
   onNext: () => void;
 }) {
-  function toggleChart(id: string) {
-    setSelectedCharts(
-      selectedCharts.includes(id)
-        ? selectedCharts.filter(c => c !== id)
-        : [...selectedCharts, id]
-    );
-  }
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState("");
   const [editDesc, setEditDesc] = useState("");
@@ -307,33 +299,6 @@ function ConfigureStage({
               </button>
             ))}
           </div>
-        </div>
-      </div>
-
-      {/* Chart selection */}
-      <div style={{ marginBottom: 28 }}>
-        <label style={{ fontSize: 10, fontWeight: 700, color: MUTED, letterSpacing: "0.08em", textTransform: "uppercase", display: "block", marginBottom: 8 }}>Charts to Include in PDF</label>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 6 }}>
-          {CHART_OPTIONS.map(ch => {
-            const on = selectedCharts.includes(ch.id);
-            return (
-              <button key={ch.id} onClick={() => toggleChart(ch.id)}
-                style={{
-                  background: on ? ACCENT + "60" : "transparent",
-                  border: `1px solid ${on ? BLUE : BORDER}`,
-                  borderRadius: 6, padding: "8px 10px", cursor: "pointer", textAlign: "left",
-                  transition: "all 0.15s",
-                }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 2 }}>
-                  <div style={{ width: 14, height: 14, borderRadius: 3, border: `2px solid ${on ? BLUE : MUTED}`, background: on ? BLUE : "transparent", display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>
-                    {on && <span style={{ color: "white", fontSize: 9, lineHeight: 1 }}>✓</span>}
-                  </div>
-                  <span style={{ fontSize: 10, fontWeight: 700, color: on ? TEXT : MUTED }}>{ch.label}</span>
-                </div>
-                <p style={{ fontSize: 9, color: MUTED, margin: 0, paddingLeft: 20 }}>{ch.desc}</p>
-              </button>
-            );
-          })}
         </div>
       </div>
 
@@ -531,7 +496,704 @@ function ThesisStage({
   );
 }
 
-// ── Stage 3: Build ─────────────────────────────────────────────────────────────
+// ── Stage 3: Charts ────────────────────────────────────────────────────────────
+
+const CHART_DEFS = [
+  {
+    id: "revenue_fcf",
+    label: "Revenue vs Free Cash Flow",
+    desc: "5-year paired bars showing revenue growth trajectory alongside FCF. Reveals CapEx compression and OCF quality.",
+    dataKeys: ["revenue", "free_cash_flow"],
+    type: "bar",
+  },
+  {
+    id: "margins",
+    label: "Margin Trends",
+    desc: "Gross / Operating / Net margin lines over 5 years. Shows operating leverage, pricing power, and cost structure shift.",
+    dataKeys: ["gross_profit", "operating_income", "net_income", "revenue"],
+    type: "line",
+  },
+  {
+    id: "eps",
+    label: "EPS Trend",
+    desc: "Diluted EPS 5-year bars. Shows earnings per share growth, tax effects, and buyback leverage.",
+    dataKeys: ["eps_diluted"],
+    type: "bar",
+  },
+  {
+    id: "price_range",
+    label: "Bear / Base / Bull Scenario Range",
+    desc: "Visual price target range with current price shown. Embedded in Valuation section after scenario math.",
+    dataKeys: [],
+    type: "scenario",
+  },
+  {
+    id: "cap_alloc",
+    label: "Capital Allocation Waterfall",
+    desc: "FCF deployment: CapEx vs Buybacks vs Dividends vs Cash build. Shows capital priorities at a glance.",
+    dataKeys: [],
+    type: "bar",
+  },
+  {
+    id: "positioning",
+    label: "Quality Signal Cards",
+    desc: "ROIC/WACC spread, Net Debt/EBITDA, and OCF/NI earnings quality — with color-coded threshold badges.",
+    dataKeys: [],
+    type: "cards",
+  },
+];
+
+// Browser-native SVG mini-charts (separate from react-pdf components)
+function MiniRevenueChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {};
+  const fcfData = history.free_cash_flow ?? {};
+  const years   = Object.keys(revData).sort().slice(-5);
+  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No revenue data</div>;
+  const allVals = [...years.map(y => revData[y] ?? 0), ...years.map(y => Math.abs(fcfData[y] ?? 0))].filter(v => v > 0);
+  const maxV = Math.max(...allVals) || 1;
+  const W = 280, H = 80, BAR = 22, GAP = (W - years.length * BAR * 2 - years.length * 4) / (years.length + 1);
+  const fmtB = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(0)}B` : `$${(v/1e6).toFixed(0)}M`;
+  return (
+    <svg width={W} height={H + 20} style={{ display: "block" }}>
+      {years.map((yr, i) => {
+        const rev = revData[yr] ?? 0; const fcf = fcfData[yr] ?? 0;
+        const x0 = GAP + i * (BAR * 2 + 4 + GAP);
+        const rH = Math.max(2, (rev / maxV) * H); const fH = Math.max(2, (Math.abs(fcf) / maxV) * H);
+        return (
+          <g key={yr}>
+            <rect x={x0} y={H - rH} width={BAR} height={rH} fill="#0c1b38" rx={1} />
+            <rect x={x0 + BAR + 4} y={H - fH} width={BAR} height={fH} fill={fcf >= 0 ? "#0d6b45" : "#b42318"} rx={1} />
+            <text x={x0 + BAR} y={H + 12} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>
+            {rev > 0 && <text x={x0 + BAR/2} y={H - rH - 2} textAnchor="middle" fill="#0c1b38" fontSize={6}>{fmtB(rev)}</text>}
+          </g>
+        );
+      })}
+      <line x1={0} y1={H} x2={W} y2={H} stroke="#dde1e8" strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+function MiniMarginChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const rev = history.revenue ?? {}, gp = history.gross_profit ?? {}, oi = history.operating_income ?? {}, ni = history.net_income ?? {};
+  const years = Object.keys(rev).sort().slice(-5);
+  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No margin data</div>;
+  const toM = (num: Record<string, number>, yr: string) => rev[yr] ? (num[yr] ?? 0) / rev[yr] * 100 : null;
+  const gMs = years.map(y => toM(gp, y)); const oMs = years.map(y => toM(oi, y)); const nMs = years.map(y => toM(ni, y));
+  const allV = [...gMs, ...oMs, ...nMs].filter((v): v is number => v != null);
+  const maxV = Math.max(...allV, 10), minV = Math.min(...allV, 0);
+  const W = 280, H = 80, PL = 28;
+  const toX = (i: number) => PL + (i / (years.length - 1)) * (W - PL);
+  const toY = (v: number | null) => v == null ? null : H - ((v - minV) / (maxV - minV || 1)) * H;
+  const pts = (ms: (number|null)[]) => ms.map((v, i) => v == null ? null : `${toX(i)},${toY(v)}`).filter(Boolean).join(" ");
+  const COLORS = ["#2563eb", "#0c1b38", "#0d6b45"];
+  const series = [gMs, oMs, nMs];
+  return (
+    <svg width={W} height={H + 20} style={{ display: "block" }}>
+      {[0, 25, 50, 75, 100].filter(v => v >= minV && v <= maxV).map(v => (
+        <g key={v}>
+          <line x1={PL} y1={toY(v)!} x2={W} y2={toY(v)!} stroke="#dde1e8" strokeWidth={0.4} strokeDasharray="2,2" />
+          <text x={PL - 2} y={(toY(v) ?? 0) + 3} textAnchor="end" fill="#4b6484" fontSize={6}>{`${v}%`}</text>
+        </g>
+      ))}
+      {series.map((ms, si) => <polyline key={si} points={pts(ms)} fill="none" stroke={COLORS[si]} strokeWidth={1.5} />)}
+      {years.map((yr, i) => <text key={yr} x={toX(i)} y={H + 14} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>)}
+      <line x1={PL} y1={0} x2={PL} y2={H} stroke="#dde1e8" strokeWidth={0.5} />
+    </svg>
+  );
+}
+
+function MiniEpsChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const eps = history.eps_diluted ?? {};
+  const years = Object.keys(eps).sort().slice(-5);
+  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No EPS data</div>;
+  const vals = years.map(y => eps[y] ?? 0);
+  const maxV = Math.max(...vals.map(Math.abs), 0.01);
+  const W = 280, H = 80, BAR = 40, GAP = (W - years.length * BAR) / (years.length + 1);
+  const MID = H / 2;
+  return (
+    <svg width={W} height={H + 20} style={{ display: "block" }}>
+      <line x1={0} y1={MID} x2={W} y2={MID} stroke="#dde1e8" strokeWidth={0.5} strokeDasharray="3,2" />
+      {years.map((yr, i) => {
+        const v = eps[yr] ?? 0; const bH = Math.max(2, (Math.abs(v) / maxV) * MID);
+        const x0 = GAP + i * (BAR + GAP); const y0 = v >= 0 ? MID - bH : MID;
+        const lblY = y0 > 8 ? y0 - 4 : y0 + bH / 2 + 3;
+        return (
+          <g key={yr}>
+            <rect x={x0} y={y0} width={BAR} height={bH} fill="#b45309" rx={1} />
+            <text x={x0 + BAR/2} y={lblY} textAnchor="middle" fill={y0 > 8 ? "#b45309" : "white"} fontSize={6} fontWeight="bold">{`$${v.toFixed(2)}`}</text>
+            <text x={x0 + BAR/2} y={H + 14} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>
+          </g>
+        );
+      })}
+    </svg>
+  );
+}
+
+// ── Chart variant thumbnail renderers ──────────────────────────────────────────
+
+const TW = 128, TH = 72;
+
+// ── Revenue vs FCF ─────────────────────────────────────────────────────────────
+
+function RevV1(revs: number[], fcfs: number[], yrs: string[]) {
+  const mx = Math.max(...revs, ...fcfs.map(Math.abs), 1);
+  const n = yrs.length; const bw = 9; const sp = (TW - n * bw * 2 - n * 3) / (n + 1);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const x = sp + i * (bw * 2 + 3 + sp); const rh = (revs[i] / mx) * (TH - 22); const fh = (Math.abs(fcfs[i]) / mx) * (TH - 22);
+      return <g key={yr}><rect x={x} y={TH-14-rh} width={bw} height={Math.max(rh,1)} fill="#1a56db" rx={1}/><rect x={x+bw+3} y={TH-14-fh} width={bw} height={Math.max(fh,1)} fill="#0d6b45" rx={1}/><text x={x+bw} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+  </svg>;
+}
+
+function RevV2(revs: number[], fcfs: number[], yrs: string[]) {
+  const mx = Math.max(...revs, 1); const bw = Math.max(1, (TW - 20) / yrs.length - 4);
+  const xOf = (i: number) => 10 + i * (bw + 4);
+  const yOf = (v: number) => TH - 14 - (v / mx) * (TH - 22);
+  const pts = yrs.map((_, i) => `${xOf(i) + bw/2},${yOf(fcfs[i])}`).join(" ");
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const rh = (revs[i] / mx) * (TH - 22);
+      return <g key={yr}><rect x={xOf(i)} y={TH-14-rh} width={bw} height={Math.max(rh,1)} fill="#0c1b38" rx={1}/><text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+    <polyline points={pts} fill="none" stroke="#16a34a" strokeWidth={1.5}/>
+    {yrs.map((_,i) => <circle key={i} cx={xOf(i)+bw/2} cy={yOf(fcfs[i])} r={2.5} fill="#16a34a" stroke="#0a1628" strokeWidth={0.5}/>)}
+  </svg>;
+}
+
+function RevV3(revs: number[], fcfs: number[], yrs: string[]) {
+  const mx = Math.max(...revs, 1); const n = yrs.length;
+  const xOf = (i: number) => 4 + (i / (n - 1)) * (TW - 8);
+  const yRev = (v: number) => TH - 14 - (v / mx) * (TH - 22);
+  const yFcf = (v: number) => TH - 14 - (Math.abs(v) / mx) * (TH - 22);
+  const polyR = yrs.map((_,i) => `${xOf(i)},${yRev(revs[i])}`).join(" ") + ` ${xOf(n-1)},${TH-14} 4,${TH-14}`;
+  const polyF = yrs.map((_,i) => `${xOf(i)},${yFcf(fcfs[i])}`).join(" ") + ` ${xOf(n-1)},${TH-14} 4,${TH-14}`;
+  return <svg width={TW} height={TH}>
+    <polygon points={polyR} fill="#1a56db" opacity={0.25}/>
+    <polygon points={polyF} fill="#0d6b45" opacity={0.4}/>
+    <polyline points={yrs.map((_,i) => `${xOf(i)},${yRev(revs[i])}`).join(" ")} fill="none" stroke="#1a56db" strokeWidth={1.5}/>
+    <polyline points={yrs.map((_,i) => `${xOf(i)},${yFcf(fcfs[i])}`).join(" ")} fill="none" stroke="#0d6b45" strokeWidth={1.5}/>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr,i) => <text key={yr} x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>)}
+  </svg>;
+}
+
+function RevV4(revs: number[], fcfs: number[], yrs: string[]) {
+  const mx = Math.max(...revs, 1); const bw = Math.max(1, (TW - 20) / yrs.length - 4);
+  const xOf = (i: number) => 10 + i * (bw + 4);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const rh = (revs[i] / mx) * (TH - 22); const fh = (Math.abs(fcfs[i]) / mx) * (TH - 22);
+      return <g key={yr}>
+        <rect x={xOf(i)} y={TH-14-rh} width={bw} height={Math.max(rh,1)} fill="#1a3a6b" rx={1}/>
+        <rect x={xOf(i)} y={TH-14-fh} width={bw} height={Math.max(fh,1)} fill="#0d6b45" rx={1}/>
+        <text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>
+      </g>;
+    })}
+  </svg>;
+}
+
+function RevV5(revs: number[], fcfs: number[], yrs: string[]) {
+  const mx = Math.max(...revs, ...fcfs.map(Math.abs), 1); const n = yrs.length;
+  const ROW = (TH - 14) / n; const bMax = TW - 32;
+  return <svg width={TW} height={TH}>
+    {yrs.map((yr, i) => {
+      const y = 4 + i * ROW; const rw = (revs[i] / mx) * bMax; const fw = (Math.abs(fcfs[i]) / mx) * bMax;
+      return <g key={yr}>
+        <rect x={24} y={y+1} width={Math.max(rw,1)} height={ROW/2-1} fill="#1a56db" rx={1}/>
+        <rect x={24} y={y+ROW/2+1} width={Math.max(fw,1)} height={ROW/2-2} fill="#0d6b45" rx={1}/>
+        <text x={22} y={y+ROW/2} textAnchor="end" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>
+      </g>;
+    })}
+    <line x1={TH-14} y1={0} x2={14} y2={TH} stroke="#2a3a55" strokeWidth={0.5}/>
+  </svg>;
+}
+
+// ── Margins ─────────────────────────────────────────────────────────────────────
+
+function MarV1(gm: number[], om: number[], nm: number[], yrs: string[]) {
+  const mx = Math.max(...gm, 10); const mn = Math.min(...nm, 0); const n = yrs.length;
+  const xOf = (i: number) => 4 + (i / Math.max(n-1,1)) * (TW - 8);
+  const yOf = (v: number) => TH - 14 - ((v - mn) / (mx - mn)) * (TH - 22);
+  const pts = (ms: number[]) => ms.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ");
+  return <svg width={TW} height={TH}>
+    <polyline points={pts(gm)} fill="none" stroke="#2563eb" strokeWidth={1.5}/>
+    <polyline points={pts(om)} fill="none" stroke="#0c1b38" strokeWidth={1.5}/>
+    <polyline points={pts(nm)} fill="none" stroke="#0d6b45" strokeWidth={1.5}/>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr,i) => <text key={yr} x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>)}
+  </svg>;
+}
+
+function MarV2(gm: number[], om: number[], nm: number[], yrs: string[]) {
+  const mx = Math.max(...gm, 10); const mn = Math.min(...nm, 0); const n = yrs.length;
+  const xOf = (i: number) => 4 + (i / Math.max(n-1,1)) * (TW - 8);
+  const yOf = (v: number) => TH - 14 - ((v - mn) / (mx - mn)) * (TH - 22);
+  const area = (ms: number[]) => ms.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ") + ` ${xOf(n-1)},${TH-14} 4,${TH-14}`;
+  return <svg width={TW} height={TH}>
+    <polygon points={area(gm)} fill="#2563eb" opacity={0.15}/>
+    <polygon points={area(om)} fill="#7c3aed" opacity={0.2}/>
+    <polygon points={area(nm)} fill="#0d6b45" opacity={0.3}/>
+    <polyline points={gm.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ")} fill="none" stroke="#2563eb" strokeWidth={1.2}/>
+    <polyline points={om.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ")} fill="none" stroke="#7c3aed" strokeWidth={1.2}/>
+    <polyline points={nm.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ")} fill="none" stroke="#0d6b45" strokeWidth={1.2}/>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr,i) => <text key={yr} x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>)}
+  </svg>;
+}
+
+function MarV3(gm: number[], om: number[], nm: number[], yrs: string[]) {
+  const mx = Math.max(...gm, 10); const n = yrs.length; const groupW = (TW - 12) / n; const bw = groupW / 3 - 1;
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const x0 = 6 + i * groupW;
+      const gh = (gm[i] / mx) * (TH - 22); const oh = (om[i] / mx) * (TH - 22); const nh = (nm[i] / mx) * (TH - 22);
+      return <g key={yr}>
+        <rect x={x0} y={TH-14-gh} width={bw} height={Math.max(gh,1)} fill="#2563eb" rx={1}/>
+        <rect x={x0+bw+1} y={TH-14-oh} width={bw} height={Math.max(oh,1)} fill="#7c3aed" rx={1}/>
+        <rect x={x0+bw*2+2} y={TH-14-nh} width={bw} height={Math.max(nh,1)} fill="#0d6b45" rx={1}/>
+        <text x={x0+groupW/2-2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>
+      </g>;
+    })}
+  </svg>;
+}
+
+function MarV4(gm: number[], om: number[], nm: number[], yrs: string[]) {
+  const mx = Math.max(...gm, 10); const mn = Math.min(...nm, 0); const n = yrs.length;
+  const xOf = (i: number) => 4 + (i / Math.max(n-1,1)) * (TW - 8);
+  const yOf = (v: number) => TH - 14 - ((v - mn) / (mx - mn)) * (TH - 22);
+  const step = (ms: number[]) => ms.flatMap((v,i) => i < ms.length-1 ? [`${xOf(i)},${yOf(v)}`, `${xOf(i+1)},${yOf(v)}`] : [`${xOf(i)},${yOf(v)}`]).join(" ");
+  return <svg width={TW} height={TH}>
+    {/* band fill between gross and net */}
+    <polygon points={[...gm.map((v,i) => `${xOf(i)},${yOf(v)}`), ...[...nm].reverse().map((v,i) => `${xOf(n-1-i)},${yOf(v)}`)].join(" ")} fill="#1a56db" opacity={0.08}/>
+    <polyline points={step(gm)} fill="none" stroke="#2563eb" strokeWidth={1.5} strokeLinejoin="round"/>
+    <polyline points={step(om)} fill="none" stroke="#7c3aed" strokeWidth={1.2} strokeDasharray="4,2"/>
+    <polyline points={step(nm)} fill="none" stroke="#0d6b45" strokeWidth={1.5} strokeLinejoin="round"/>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr,i) => <text key={yr} x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>)}
+  </svg>;
+}
+
+function MarV5(gm: number[], _om: number[], _nm: number[], yrs: string[]) {
+  const mx = Math.max(...gm, 10); const n = yrs.length; const bw = Math.max(1, (TW - 20) / n - 4);
+  const xOf = (i: number) => 10 + i * (bw + 4);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const gh = (gm[i] / mx) * (TH - 22);
+      const intensity = Math.round(40 + (gm[i] / mx) * 175);
+      return <g key={yr}>
+        <rect x={xOf(i)} y={TH-14-gh} width={bw} height={Math.max(gh,1)} fill={`rgb(${intensity},${Math.round(intensity*0.5)},0)`} rx={1}/>
+        <text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>
+      </g>;
+    })}
+  </svg>;
+}
+
+// ── EPS ─────────────────────────────────────────────────────────────────────────
+
+function EpsV1(vals: number[], yrs: string[]) {
+  const mx = Math.max(...vals.map(Math.abs), 0.01); const bw = Math.max(1, (TW - 20) / yrs.length - 4);
+  const xOf = (i: number) => 10 + i * (bw + 4);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH/2} x2={TW} y2={TH/2} stroke="#2a3a55" strokeWidth={0.4} strokeDasharray="2,2"/>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {yrs.map((yr, i) => {
+      const v = vals[i]; const bh = (Math.abs(v) / mx) * (TH/2 - 8);
+      const y = v >= 0 ? TH/2 - bh : TH/2;
+      return <g key={yr}><rect x={xOf(i)} y={y} width={bw} height={Math.max(bh,1)} fill="#b45309" rx={1}/><text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+  </svg>;
+}
+
+function EpsV2(vals: number[], yrs: string[]) {
+  const mx = Math.max(...vals.map(Math.abs), 0.01);
+  const xOf = (i: number) => 8 + i * ((TW - 16) / Math.max(yrs.length-1,1));
+  const yOf = (v: number) => TH/2 - (v/mx) * (TH/2 - 8);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH/2} x2={TW} y2={TH/2} stroke="#2a3a55" strokeWidth={0.4} strokeDasharray="2,2"/>
+    {yrs.map((yr, i) => {
+      const cy = yOf(vals[i]);
+      return <g key={yr}><line x1={xOf(i)} y1={TH/2} x2={xOf(i)} y2={cy} stroke="#b45309" strokeWidth={1.5}/><circle cx={xOf(i)} cy={cy} r={3} fill="#b45309"/><text x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+  </svg>;
+}
+
+function EpsV3(vals: number[], yrs: string[]) {
+  const mx = Math.max(...vals.map(Math.abs), 0.01); const bw = Math.max(1, (TW - 20) / yrs.length - 4);
+  const xOf = (i: number) => 10 + i * (bw + 4);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH/2} x2={TW} y2={TH/2} stroke="#2a3a55" strokeWidth={0.4} strokeDasharray="2,2"/>
+    {yrs.map((yr, i) => {
+      const v = vals[i]; const bh = (Math.abs(v)/mx) * (TH/2-8); const y = v >= 0 ? TH/2-bh : TH/2;
+      return <g key={yr}><rect x={xOf(i)} y={y} width={bw} height={Math.max(bh,1)} fill={v >= 0 ? "#0d6b45" : "#b42318"} rx={1}/><text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+  </svg>;
+}
+
+function EpsV4(vals: number[], yrs: string[]) {
+  const mx = Math.max(...vals.map(Math.abs), 0.01); const bw = Math.max(1,(TW-20)/yrs.length-4);
+  const xOf = (i: number) => 10 + i*(bw+4);
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH/2} x2={TW} y2={TH/2} stroke="#2a3a55" strokeWidth={0.4} strokeDasharray="2,2"/>
+    {yrs.map((yr, i) => {
+      const v = vals[i]; const bh = (Math.abs(v)/mx)*(TH/2-8); const y = v>=0?TH/2-bh:TH/2;
+      return <g key={yr}><rect x={xOf(i)} y={y} width={bw} height={Math.max(bh,1)} fill="none" stroke="#b45309" strokeWidth={1} rx={1}/><text x={xOf(i)+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text></g>;
+    })}
+  </svg>;
+}
+
+function EpsV5(vals: number[], yrs: string[]) {
+  const mx = Math.max(...vals.map(Math.abs), 0.01); const n = yrs.length;
+  const xOf = (i: number) => 4+(i/Math.max(n-1,1))*(TW-8);
+  const yOf = (v: number) => TH/2-(v/mx)*(TH/2-8);
+  const pts = vals.map((v,i) => `${xOf(i)},${yOf(v)}`).join(" ");
+  const area = pts + ` ${xOf(n-1)},${TH/2} 4,${TH/2}`;
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH/2} x2={TW} y2={TH/2} stroke="#2a3a55" strokeWidth={0.4} strokeDasharray="2,2"/>
+    <polygon points={area} fill="#b45309" opacity={0.25}/>
+    <polyline points={pts} fill="none" stroke="#b45309" strokeWidth={1.5}/>
+    {yrs.map((yr,i) => <text key={yr} x={xOf(i)} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={6}>{yr.slice(2,4)}</text>)}
+  </svg>;
+}
+
+// ── Price Range ─────────────────────────────────────────────────────────────────
+
+const PR_TARGETS = [{ l: "Bear", c: "#b42318", v: 430 }, { l: "Curr", c: "#b45309", v: 620 }, { l: "Base", c: "#1a56db", v: 720 }, { l: "Bull", c: "#0d6b45", v: 950 }];
+
+function PrV1() {
+  return <svg width={TW} height={TH}>
+    {PR_TARGETS.map((p, i) => { const x = 12 + i * 26; return <g key={p.l}><circle cx={x} cy={TH/2-6} r={7} fill={p.c}/><text x={x} y={TH/2-3} textAnchor="middle" fill="white" fontSize={6} fontWeight="bold">{p.l[0]}</text><text x={x} y={TH-8} textAnchor="middle" fill={p.c} fontSize={7}>${p.v}</text><text x={x} y={TH-1} textAnchor="middle" fill="#4b6484" fontSize={6}>{p.l}</text></g>; })}
+  </svg>;
+}
+function PrV2() {
+  const min = 350, max = 1050, range = max - min;
+  const xOf = (v: number) => 4 + ((v - min) / range) * (TW - 8);
+  return <svg width={TW} height={TH}>
+    <rect x={4} y={TH/2-5} width={TW-8} height={10} rx={2} fill="#1a2d4a"/>
+    {PR_TARGETS.map(p => <line key={p.l} x1={xOf(p.v)} y1={TH/2-10} x2={xOf(p.v)} y2={TH/2+10} stroke={p.c} strokeWidth={2}/>)}
+    {PR_TARGETS.map(p => <text key={p.l} x={xOf(p.v)} y={TH/2-13} textAnchor="middle" fill={p.c} fontSize={6}>{p.l}</text>)}
+    {PR_TARGETS.map(p => <text key={p.l+1} x={xOf(p.v)} y={TH-5} textAnchor="middle" fill="#4b6484" fontSize={6}>${p.v}</text>)}
+  </svg>;
+}
+function PrV3() {
+  const rowH = (TH - 12) / PR_TARGETS.length;
+  return <svg width={TW} height={TH}>
+    {PR_TARGETS.map((p, i) => {
+      const y = 4 + i * rowH; const bw = (p.v / 1200) * (TW - 40);
+      return <g key={p.l}><text x={28} y={y+rowH/2+3} textAnchor="end" fill={p.c} fontSize={6} fontWeight="bold">{p.l}</text><rect x={32} y={y+2} width={Math.max(bw,2)} height={rowH-4} fill={p.c} opacity={0.8} rx={1}/><text x={34+bw} y={y+rowH/2+3} fill="white" fontSize={6}>${p.v}</text></g>;
+    })}
+  </svg>;
+}
+function PrV4() {
+  return <svg width={TW} height={TH}>
+    {PR_TARGETS.map((p, i) => {
+      const x = 14 + i * 26; const isUp = i >= 2;
+      return <g key={p.l}><line x1={x} y1={isUp?TH/2:TH/2-12} x2={x} y2={isUp?TH/2-12:TH/2} stroke={p.c} strokeWidth={2} markerEnd={`url(#arr-${i})`}/><circle cx={x} cy={TH/2} r={3} fill={p.c} opacity={0.5}/><text x={x} y={isUp?TH/2-16:TH/2+18} textAnchor="middle" fill={p.c} fontSize={6}>${p.v}</text></g>;
+    })}
+  </svg>;
+}
+function PrV5() {
+  const cx = TW/2, cy = TH/2, r = TH/2-8;
+  const tot = 1200 - 350;
+  const arc = (start: number, end: number, color: string) => {
+    const s = ((start-350)/tot)*Math.PI; const e = ((end-350)/tot)*Math.PI;
+    const x1=cx+r*Math.cos(Math.PI+s); const y1=cy+r*Math.sin(Math.PI+s);
+    const x2=cx+r*Math.cos(Math.PI+e); const y2=cy+r*Math.sin(Math.PI+e);
+    return <path key={color} d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 0 1 ${x2} ${y2} Z`} fill={color} opacity={0.75}/>;
+  };
+  const segs = [[350,620,"#b42318"],[620,720,"#b45309"],[720,950,"#1a56db"],[950,1200,"#0d6b45"]] as const;
+  return <svg width={TW} height={TH}>{segs.map(([s,e,c]) => arc(s,e,c))}<text x={cx} y={cy+4} textAnchor="middle" fill="white" fontSize={7} fontWeight="bold">$720</text></svg>;
+}
+
+// ── Capital Allocation ──────────────────────────────────────────────────────────
+
+const CA_SEGS = [{ l: "CapEx", p: 0.69, c: "#1a56db" }, { l: "Buybacks", p: 0.26, c: "#0c1b38" }, { l: "Dividends", p: 0.05, c: "#0d6b45" }];
+
+function CaV1() {
+  let x = 4;
+  return <svg width={TW} height={TH}>
+    {CA_SEGS.map(s => { const w = s.p * (TW - 8); const el = <rect key={s.l} x={x} y={TH/2-10} width={w} height={20} fill={s.c}/>; x += w; return el; })}
+    {(() => { let ox = 4; return CA_SEGS.map(s => { const w = s.p*(TW-8); const el = <text key={s.l} x={ox+w/2} y={TH-5} textAnchor="middle" fill="#4b6484" fontSize={6}>{s.l}</ text>; ox+=w; return el; }); })()}
+  </svg>;
+}
+function CaV2() {
+  const cx=TW/2, cy=TH/2, r=Math.min(TW,TH)/2-8;
+  let ang = -Math.PI/2;
+  return <svg width={TW} height={TH}>
+    {CA_SEGS.map(s => {
+      const startA=ang; ang+=s.p*2*Math.PI;
+      const x1=cx+r*Math.cos(startA); const y1=cy+r*Math.sin(startA);
+      const x2=cx+r*Math.cos(ang); const y2=cy+r*Math.sin(ang);
+      const large=s.p>0.5?1:0;
+      return <path key={s.l} d={`M ${cx} ${cy} L ${x1} ${y1} A ${r} ${r} 0 ${large} 1 ${x2} ${y2} Z`} fill={s.c}/>;
+    })}
+    <circle cx={cx} cy={cy} r={r*0.45} fill="#0d1020"/>
+  </svg>;
+}
+function CaV3() {
+  const sorted = [...CA_SEGS].sort((a,b)=>b.p-a.p);
+  let x=2; const H3=TH-16;
+  return <svg width={TW} height={TH}>
+    <rect x={0} y={0} width={TW} height={TH} fill="#0a1220"/>
+    {sorted.map(s => {
+      const w = s.p*(TW-4); const el = <g key={s.l}><rect x={x} y={2} width={w-2} height={H3} fill={s.c} opacity={0.85} rx={2}/><text x={x+4} y={H3-4} fill="white" fontSize={6} fontWeight="bold">{s.l}</text></g>; x+=w; return el;
+    })}
+    {CA_SEGS.map((s,i) => <text key={i} x={4+i*38} y={TH-2} fill="#4b6484" fontSize={6}>{`${(s.p*100).toFixed(0)}%`}</text>)}
+  </svg>;
+}
+function CaV4() {
+  const mx = Math.max(...CA_SEGS.map(s=>s.p)); const n=CA_SEGS.length; const bw=(TW-20)/n-4;
+  return <svg width={TW} height={TH}>
+    <line x1={0} y1={TH-14} x2={TW} y2={TH-14} stroke="#2a3a55" strokeWidth={0.5}/>
+    {CA_SEGS.map((s, i) => { const bh=(s.p/mx)*(TH-22); const x=10+i*(bw+4); return <g key={s.l}><rect x={x} y={TH-14-bh} width={bw} height={Math.max(bh,1)} fill={s.c} rx={1}/><text x={x+bw/2} y={TH-3} textAnchor="middle" fill="#4b6484" fontSize={5}>{s.l.slice(0,3)}</text></g>; })}
+  </svg>;
+}
+function CaV5() {
+  const cols=10, rows=5, total=cols*rows;
+  const cells: string[] = [];
+  let filled=0;
+  CA_SEGS.forEach(s => { const n=Math.round(s.p*total); for(let j=0;j<n&&filled<total;j++,filled++) cells.push(s.c); });
+  while(cells.length<total) cells.push("#1a2d4a");
+  const cw=(TW-4)/cols, ch=(TH-4)/rows;
+  return <svg width={TW} height={TH}>
+    {cells.map((c,i) => { const row=Math.floor(i/cols); const col=i%cols; return <rect key={i} x={2+col*cw} y={2+row*ch} width={cw-1} height={ch-1} fill={c} rx={0.5}/>; })}
+  </svg>;
+}
+
+// ── Positioning (Quality Signals) ───────────────────────────────────────────────
+
+const PQ_CARDS = [{ l: "ROIC/WACC", v: "+12pp", c: "#0d6b45" }, { l: "ND/EBITDA", v: "Net Cash", c: "#0d6b45" }, { l: "OCF/NI", v: "1.28x", c: "#b45309" }];
+
+function PqV1() {
+  return <svg width={TW} height={TH}>
+    {PQ_CARDS.map((p, i) => { const x=2+i*41; return <g key={p.l}><rect x={x} y={4} width={39} height={TH-10} fill="#0d1f3c" rx={2}/><rect x={x} y={4} width={39} height={2} fill={p.c}/><text x={x+4} y={18} fill="#4b6484" fontSize={5}>{p.l}</text><text x={x+4} y={30} fill="white" fontSize={7} fontWeight="bold">{p.v}</text><rect x={x+4} y={TH-20} width={30} height={8} fill={p.c} opacity={0.25} rx={2}/><text x={x+19} y={TH-13} textAnchor="middle" fill={p.c} fontSize={5} fontWeight="bold">{p.c==="#0d6b45"?"STRONG":"MOD"}</text></g>; })}
+  </svg>;
+}
+function PqV2() {
+  return <svg width={TW} height={TH}>
+    {PQ_CARDS.map((p, i) => { const y=2+i*((TH-6)/3); const bw=(p.c==="#0d6b45"?0.85:0.55)*(TW-50); return <g key={p.l}><rect x={0} y={y} width={TW} height={(TH-6)/3-1} fill="#f0f4f8" opacity={0.04}/><text x={4} y={y+(TH-6)/3/2+3} fill="#4b6484" fontSize={6}>{p.l}</text><rect x={42} y={y+3} width={bw} height={(TH-6)/3-8} fill={p.c} opacity={0.7} rx={1}/><text x={44+bw} y={y+(TH-6)/3/2+3} fill="white" fontSize={6}>{p.v}</text></g>; })}
+  </svg>;
+}
+function PqV3() {
+  const arcs = [0.72, 0.9, 0.55];
+  return <svg width={TW} height={TH}>
+    {PQ_CARDS.map((p, i) => {
+      const cx=14+i*37; const cy=TH/2+4; const r=TH/2-6; const frac=arcs[i];
+      const startA=Math.PI; const endA=Math.PI+frac*Math.PI;
+      const x1=cx+r*Math.cos(startA); const y1=cy+r*Math.sin(startA);
+      const x2=cx+r*Math.cos(endA); const y2=cy+r*Math.sin(endA);
+      return <g key={p.l}>
+        <path d={`M ${x1} ${y1} A ${r} ${r} 0 0 1 ${cx+r} ${cy}`} fill="none" stroke="#1a2d4a" strokeWidth={4}/>
+        <path d={`M ${x1} ${y1} A ${r} ${r} 0 ${frac>0.5?1:0} 1 ${x2} ${y2}`} fill="none" stroke={p.c} strokeWidth={4}/>
+        <text x={cx} y={cy+3} textAnchor="middle" fill="white" fontSize={6} fontWeight="bold">{p.v}</text>
+        <text x={cx} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{p.l.slice(0,7)}</text>
+      </g>;
+    })}
+  </svg>;
+}
+function PqV4() {
+  return <svg width={TW} height={TH}>
+    {PQ_CARDS.map((p, i) => { const cx=14+i*37; return <g key={p.l}><circle cx={cx} cy={TH/2-4} r={18} fill={p.c} opacity={0.15}/><circle cx={cx} cy={TH/2-4} r={18} fill="none" stroke={p.c} strokeWidth={1.5}/><text x={cx} y={TH/2-8} textAnchor="middle" fill="white" fontSize={6} fontWeight="bold">{p.v}</text><text x={cx} y={TH-5} textAnchor="middle" fill="#4b6484" fontSize={5}>{p.l.slice(0,7)}</text></g>; })}
+  </svg>;
+}
+function PqV5() {
+  const scores = [0.85, 0.95, 0.6];
+  return <svg width={TW} height={TH}>
+    {PQ_CARDS.map((p, i) => {
+      const y=4+i*((TH-8)/3); const row=(TH-8)/3-2; const sw=scores[i]*(TW-52);
+      return <g key={p.l}><text x={4} y={y+row/2+3} fill="#4b6484" fontSize={6}>{p.l}</text><rect x={46} y={y+2} width={TW-52} height={row-4} fill="#1a2d4a" rx={2}/><rect x={46} y={y+2} width={sw} height={row-4} fill={p.c} rx={2}/><text x={46+sw+2} y={y+row/2+3} fill="white" fontSize={6}>{p.v}</text></g>;
+    })}
+  </svg>;
+}
+
+// Map chart ID → array of {name, render}
+function buildVariants(history: Record<string, Record<string, number>>, _facts: Record<string, number | null>) {
+  const revData = history.revenue ?? {}, fcfData = history.free_cash_flow ?? {};
+  const epsData = history.eps_diluted ?? {};
+  const gpData = history.gross_profit ?? {}, oiData = history.operating_income ?? {}, niData = history.net_income ?? {};
+  const yrs = Object.keys(revData).sort().slice(-5);
+  const epYrs = Object.keys(epsData).sort().slice(-5);
+  const revs = yrs.map(y => revData[y] ?? 0);
+  const fcfs = yrs.map(y => fcfData[y] ?? 0);
+  const eps = epYrs.map(y => epsData[y] ?? 0);
+  const gm = yrs.map(y => revData[y] ? (gpData[y] ?? 0) / revData[y] * 100 : 0);
+  const om = yrs.map(y => revData[y] ? (oiData[y] ?? 0) / revData[y] * 100 : 0);
+  const nm = yrs.map(y => revData[y] ? (niData[y] ?? 0) / revData[y] * 100 : 0);
+  return {
+    revenue_fcf: [
+      { name: "Grouped Bars", el: RevV1(revs, fcfs, yrs) },
+      { name: "Line Overlay", el: RevV2(revs, fcfs, yrs) },
+      { name: "Filled Area", el: RevV3(revs, fcfs, yrs) },
+      { name: "Stacked", el: RevV4(revs, fcfs, yrs) },
+      { name: "Horizontal", el: RevV5(revs, fcfs, yrs) },
+    ],
+    margins: [
+      { name: "Multi-Line", el: MarV1(gm, om, nm, yrs) },
+      { name: "Filled Area", el: MarV2(gm, om, nm, yrs) },
+      { name: "Bar Groups", el: MarV3(gm, om, nm, yrs) },
+      { name: "Stepped Band", el: MarV4(gm, om, nm, yrs) },
+      { name: "Heat Gradient", el: MarV5(gm, om, nm, yrs) },
+    ],
+    eps: [
+      { name: "Bar Chart", el: EpsV1(eps, epYrs) },
+      { name: "Lollipop", el: EpsV2(eps, epYrs) },
+      { name: "Dual-Tone", el: EpsV3(eps, epYrs) },
+      { name: "Outline", el: EpsV4(eps, epYrs) },
+      { name: "Mountain", el: EpsV5(eps, epYrs) },
+    ],
+    price_range: [
+      { name: "Color Dots", el: PrV1() },
+      { name: "Spectrum Bar", el: PrV2() },
+      { name: "Price Ladder", el: PrV3() },
+      { name: "Arrow Targets", el: PrV4() },
+      { name: "Donut Gauge", el: PrV5() },
+    ],
+    cap_alloc: [
+      { name: "Stacked Bar", el: CaV1() },
+      { name: "Donut", el: CaV2() },
+      { name: "Treemap", el: CaV3() },
+      { name: "Bar per Category", el: CaV4() },
+      { name: "Waffle Grid", el: CaV5() },
+    ],
+    positioning: [
+      { name: "Dark Cards", el: PqV1() },
+      { name: "Score Bars", el: PqV2() },
+      { name: "Gauge Arcs", el: PqV3() },
+      { name: "Badge Circles", el: PqV4() },
+      { name: "Progress Bars", el: PqV5() },
+    ],
+  } as Record<string, { name: string; el: React.ReactNode }[]>;
+}
+
+// ── Stage 3: Charts ─────────────────────────────────────────────────────────────
+
+function ChartsStage({
+  history, facts,
+  selectedCharts, setSelectedCharts,
+  chartVariants, setChartVariants,
+  onNext, onBack,
+}: {
+  history: Record<string, Record<string, number>>;
+  facts: Record<string, number | null>;
+  selectedCharts: string[];
+  setSelectedCharts: (c: string[]) => void;
+  chartVariants: Record<string, number>;
+  setChartVariants: (v: Record<string, number>) => void;
+  onNext: () => void;
+  onBack: () => void;
+}) {
+  const variants = buildVariants(history, facts);
+
+  function toggle(id: string) {
+    setSelectedCharts(
+      selectedCharts.includes(id)
+        ? selectedCharts.filter(c => c !== id)
+        : [...selectedCharts, id]
+    );
+  }
+
+  return (
+    <div style={{ padding: 24, maxWidth: 960, margin: "0 auto" }}>
+      <h2 style={{ fontSize: 16, fontWeight: 700, color: TEXT, marginBottom: 4 }}>Select Charts &amp; Designs</h2>
+      <p style={{ fontSize: 11, color: MUTED, marginBottom: 22 }}>
+        Toggle charts on/off, then pick your preferred design from the 5 style variants below each one.
+      </p>
+
+      <div style={{ display: "flex", flexDirection: "column", gap: 18, marginBottom: 28 }}>
+        {CHART_DEFS.map(chart => {
+          const on = selectedCharts.includes(chart.id);
+          const chartVars = variants[chart.id] ?? [];
+          const selVariant = chartVariants[chart.id] ?? 0;
+          return (
+            <div key={chart.id} style={{ background: CARD, border: `2px solid ${on ? BLUE : BORDER}`, borderRadius: 10, padding: 16, transition: "border-color 0.15s" }}>
+              {/* Header row */}
+              <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
+                <div>
+                  <div style={{ fontSize: 13, fontWeight: 700, color: TEXT, marginBottom: 3 }}>{chart.label}</div>
+                  <div style={{ fontSize: 10, color: MUTED, lineHeight: 1.5, maxWidth: 600 }}>{chart.desc}</div>
+                </div>
+                {/* Include toggle */}
+                <button
+                  onClick={() => toggle(chart.id)}
+                  style={{
+                    flexShrink: 0, marginLeft: 16,
+                    padding: "6px 14px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+                    border: `1px solid ${on ? BLUE : BORDER}`,
+                    background: on ? BLUE : "transparent",
+                    color: on ? "white" : MUTED,
+                    cursor: "pointer",
+                    display: "flex", alignItems: "center", gap: 6,
+                  }}>
+                  {on ? <><Check size={11} /> Included</> : "Include"}
+                </button>
+              </div>
+
+              {/* 5 variant thumbnails */}
+              <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+                {chartVars.map((v, vi) => (
+                  <div
+                    key={vi}
+                    onClick={() => setChartVariants({ ...chartVariants, [chart.id]: vi })}
+                    style={{
+                      cursor: "pointer",
+                      border: `2px solid ${selVariant === vi ? BLUE : BORDER}`,
+                      borderRadius: 8,
+                      overflow: "hidden",
+                      background: selVariant === vi ? "#0d1f3c" : BG,
+                      transition: "border-color 0.12s, background 0.12s",
+                      opacity: on ? 1 : 0.45,
+                    }}
+                  >
+                    <div style={{ padding: "8px 10px 2px", display: "flex", alignItems: "center", justifyContent: "center", pointerEvents: "none" }}>
+                      {v.el}
+                    </div>
+                    <div style={{
+                      padding: "4px 6px",
+                      fontSize: 9, fontWeight: selVariant === vi ? 700 : 400,
+                      color: selVariant === vi ? BLUE : MUTED,
+                      textAlign: "center",
+                      borderTop: `1px solid ${selVariant === vi ? BLUE + "44" : BORDER}`,
+                    }}>
+                      {v.name}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={onBack}
+          style={{ padding: "10px 20px", fontSize: 11, fontWeight: 600, borderRadius: 7, border: `1px solid ${BORDER}`, background: "transparent", color: MUTED, cursor: "pointer" }}>
+          ← Back
+        </button>
+        <button
+          onClick={() => setSelectedCharts(CHART_DEFS.map(c => c.id))}
+          style={{ padding: "10px 16px", fontSize: 11, fontWeight: 600, borderRadius: 7, border: `1px solid ${BORDER}`, background: "transparent", color: TEXT, cursor: "pointer" }}>
+          Select All
+        </button>
+        <button
+          onClick={() => setSelectedCharts([])}
+          style={{ padding: "10px 16px", fontSize: 11, fontWeight: 600, borderRadius: 7, border: `1px solid ${BORDER}`, background: "transparent", color: MUTED, cursor: "pointer" }}>
+          Clear All
+        </button>
+        <button onClick={onNext}
+          style={{ display: "flex", alignItems: "center", gap: 8, background: BLUE, border: "none", borderRadius: 8, padding: "12px 24px", cursor: "pointer", fontSize: 12, fontWeight: 700, color: "white", marginLeft: "auto" }}>
+          Next: Build Sections ({selectedCharts.length} chart{selectedCharts.length !== 1 ? "s" : ""}) <ArrowRight size={14} />
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Stage 4: Build ─────────────────────────────────────────────────────────────
 
 function BuildStage({
   ticker, companyName, sections, setSections,
@@ -764,7 +1426,7 @@ interface SynthesisResult {
 }
 
 function ReviewStage({
-  ticker, companyName, industry, sections, selectedThesis, facts, history, sector, selectedCharts, fmpExtended,
+  ticker, companyName, industry, sections, selectedThesis, facts, history, sector, selectedCharts, chartVariants, fmpExtended,
   onBack, onEditSection, onRestart,
 }: {
   ticker: string; companyName: string; industry: string;
@@ -774,6 +1436,7 @@ function ReviewStage({
   history: Record<string, Record<string, number>>;
   sector: string;
   selectedCharts?: string[];
+  chartVariants?: Record<string, number>;
   fmpExtended?: Record<string, unknown>;
   onBack: () => void; onEditSection: (sectionId: string) => void; onRestart: () => void;
 }) {
@@ -835,6 +1498,7 @@ function ReviewStage({
           facts={facts as Record<string, number>}
           sector={sector}
           selectedCharts={selectedCharts}
+          chartVariants={chartVariants}
           fmpExtended={fmpExtended as Record<string, unknown>}
         />
         <button onClick={onBack}
@@ -1171,6 +1835,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
   const [theses, setTheses] = useState<ThesisOption[]>([]);
   const [selectedThesis, setSelectedThesis] = useState("");
   const [selectedCharts, setSelectedCharts] = useState<string[]>(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
+  const [chartVariants, setChartVariants] = useState<Record<string, number>>({});
   const [editTargetId, setEditTargetId] = useState<string | undefined>(undefined);
 
   function restart() {
@@ -1180,6 +1845,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
     setTheses([]);
     setSelectedThesis("");
     setSelectedCharts(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
+    setChartVariants({});
     setStage("configure");
   }
 
@@ -1205,7 +1871,6 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               sections={sections} setSections={setSections}
               tone={tone} setTone={setTone}
               length={length} setLength={setLength}
-              selectedCharts={selectedCharts} setSelectedCharts={setSelectedCharts}
               onNext={() => setStage("thesis")}
             />
           )}
@@ -1214,7 +1879,15 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               ticker={ticker} companyName={companyName} sector={sector} facts={facts} tone={tone} fmpExtended={fmpExtended}
               theses={theses} setTheses={setTheses}
               selectedThesis={selectedThesis} setSelectedThesis={setSelectedThesis}
-              onNext={() => setStage("build")} onBack={() => setStage("configure")}
+              onNext={() => setStage("charts")} onBack={() => setStage("configure")}
+            />
+          )}
+          {stage === "charts" && (
+            <ChartsStage
+              history={history} facts={facts}
+              selectedCharts={selectedCharts} setSelectedCharts={setSelectedCharts}
+              chartVariants={chartVariants} setChartVariants={setChartVariants}
+              onNext={() => setStage("build")} onBack={() => setStage("thesis")}
             />
           )}
           {stage === "build" && (
@@ -1224,7 +1897,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
               thesis={selectedThesis} tone={tone} length={length}
               facts={facts} history={history} fmpExtended={fmpExtended}
               onNext={() => { setEditTargetId(undefined); setStage("review"); }}
-              onBack={() => { setEditTargetId(undefined); setStage("thesis"); }}
+              onBack={() => { setEditTargetId(undefined); setStage("charts"); }}
               initialExpandedId={editTargetId}
             />
           )}
@@ -1232,7 +1905,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
             <ReviewStage
               ticker={ticker} companyName={companyName} industry={industry}
               sections={sections} selectedThesis={selectedThesis} facts={facts} history={history} sector={sector}
-              selectedCharts={selectedCharts}
+              selectedCharts={selectedCharts} chartVariants={chartVariants}
               fmpExtended={fmpExtended as Record<string, unknown>}
               onBack={() => setStage("build")}
               onEditSection={(sectionId) => { setEditTargetId(sectionId); setStage("build"); }}

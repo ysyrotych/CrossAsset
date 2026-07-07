@@ -227,7 +227,22 @@ function parseBullets(text: string): string[] {
 }
 
 function stripMd(s: string): string {
-  return s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").trim();
+  return s.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\*([^*]+)\*/g, "$1").replace(/\s*--\s*$/, "").trim();
+}
+
+// Renders **bold** and *italic* as actual styled text inline (react-pdf supports nested Text)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function RichText({ text, style }: { text: string; style?: any }) {
+  const parts = text.replace(/\s*--\s*$/, "").split(/(\*\*[^*]+\*\*)/g);
+  return (
+    <Text style={style}>
+      {parts.map((part, i) => {
+        const m = part.match(/^\*\*([^*]+)\*\*$/);
+        if (m) return <Text key={i} style={{ fontFamily: "Helvetica-Bold" }}>{m[1]}</Text>;
+        return <Text key={i}>{part}</Text>;
+      })}
+    </Text>
+  );
 }
 
 function sectionFallback(
@@ -261,14 +276,14 @@ function parseRisks(text: string): { title: string; body: string }[] {
     }
   };
   for (const line of lines) {
-    const t = line.trim();
+    const t = line.trim().replace(/\s*--\s*$/, "");
     if (!t) continue;
     // Bold standalone title: **TITLE** (possibly after a bullet marker)
     const titleMatch = t.match(/^[•\-]?\s*\*\*([^*]+)\*\*\s*$/) ?? t.match(/^[•\-]?\s*\*\*([^*]+)\*\*:?\s*$/);
     if (titleMatch) { flush(); curTitle = titleMatch[1].trim(); continue; }
     // Bullet with bold-prefixed title: • **TITLE:** body...
     const inlineMatch = t.match(/^[•\-]\s*\*\*([^*]+)\*\*[:\s]+(.+)$/);
-    if (inlineMatch) { flush(); risks.push({ title: inlineMatch[1].trim(), body: inlineMatch[2].trim() }); continue; }
+    if (inlineMatch) { flush(); risks.push({ title: inlineMatch[1].trim(), body: inlineMatch[2].trim().replace(/\s*--\s*$/, "") }); continue; }
     // Regular line → body content
     if (curTitle) bodyLines.push(t.replace(/^[•\-]\s*/, ""));
   }
@@ -456,7 +471,7 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
                 strokeWidth={isZero ? 0.8 : 0.4} strokeDasharray={isZero ? "none" : "2,2"} />
               <Text x={YAXIS_W - 2} y={y + 2}
                 style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "end" }}>
-                {v}%
+                {`${v}%`}
               </Text>
             </G>
           );
@@ -509,19 +524,22 @@ function EpsBarChart({ history }: { history: Record<string, Record<string, numbe
   return (
     <View style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
-      <Svg width={CHART_W} height={CHART_H + 2}>
+      <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />
         {years.map((yr, i) => {
           const v    = epsData[yr] ?? 0;
           const barH = Math.max(2, (Math.abs(v) / maxAbs) * MID_Y);
           const x0   = GAP + i * (BAR_W + GAP);
           const y0   = v >= 0 ? MID_Y - barH : MID_Y;
-          const labelY = v >= 0 ? y0 - 3 : y0 + barH + 7;
+          // Clamp label inside SVG: for tall positive bars, show inside the bar
+          const labelAbove = y0 - 8;
+          const labelY = labelAbove < 4 ? y0 + barH / 2 + 2 : labelAbove;
+          const labelFill = labelAbove < 4 ? "white" : (v >= 0 ? AMBER : RED);
           return (
             <G key={yr}>
               <Rect x={x0} y={y0} width={BAR_W} height={barH} fill={v >= 0 ? AMBER : RED} rx={1} />
               <Text x={x0 + BAR_W/2} y={labelY}
-                style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>
+                style={{ fontSize: 5, fill: labelFill, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>
                 {fmtEps(v)}
               </Text>
             </G>
@@ -574,8 +592,7 @@ function SubSectionHdr({ title }: { title: string }) {
   return <Text style={S.subsectionHeader}>{title}</Text>;
 }
 function Para({ text }: { text: string }) {
-  const clean = text.replace(/\*\*([^*]+)\*\*/g, "$1");
-  return <Text style={S.para}>{clean}</Text>;
+  return <RichText text={text} style={S.para} />;
 }
 function CalloutBox({ label, value, context, color }: { label: string; value: string; context: string; color: string }) {
   return (
@@ -589,15 +606,12 @@ function CalloutBox({ label, value, context, color }: { label: string; value: st
 function Bullets({ items, color }: { items: string[]; color?: string }) {
   return (
     <>
-      {items.map((item, i) => {
-        const clean = item.replace(/\*\*([^*]+)\*\*/g, "$1");
-        return (
-          <View key={i} style={S.bullet}>
-            <Text style={[S.bulletDot, color ? { color } : {}]}>•</Text>
-            <Text style={S.bulletText}>{clean}</Text>
-          </View>
-        );
-      })}
+      {items.map((item, i) => (
+        <View key={i} style={S.bullet}>
+          <Text style={[S.bulletDot, color ? { color } : {}]}>•</Text>
+          <RichText text={item} style={S.bulletText} />
+        </View>
+      ))}
     </>
   );
 }
@@ -648,13 +662,15 @@ interface PrimerPDFProps {
   facts: Record<string, number>;
   sector?: string;
   selectedCharts?: string[];
+  chartVariants?: Record<string, number>;
   fmpExtended?: Record<string, unknown>;
 }
 
 const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"];
 
-export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts, fmpExtended }: PrimerPDFProps) {
+export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts, chartVariants, fmpExtended }: PrimerPDFProps) {
   const showChart = (id: string) => !selectedCharts || selectedCharts.length === 0 || selectedCharts.includes(id);
+  const chartVariant = (id: string) => chartVariants?.[id] ?? 0;
   const secs = parsePrimerSections(content);
 
   const execBullets  = parseBullets(secs["EXECUTIVE_SUMMARY"] ?? "");
@@ -752,11 +768,11 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
     : Math.abs(v) >= 1e6  ? `$${(v/1e6).toFixed(0)}M`
     : `$${v.toFixed(2)}`;
 
-  // Pull first exec bullet as cover tagline (trim to ~120 chars)
+  // Pull first exec bullet as cover tagline (trim to ~220 chars)
   const execTagline = (() => {
     const raw = execBullets[0] ?? "";
-    const clean = raw.replace(/\*\*([^*]+)\*\*/g, "$1");
-    return clean.length > 130 ? clean.slice(0, 127) + "…" : clean;
+    const clean = raw.replace(/\*\*([^*]+)\*\*/g, "$1").replace(/\s*--\s*$/, "");
+    return clean.length > 240 ? clean.slice(0, 237) + "…" : clean;
   })();
 
   // Investment Frame from snapshot
@@ -830,7 +846,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             {investmentFrame.length > 0 && (
               <View style={{ marginTop: 8, paddingTop: 8, borderTopWidth: 1, borderTopColor: "rgba(255,255,255,0.15)" }}>
                 <Text style={{ fontSize: 6.5, color: ACCENT.muted, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>Key Question</Text>
-                <Text style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>{investmentFrame}</Text>
+                <Text style={{ fontSize: 8, color: "rgba(255,255,255,0.85)", lineHeight: 1.5 }}>{investmentFrame.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>
               </View>
             )}
             {/* Date */}
@@ -877,47 +893,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           <SectionHdr title="II. Company Snapshot" accentColor={ACCENT.primary} />
           {snapshotRows.length > 0 && <SnapshotTable rows={snapshotRows} />}
 
-          {/* Financial Positioning Card (4 boxes) */}
-          {showChart("positioning") && (() => {
-            const roic = facts.roic;
-            const roicSpread = roic != null ? roic - 9 : null;
-            const fcfYld = facts.free_cash_flow && facts.market_cap ? (facts.free_cash_flow / facts.market_cap * 100) : null;
-            const erp = fcfYld != null ? fcfYld - 3.5 : null;
-            const ocfNi = facts.operating_cf && facts.net_income ? facts.operating_cf / facts.net_income : null;
-            const qLabel = ocfNi == null ? "N/A" : ocfNi > 1.1 ? "STRONG" : ocfNi > 0.8 ? "MODERATE" : "WEAK";
-            return (
-              <View style={S.positioningRow}>
-                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: roicSpread != null && roicSpread >= 0 ? GREEN : RED }]}>
-                  <Text style={S.posCardLabel}>ROIC vs WACC</Text>
-                  <Text style={[S.posCardValue, { color: roicSpread != null && roicSpread >= 0 ? GREEN : RED }]}>
-                    {roic != null ? `${roic.toFixed(1)}%` : "N/A"}
-                  </Text>
-                  <Text style={S.posCardSub}>vs 9% WACC{roicSpread != null ? ` | ${roicSpread >= 0 ? "+" : ""}${roicSpread.toFixed(1)}pp spread` : ""}</Text>
-                </View>
-                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: erp != null && erp > 0 ? GREEN : AMBER }]}>
-                  <Text style={S.posCardLabel}>FCF Yield</Text>
-                  <Text style={[S.posCardValue, { color: NAVY }]}>{fcfYld != null ? `${fcfYld.toFixed(1)}%` : "N/A"}</Text>
-                  <Text style={S.posCardSub}>vs 3.5% RF{erp != null ? ` | ERP ${erp >= 0 ? "+" : ""}${erp.toFixed(1)}pp` : ""}</Text>
-                </View>
-                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: ocfNi != null && ocfNi > 1 ? GREEN : ocfNi != null && ocfNi > 0.8 ? AMBER : RED }]}>
-                  <Text style={S.posCardLabel}>Earnings Quality</Text>
-                  <Text style={[S.posCardValue, { color: NAVY }]}>{ocfNi != null ? `${ocfNi.toFixed(2)}x` : "N/A"}</Text>
-                  <Text style={S.posCardSub}>OCF/Net Income | {qLabel}</Text>
-                </View>
-                <View style={[S.posCard, { borderTopWidth: 2, borderTopColor: ACCENT.primary }]}>
-                  <Text style={S.posCardLabel}>Stock vs 52W Range</Text>
-                  <Text style={[S.posCardValue, { color: NAVY }]}>
-                    {facts.stock_price != null && facts.week52_low != null && facts.week52_high != null && facts.week52_high > facts.week52_low
-                      ? `${Math.round(((facts.stock_price - facts.week52_low) / (facts.week52_high - facts.week52_low)) * 100)}th %ile`
-                      : "N/A"}
-                  </Text>
-                  <Text style={S.posCardSub}>{facts.stock_price != null ? `$${facts.stock_price.toFixed(2)} current` : ""}</Text>
-                </View>
-              </View>
-            );
-          })()}
-
-          {/* Incremental margin / leverage signal row */}
+          {/* Quality signal row — ROIC/WACC, leverage, earnings quality */}
           {(() => {
             const nd = facts.net_debt; const eb = facts.ebitda;
             const ndEb = nd != null && eb != null && eb !== 0 ? nd / eb : null;
@@ -1479,22 +1455,18 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* XI. Investment Thesis */}
           <SectionHdr title="XI. Investment Thesis" accentColor={ACCENT.primary} pageBreak />
-          <View style={S.twoCols}>
-            <View style={S.col}>
+          {bull.length > 0 && (
+            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
-              {bull.length > 0
-                ? <Bullets items={bull} color={GREEN} />
-                : <Text style={[S.para, { color: GRAY, fontFamily: "Helvetica-Oblique" }]}>See investment thesis content above</Text>
-              }
+              <Bullets items={bull} color={GREEN} />
             </View>
-            <View style={S.col}>
+          )}
+          {bear.length > 0 && (
+            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: RED, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#fff1f2" }}>
               <Text style={S.colHeaderBear}>Bear Case</Text>
-              {bear.length > 0
-                ? <Bullets items={bear} color={RED} />
-                : <Text style={[S.para, { color: GRAY, fontFamily: "Helvetica-Oblique" }]}>See investment thesis content above</Text>
-              }
+              <Bullets items={bear} color={RED} />
             </View>
-          </View>
+          )}
           {/* Conviction statement */}
           {(() => {
             const conviction = parseParas(secs["CONVICTION_STATEMENT"] ?? "");
@@ -1521,16 +1493,16 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} />
               <View style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
-                  {[["KPI", 1], ["Current", 0.8], ["Watch Threshold", 0.9], ["Why It Matters", 2.3]].map(([h, f]) => (
-                    <Text key={h as string} style={[S.tableHeaderCell, { flex: f as number }]}>{h as string}</Text>
+                  {[["KPI", "22%"], ["Current", "16%"], ["Watch Threshold", "22%"], ["Why It Matters", "40%"]].map(([h, w]) => (
+                    <Text key={h} style={[S.tableHeaderCell, { width: w }]}>{h}</Text>
                   ))}
                 </View>
                 {kpiRows.map((row, i) => (
-                  <View key={i} style={i % 2 === 0 ? S.tableRow : S.tableRowAlt}>
-                    <Text style={[S.tableCellBold, { flex: 1 }]}>{stripMd(row.kpi)}</Text>
-                    <Text style={[S.tableCell,     { flex: 0.8 }]}>{stripMd(row.current)}</Text>
-                    <Text style={[S.tableCell,     { flex: 0.9, color: RED }]}>{stripMd(row.threshold)}</Text>
-                    <Text style={[S.tableCell,     { flex: 2.3 }]}>{stripMd(row.why)}</Text>
+                  <View key={i} style={[i % 2 === 0 ? S.tableRow : S.tableRowAlt, { alignItems: "flex-start" }]}>
+                    <Text style={[S.tableCellBold, { width: "22%", lineHeight: 1.4 }]}>{stripMd(row.kpi)}</Text>
+                    <Text style={[S.tableCell,     { width: "16%", lineHeight: 1.4 }]}>{stripMd(row.current)}</Text>
+                    <Text style={[S.tableCell,     { width: "22%", color: RED, lineHeight: 1.4 }]}>{stripMd(row.threshold)}</Text>
+                    <Text style={[S.tableCell,     { width: "40%", lineHeight: 1.4 }]}>{stripMd(row.why)}</Text>
                   </View>
                 ))}
               </View>
