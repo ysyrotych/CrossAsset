@@ -967,13 +967,16 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const kpiRaw  = secs["KEY_METRICS_DASHBOARD"] ?? "";
   const kpiRows = kpiRaw.split("\n").filter(l => l.includes("|")).map(l => {
     const parts = l.split("|").map(p => p.trim()).filter(Boolean);
-    return parts.length >= 4 ? { kpi: parts[0], current: parts[1], threshold: parts[2], why: parts[3] } : null;
-  }).filter((r): r is { kpi: string; current: string; threshold: string; why: string } =>
+    if (parts.length >= 5) return { kpi: parts[0], current: parts[1], ntm: parts[2], threshold: parts[3], why: parts[4] };
+    if (parts.length === 4) return { kpi: parts[0], current: parts[1], ntm: null, threshold: parts[2], why: parts[3] };
+    return null;
+  }).filter((r): r is { kpi: string; current: string; ntm: string | null; threshold: string; why: string } =>
     r !== null
     && !r.kpi.match(/^[-=:]+$/)
     && r.kpi.toLowerCase() !== "kpi"
     && r.kpi.toLowerCase() !== "metric"
     && r.kpi.toLowerCase() !== "key performance indicator"
+    && r.kpi.toLowerCase() !== "ltm value"
   );
 
   const qaRaw  = secs["EARNINGS_CALL_QUESTIONS"] ?? "";
@@ -1208,6 +1211,32 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* I. Executive Summary */}
           <SectionHdr title="I. Executive Summary" accentColor={ACCENT.primary} />
+          {/* Conviction Badge — parse BUY/HOLD/SELL from the last exec bullet */}
+          {(() => {
+            const execText = (secs["EXECUTIVE_SUMMARY"] ?? "");
+            const stance = execText.match(/\b(BUY|HOLD|SELL)\b/);
+            const ptMatch = execText.match(/(?:price target|PT)\s*\$\s*(\d{2,5}(?:\.\d{1,2})?)/i);
+            if (!stance) return null;
+            const label = stance[1];
+            const color = label === "BUY" ? GREEN : label === "SELL" ? RED : AMBER;
+            return (
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                <View style={{ backgroundColor: color, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 3 }}>
+                  <Text style={{ fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", letterSpacing: 1.5 }}>{label}</Text>
+                </View>
+                {ptMatch && (
+                  <View style={{ borderWidth: 1, borderColor: color, paddingHorizontal: 10, paddingVertical: 5, borderRadius: 3 }}>
+                    <Text style={{ fontSize: 9, fontFamily: "Helvetica-Bold", color }}>{`PT: $${ptMatch[1]}`}</Text>
+                  </View>
+                )}
+                {facts.stock_price && ptMatch && (
+                  <Text style={{ fontSize: 7.5, color: GRAY }}>
+                    {`vs current $${facts.stock_price.toFixed(2)} (${(((parseFloat(ptMatch[1]) / facts.stock_price) - 1) * 100).toFixed(0)}% return)`}
+                  </Text>
+                )}
+              </View>
+            );
+          })()}
           {execBullets.length > 0
             ? <Bullets items={execBullets} color={ACCENT.primary} />
             : parseParas(secs["EXECUTIVE_SUMMARY"] ?? "").map((p, i) => <Para key={i} text={p} />)}
@@ -2012,16 +2041,17 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} pageBreak />
               <View style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
-                  {[["KPI", "22%"], ["Current", "16%"], ["Watch Threshold", "22%"], ["Why It Matters", "40%"]].map(([h, w]) => (
+                  {[["KPI", "20%"], ["LTM", "13%"], ["NTM Est", "12%"], ["Watch Threshold", "20%"], ["Why It Matters Here", "35%"]].map(([h, w]) => (
                     <Text key={h} style={[S.tableHeaderCell, { width: w }]}>{h}</Text>
                   ))}
                 </View>
                 {kpiRows.map((row, i) => (
                   <View key={i} style={[i % 2 === 0 ? S.tableRow : S.tableRowAlt, { alignItems: "flex-start" }]}>
-                    <Text style={[S.tableCellBold, { width: "22%", lineHeight: 1.4 }]}>{stripMd(row.kpi)}</Text>
-                    <Text style={[S.tableCell,     { width: "16%", lineHeight: 1.4 }]}>{stripMd(row.current)}</Text>
-                    <Text style={[S.tableCell,     { width: "22%", color: RED, lineHeight: 1.4 }]}>{stripMd(row.threshold)}</Text>
-                    <Text style={[S.tableCell,     { width: "40%", lineHeight: 1.4 }]}>{stripMd(row.why)}</Text>
+                    <Text style={[S.tableCellBold, { width: "20%", lineHeight: 1.4 }]}>{stripMd(row.kpi)}</Text>
+                    <Text style={[S.tableCell,     { width: "13%", lineHeight: 1.4 }]}>{stripMd(row.current)}</Text>
+                    <Text style={[S.tableCell,     { width: "12%", lineHeight: 1.4, color: BLUE }]}>{row.ntm ? stripMd(row.ntm) : "—"}</Text>
+                    <Text style={[S.tableCell,     { width: "20%", color: RED, lineHeight: 1.4 }]}>{stripMd(row.threshold)}</Text>
+                    <Text style={[S.tableCell,     { width: "35%", lineHeight: 1.4 }]}>{stripMd(row.why)}</Text>
                   </View>
                 ))}
               </View>
