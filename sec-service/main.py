@@ -335,19 +335,37 @@ def get_fmp_financials(ticker: str) -> dict:
         if peer_symbols:
             def fetch_peer_data(sym: str) -> dict:
                 try:
-                    url_km = f"{FMP_BASE}/key-metrics?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
-                    url_pr = f"{FMP_BASE}/profile?symbol={sym}&apikey={FMP_API_KEY}"
-                    rk = httpx.get(url_km, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
-                    rp = httpx.get(url_pr, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    url_km    = f"{FMP_BASE}/key-metrics?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
+                    url_km_v3 = f"{FMP_V3}/key-metrics/{sym}?period=annual&limit=1&apikey={FMP_API_KEY}"
+                    url_rat   = f"{FMP_BASE}/ratios?symbol={sym}&period=annual&limit=1&apikey={FMP_API_KEY}"
+                    url_pr    = f"{FMP_BASE}/profile?symbol={sym}&apikey={FMP_API_KEY}"
+                    rk  = httpx.get(url_km,    timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    rp  = httpx.get(url_pr,    timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                    rr  = httpx.get(url_rat,   timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
                     km_item = {}
                     pr_item = {}
+                    rat_item = {}
                     if rk.status_code == 200:
                         dk = rk.json()
                         km_item = dk[0] if isinstance(dk, list) and dk else {}
+                    # If stable key-metrics came back empty, try v3
+                    if not km_item:
+                        try:
+                            rk3 = httpx.get(url_km_v3, timeout=12, headers={"User-Agent": "CrossAsset/1.0"})
+                            if rk3.status_code == 200:
+                                dk3 = rk3.json()
+                                km_item = dk3[0] if isinstance(dk3, list) and dk3 else {}
+                        except Exception:
+                            pass
+                    if rr.status_code == 200:
+                        dr = rr.json()
+                        rat_item = dr[0] if isinstance(dr, list) and dr else {}
                     if rp.status_code == 200:
                         dp = rp.json()
                         pr_item = dp[0] if isinstance(dp, list) and dp else (dp if isinstance(dp, dict) else {})
-                    return {"km": km_item, "pr": pr_item}
+                    # Merge ratios into km so _peer_val can find fields from either source
+                    merged = {**rat_item, **km_item}
+                    return {"km": merged, "pr": pr_item}
                 except Exception as e:
                     print(f"Peer fetch error for {sym}: {e}")
                     return {"km": {}, "pr": {}}
@@ -368,13 +386,13 @@ def get_fmp_financials(ticker: str) -> dict:
                 km = pd.get("km", {})
                 pr = pd.get("pr", {})
                 if km or pr:
-                    pe    = _peer_val(km, "peRatioTTM", "peRatio", "priceEarningsRatio", "pe", "priceToEarningsRatio")
-                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDATTM", "enterpriseValueOverEBITDA", "evEbitda", "evToEbitda", "enterpriseValueMultiple")
-                    p_fcf = _peer_val(km, "pfcfRatioTTM", "pfcfRatio", "priceToFreeCashFlowsRatio", "priceToFreeCashFlow")
-                    roic  = _peer_val(km, "roicTTM", "roic", "returnOnInvestedCapital")
-                    npm   = _peer_val(km, "netProfitMarginTTM", "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage")
-                    rev_g = _peer_val(km, "revenueGrowthTTM", "revenueGrowth", "revenuePerShareGrowth")
-                    gpm   = _peer_val(km, "grossProfitMarginTTM", "grossProfitMargin", "grossProfitRatio")
+                    pe    = _peer_val(km, "peRatioTTM", "peRatio", "priceEarningsRatioTTM", "priceEarningsRatio", "pe", "priceToEarningsRatio")
+                    ev_e  = _peer_val(km, "enterpriseValueOverEBITDATTM", "enterpriseValueOverEBITDA", "evToEbitda", "evEbitda", "enterpriseValueMultiple", "enterpriseValueMultipleTTM")
+                    p_fcf = _peer_val(km, "pfcfRatioTTM", "pfcfRatio", "priceToFreeCashFlowsRatio", "priceToFreeCashFlowsTTM", "priceToFreeCashFlow", "priceFreeCashFlowRatio")
+                    roic  = _peer_val(km, "roicTTM", "roic", "returnOnInvestedCapital", "returnOnInvestedCapitalTTM")
+                    npm   = _peer_val(km, "netProfitMarginTTM", "netProfitMargin", "netIncomePerEBT", "netProfitMarginPercentage", "profitMargin")
+                    rev_g = _peer_val(km, "revenueGrowthTTM", "revenueGrowth", "revenuePerShareGrowth", "revenueGrowthAnnual")
+                    gpm   = _peer_val(km, "grossProfitMarginTTM", "grossProfitMargin", "grossProfitRatio", "grossMargin")
                     rpe   = _peer_val(km, "revenuePerEmployee")
                     mc    = safe_float(pr.get("marketCap") or pr.get("mktCap"))
                     # Fallback: compute PE from marketCap / netIncome if km doesn't have it
