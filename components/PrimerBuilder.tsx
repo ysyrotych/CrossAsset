@@ -1198,10 +1198,15 @@ function BuildStage({
   async function generateAll() {
     setGeneratingAll(true);
     const toGenerate = included.filter(s => !s.generated && !s.userEdited);
+    // Smart ordering: executive_summary last — it needs context from all others
+    const execIdx = toGenerate.findIndex(s => s.id === "executive_summary");
+    const ordered = execIdx >= 0
+      ? [...toGenerate.slice(0, execIdx), ...toGenerate.slice(execIdx + 1), toGenerate[execIdx]]
+      : toGenerate;
     // Run in parallel batches of 3 — dramatically faster than sequential
     const BATCH = 3;
-    for (let i = 0; i < toGenerate.length; i += BATCH) {
-      await Promise.all(toGenerate.slice(i, i + BATCH).map(s => generateSection(s.id)));
+    for (let i = 0; i < ordered.length; i += BATCH) {
+      await Promise.all(ordered.slice(i, i + BATCH).map(s => generateSection(s.id)));
     }
     setGeneratingAll(false);
   }
