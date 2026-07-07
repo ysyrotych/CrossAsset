@@ -878,7 +878,9 @@ function PageFooter({ ticker, company, date }: { ticker: string; company: string
   return (
     <View style={S.footer} fixed>
       <Text style={S.footerText}>{company} ({ticker}) — Equity Research Primer</Text>
-      <Text style={S.footerText}>Edgewood Management | {date} | For institutional use only</Text>
+      <Text style={S.footerText} render={({ pageNumber, totalPages }) =>
+        `Edgewood Management | ${date} | Page ${pageNumber} of ${totalPages} | Institutional Use Only`
+      } />
     </View>
   );
 }
@@ -1296,21 +1298,21 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           )}
 
           {/* III. Business Overview */}
-          <SectionHdr title="III. Business Overview" accentColor={ACCENT.primary} />
+          <SectionHdr title="III. Business Overview" accentColor={ACCENT.primary} pageBreak />
           {bg.length > 0 && <><SubSectionHdr title="Company Background" />{bg.map((p,i) => <Para key={i} text={p} />)}</>}
           {pp.length > 0 && <><SubSectionHdr title="Product Portfolio & Revenue Mix" />{pp.map((p,i) => <Para key={i} text={p} />)}</>}
           {cust.length > 0 && <><SubSectionHdr title="Customers, End Markets & Geographic Exposure" />{cust.map((p,i) => <Para key={i} text={p} />)}</>}
           {parseParas(sectionFallback(secs, "BUSINESS_OVERVIEW", ["COMPANY_BACKGROUND","PRODUCT_PORTFOLIO_&_REVENUE_MIX","CUSTOMERS,_END_MARKETS_&_GEOGRAPHIC_EXPOSURE"])).map((p,i) => <Para key={i} text={p} />)}
 
           {/* IV. Industry Analysis */}
-          <SectionHdr title="IV. Industry Analysis" accentColor={ACCENT.primary} />
+          <SectionHdr title="IV. Industry Analysis" accentColor={ACCENT.primary} pageBreak />
           {mkt.length > 0 && <><SubSectionHdr title="Market Structure & Competitive Dynamics" />{mkt.map((p,i) => <Para key={i} text={p} />)}</>}
           {drv.length > 0 && <><SubSectionHdr title="Key Industry Drivers & Cycle" />{drv.map((p,i) => <Para key={i} text={p} />)}</>}
           {comp.length > 0 && <><SubSectionHdr title="Competitive Position" />{comp.map((p,i) => <Para key={i} text={p} />)}</>}
           {parseParas(sectionFallback(secs, "INDUSTRY_ANALYSIS", ["MARKET_STRUCTURE_&_COMPETITIVE_DYNAMICS","KEY_INDUSTRY_DRIVERS_&_CYCLE","COMPETITIVE_POSITION"])).map((p,i) => <Para key={i} text={p} />)}
 
           {/* V. Financial Analysis */}
-          <SectionHdr title="V. Financial Analysis" accentColor={ACCENT.primary} />
+          <SectionHdr title="V. Financial Analysis" accentColor={ACCENT.primary} pageBreak />
           {rev.length > 0 && (
             <>
               <SubSectionHdr title="Revenue & Profitability Trends" />
@@ -1520,7 +1522,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             if (!hasSubsections && mgmtFallback.length === 0) return null;
             return (
               <>
-                <SectionHdr title="VII. Management Commentary & Guidance" accentColor={ACCENT.primary} />
+                <SectionHdr title="VII. Management Commentary & Guidance" accentColor={ACCENT.primary} pageBreak />
                 {callHighlights.length > 0 && <><SubSectionHdr title="Earnings Call Highlights" />{callHighlights.map((p,i) => <Para key={i} text={p} />)}</>}
                 {fwdGuidance.length > 0 && <><SubSectionHdr title="Forward Guidance & Outlook" />{fwdGuidance.map((p,i) => <Para key={i} text={p} />)}</>}
                 {!hasSubsections && mgmtFallback.map((p,i) => <Para key={i} text={p} />)}
@@ -1531,7 +1533,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* VIII. Management & Governance */}
           {(leadership.length > 0 || capAlloc.length > 0) && (
             <>
-              <SectionHdr title="VIII. Management & Governance" accentColor={ACCENT.primary} />
+              <SectionHdr title="VIII. Management & Governance" accentColor={ACCENT.primary} pageBreak />
               {leadership.length > 0 && <><SubSectionHdr title="Leadership & Track Record" />{leadership.map((p,i) => <Para key={i} text={p} />)}</>}
               {capAlloc.length > 0 && (
                 <>
@@ -1626,7 +1628,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             if (subsections.length > 0) {
               return (
                 <>
-                  <SectionHdr title="X. News Analysis & Market Intelligence" accentColor={ACCENT.primary} />
+                  <SectionHdr title="X. News Analysis & Market Intelligence" accentColor={ACCENT.primary} pageBreak />
                   {subsections.map((sub, i) => {
                     const col = subColors[sub.icon] ?? NAVY;
                     const lines = sub.body.split("\n").map(l => l.trim()).filter(Boolean);
@@ -1743,7 +1745,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* XII. Key Metrics Dashboard */}
           {kpiRows.length > 0 && (
             <>
-              <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} />
+              <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} pageBreak />
               <View style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                   {[["KPI", "22%"], ["Current", "16%"], ["Watch Threshold", "22%"], ["Why It Matters", "40%"]].map(([h, w]) => (
@@ -1765,7 +1767,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {/* XIII. Earnings Call Questions */}
           {qaItems.length > 0 && (
             <>
-              <SectionHdr title="XIII. Earnings Call Questions" accentColor={ACCENT.primary} />
+              <SectionHdr title="XIII. Earnings Call Questions" accentColor={ACCENT.primary} pageBreak />
               <Text style={[S.para, { color: GRAY, marginBottom: 8 }]}>Institutional-grade questions for the upcoming earnings call:</Text>
               {qaItems.map((q, i) => (
                 <View key={i} style={[S.bullet, { marginBottom: 7 }]}>
