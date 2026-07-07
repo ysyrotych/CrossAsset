@@ -2,7 +2,7 @@
 import React from "react";
 import {
   Document, Page, Text, View, StyleSheet,
-  Svg, Rect, G, Line, Polyline,
+  Svg, Rect, G, Line, Polyline, Polygon,
 } from "@react-pdf/renderer";
 
 // ── Colours ───────────────────────────────────────────────────────────────────
@@ -616,8 +616,8 @@ function RevenueAreaChart({ history }: { history: Record<string, Record<string, 
       <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
-        <Polyline points={revArea} fill={NAVY} opacity={0.2} strokeWidth={0} />
-        <Polyline points={fcfArea} fill={GREEN} opacity={0.3} strokeWidth={0} />
+        <Polygon points={revArea} fill={NAVY} opacity={0.2} stroke="none" />
+        <Polygon points={fcfArea} fill={GREEN} opacity={0.3} stroke="none" />
         <Polyline points={revPts} fill="none" stroke={NAVY} strokeWidth={1.5} />
         <Polyline points={fcfPts} fill="none" stroke={GREEN} strokeWidth={1.5} />
       </Svg>
@@ -655,9 +655,9 @@ function MarginAreaChart({ history }: { history: Record<string, Record<string, n
       <Svg width={CHART_W} height={CHART_H + 2}>
         {gridVals.map(v => { const y = toY(v); if (y==null) return null; return <G key={v}><Line x1={YAXIS_W} y1={y} x2={CHART_W} y2={y} stroke={BORDER} strokeWidth={0.4} strokeDasharray="2,2"/><Text x={YAXIS_W-2} y={y+2} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "end" }}>{`${v}%`}</Text></G>; })}
         <Line x1={YAXIS_W} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5}/>
-        <Polyline points={areaStr(gm)} fill={BLUE} opacity={0.1} strokeWidth={0}/>
-        <Polyline points={areaStr(om)} fill={NAVY} opacity={0.15} strokeWidth={0}/>
-        <Polyline points={areaStr(nm)} fill={GREEN} opacity={0.2} strokeWidth={0}/>
+        <Polygon points={areaStr(gm)} fill={BLUE} opacity={0.1} stroke="none"/>
+        <Polygon points={areaStr(om)} fill={NAVY} opacity={0.15} stroke="none"/>
+        <Polygon points={areaStr(nm)} fill={GREEN} opacity={0.2} stroke="none"/>
         <Polyline points={ptsStr(gm)} fill="none" stroke={BLUE} strokeWidth={1.5}/>
         <Polyline points={ptsStr(om)} fill="none" stroke={NAVY} strokeWidth={1.5}/>
         <Polyline points={ptsStr(nm)} fill="none" stroke={GREEN} strokeWidth={1.5}/>
@@ -1253,14 +1253,28 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   { label: "Net Income",    data: history.net_income,     key: true },
                   { label: "Operating CF",  data: history.operating_cf,   key: false },
                   { label: "Free Cash Flow",data: history.free_cash_flow, key: true },
-                ].filter(r => r.data && Object.keys(r.data).length > 0).map((row, ri) => (
+                  { label: "EPS Diluted ($)",data: history.eps_diluted,   key: false, isEps: true },
+                ].filter(r => r.data && Object.keys(r.data).length > 0).map((row: { label: string; data: Record<string, number> | undefined; key: boolean; isEps?: boolean }, ri) => (
                   <View key={row.label} style={[ri % 2 === 0 ? S.tableRow : S.tableRowAlt, row.key ? { borderTopWidth: 1, borderTopColor: BORDER } : {}]}>
                     <Text style={[row.key ? S.tableCellBold : S.tableCell, { width: "28%", color: row.key ? NAVY : DGRAY }]}>{row.label}</Text>
-                    {allFY.map(y => (
-                      <Text key={y} style={[row.key ? { ...S.tableCellNum, fontFamily: "Helvetica-Bold", color: NAVY } : S.tableCellNum, { flex: 1 }]}>{fmtM(row.data?.[y])}</Text>
-                    ))}
+                    {allFY.map((y, yi) => {
+                      const v = row.data?.[y];
+                      const prev = yi > 0 ? row.data?.[allFY[yi-1]] : undefined;
+                      const yoy = v != null && prev != null && prev !== 0 ? ((v - prev) / Math.abs(prev)) * 100 : null;
+                      const display = row.isEps
+                        ? (v != null ? `$${v.toFixed(2)}` : "—")
+                        : fmtM(v);
+                      return (
+                        <View key={y} style={{ flex: 1, alignItems: "flex-end" }}>
+                          <Text style={row.key ? { ...S.tableCellNum, fontFamily: "Helvetica-Bold", color: NAVY } : S.tableCellNum}>{display}</Text>
+                          {yoy != null && <Text style={{ fontSize: 5, color: yoy >= 0 ? GREEN : RED, textAlign: "right" }}>{yoy >= 0 ? "+" : ""}{yoy.toFixed(0)}%</Text>}
+                        </View>
+                      );
+                    })}
                   </View>
                 ))}
+                {/* Separator */}
+                <View style={{ height: 1, backgroundColor: BORDER, marginVertical: 2 }} />
                 {[
                   { label: "Gross Margin %", numKey: "gross_profit", denKey: "revenue" },
                   { label: "Op. Margin %",   numKey: "operating_income", denKey: "revenue" },

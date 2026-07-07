@@ -144,14 +144,6 @@ function Toggle({ value, onChange }: { value: boolean; onChange: (v: boolean) =>
 
 // ── Stage 1: Configure ─────────────────────────────────────────────────────────
 
-const CHART_OPTIONS = [
-  { id: "revenue_fcf", label: "Revenue vs FCF", desc: "5-year bars with FCF overlay" },
-  { id: "eps", label: "EPS Trend", desc: "5-year EPS bar chart" },
-  { id: "margins", label: "Margin Lines", desc: "Gross/Op/Net margin over time" },
-  { id: "positioning", label: "KPI Cards", desc: "ROIC, FCF yield, earnings quality" },
-  { id: "price_range", label: "Price Range", desc: "Bear / Base / Bull scenario visual" },
-  { id: "cap_alloc", label: "Capital Allocation", desc: "FCF deployment waterfall" },
-];
 
 function ConfigureStage({
   sections, setSections, tone, setTone, length, setLength, onNext,
@@ -542,92 +534,6 @@ const CHART_DEFS = [
     type: "cards",
   },
 ];
-
-// Browser-native SVG mini-charts (separate from react-pdf components)
-function MiniRevenueChart({ history }: { history: Record<string, Record<string, number>> }) {
-  const revData = history.revenue ?? {};
-  const fcfData = history.free_cash_flow ?? {};
-  const years   = Object.keys(revData).sort().slice(-5);
-  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No revenue data</div>;
-  const allVals = [...years.map(y => revData[y] ?? 0), ...years.map(y => Math.abs(fcfData[y] ?? 0))].filter(v => v > 0);
-  const maxV = Math.max(...allVals) || 1;
-  const W = 280, H = 80, BAR = 22, GAP = (W - years.length * BAR * 2 - years.length * 4) / (years.length + 1);
-  const fmtB = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(0)}B` : `$${(v/1e6).toFixed(0)}M`;
-  return (
-    <svg width={W} height={H + 20} style={{ display: "block" }}>
-      {years.map((yr, i) => {
-        const rev = revData[yr] ?? 0; const fcf = fcfData[yr] ?? 0;
-        const x0 = GAP + i * (BAR * 2 + 4 + GAP);
-        const rH = Math.max(2, (rev / maxV) * H); const fH = Math.max(2, (Math.abs(fcf) / maxV) * H);
-        return (
-          <g key={yr}>
-            <rect x={x0} y={H - rH} width={BAR} height={rH} fill="#0c1b38" rx={1} />
-            <rect x={x0 + BAR + 4} y={H - fH} width={BAR} height={fH} fill={fcf >= 0 ? "#0d6b45" : "#b42318"} rx={1} />
-            <text x={x0 + BAR} y={H + 12} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>
-            {rev > 0 && <text x={x0 + BAR/2} y={H - rH - 2} textAnchor="middle" fill="#0c1b38" fontSize={6}>{fmtB(rev)}</text>}
-          </g>
-        );
-      })}
-      <line x1={0} y1={H} x2={W} y2={H} stroke="#dde1e8" strokeWidth={0.5} />
-    </svg>
-  );
-}
-
-function MiniMarginChart({ history }: { history: Record<string, Record<string, number>> }) {
-  const rev = history.revenue ?? {}, gp = history.gross_profit ?? {}, oi = history.operating_income ?? {}, ni = history.net_income ?? {};
-  const years = Object.keys(rev).sort().slice(-5);
-  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No margin data</div>;
-  const toM = (num: Record<string, number>, yr: string) => rev[yr] ? (num[yr] ?? 0) / rev[yr] * 100 : null;
-  const gMs = years.map(y => toM(gp, y)); const oMs = years.map(y => toM(oi, y)); const nMs = years.map(y => toM(ni, y));
-  const allV = [...gMs, ...oMs, ...nMs].filter((v): v is number => v != null);
-  const maxV = Math.max(...allV, 10), minV = Math.min(...allV, 0);
-  const W = 280, H = 80, PL = 28;
-  const toX = (i: number) => PL + (i / (years.length - 1)) * (W - PL);
-  const toY = (v: number | null) => v == null ? null : H - ((v - minV) / (maxV - minV || 1)) * H;
-  const pts = (ms: (number|null)[]) => ms.map((v, i) => v == null ? null : `${toX(i)},${toY(v)}`).filter(Boolean).join(" ");
-  const COLORS = ["#2563eb", "#0c1b38", "#0d6b45"];
-  const series = [gMs, oMs, nMs];
-  return (
-    <svg width={W} height={H + 20} style={{ display: "block" }}>
-      {[0, 25, 50, 75, 100].filter(v => v >= minV && v <= maxV).map(v => (
-        <g key={v}>
-          <line x1={PL} y1={toY(v)!} x2={W} y2={toY(v)!} stroke="#dde1e8" strokeWidth={0.4} strokeDasharray="2,2" />
-          <text x={PL - 2} y={(toY(v) ?? 0) + 3} textAnchor="end" fill="#4b6484" fontSize={6}>{`${v}%`}</text>
-        </g>
-      ))}
-      {series.map((ms, si) => <polyline key={si} points={pts(ms)} fill="none" stroke={COLORS[si]} strokeWidth={1.5} />)}
-      {years.map((yr, i) => <text key={yr} x={toX(i)} y={H + 14} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>)}
-      <line x1={PL} y1={0} x2={PL} y2={H} stroke="#dde1e8" strokeWidth={0.5} />
-    </svg>
-  );
-}
-
-function MiniEpsChart({ history }: { history: Record<string, Record<string, number>> }) {
-  const eps = history.eps_diluted ?? {};
-  const years = Object.keys(eps).sort().slice(-5);
-  if (years.length < 2) return <div style={{ color: "#4b6484", fontSize: 10, padding: "20px 0" }}>No EPS data</div>;
-  const vals = years.map(y => eps[y] ?? 0);
-  const maxV = Math.max(...vals.map(Math.abs), 0.01);
-  const W = 280, H = 80, BAR = 40, GAP = (W - years.length * BAR) / (years.length + 1);
-  const MID = H / 2;
-  return (
-    <svg width={W} height={H + 20} style={{ display: "block" }}>
-      <line x1={0} y1={MID} x2={W} y2={MID} stroke="#dde1e8" strokeWidth={0.5} strokeDasharray="3,2" />
-      {years.map((yr, i) => {
-        const v = eps[yr] ?? 0; const bH = Math.max(2, (Math.abs(v) / maxV) * MID);
-        const x0 = GAP + i * (BAR + GAP); const y0 = v >= 0 ? MID - bH : MID;
-        const lblY = y0 > 8 ? y0 - 4 : y0 + bH / 2 + 3;
-        return (
-          <g key={yr}>
-            <rect x={x0} y={y0} width={BAR} height={bH} fill="#b45309" rx={1} />
-            <text x={x0 + BAR/2} y={lblY} textAnchor="middle" fill={y0 > 8 ? "#b45309" : "white"} fontSize={6} fontWeight="bold">{`$${v.toFixed(2)}`}</text>
-            <text x={x0 + BAR/2} y={H + 14} textAnchor="middle" fill="#4b6484" fontSize={7}>{yr.slice(2, 4)}</text>
-          </g>
-        );
-      })}
-    </svg>
-  );
-}
 
 // ── Chart variant thumbnail renderers ──────────────────────────────────────────
 
@@ -1069,8 +975,6 @@ function buildVariants(history: Record<string, Record<string, number>>, _facts: 
     ],
   } as Record<string, { name: string; el: React.ReactNode }[]>;
 }
-
-// ── Stage 3: Charts ─────────────────────────────────────────────────────────────
 
 function ChartsStage({
   history, facts,

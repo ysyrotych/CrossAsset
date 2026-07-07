@@ -53,7 +53,7 @@ export async function POST(req: NextRequest) {
     thesis, tone, length, facts, history, fmpExtended, documentContext,
   } = await req.json();
 
-  const wordTarget = length === "brief" ? "450-600" : length === "comprehensive" ? "900-1200" : "650-850";
+  const wordTarget = length === "brief" ? "500-650" : length === "comprehensive" ? "1000-1400" : "700-950";
   const sectionGuidance = SECTION_PROMPTS[sectionId] ?? sectionDescription ?? `Write the ${sectionTitle} section.`;
 
   const fmtV = (v: number | null | undefined) => {
@@ -286,7 +286,7 @@ FORMATTING:
     },
     body: JSON.stringify({
       model: "claude-sonnet-4-6",
-      max_tokens: 4000,
+      max_tokens: 5000,
       stream: true,
       system: systemPrompt,
       messages: [{ role: "user", content: userPrompt }],
