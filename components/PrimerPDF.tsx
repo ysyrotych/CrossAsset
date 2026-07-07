@@ -557,6 +557,245 @@ function EpsBarChart({ history }: { history: Record<string, Record<string, numbe
   );
 }
 
+// ── Revenue FCF: line overlay variant (variant 1) ──────────────────────────────
+function RevenueLineOverlayChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {}, fcfData = history.free_cash_flow ?? {};
+  const years = Object.keys(revData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const revVals = years.map(y => revData[y] ?? 0);
+  const fcfVals = years.map(y => fcfData[y] ?? 0);
+  const maxV = Math.max(...revVals, ...fcfVals.map(Math.abs), 1);
+  const fmtS = (v: number) => Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+  const BAR_W = 36; const GAP = (CHART_W - years.length * BAR_W) / (years.length + 1);
+  const xOf = (i: number) => GAP + i * (BAR_W + GAP) + BAR_W / 2;
+  const yOf = (v: number) => CHART_H - (Math.abs(v) / maxV) * CHART_H;
+  const pts = years.map((_, i) => `${xOf(i)},${yOf(fcfVals[i])}`).join(" ");
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
+      <Svg width={CHART_W} height={CHART_H + 14}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {years.map((yr, i) => {
+          const rev = revData[yr] ?? 0;
+          const rH = Math.max(2, (rev / maxV) * CHART_H);
+          const x0 = GAP + i * (BAR_W + GAP);
+          return <G key={yr}><Rect x={x0} y={CHART_H - rH} width={BAR_W} height={rH} fill={NAVY} rx={1} opacity={0.85} /></G>;
+        })}
+        <Polyline points={pts} fill="none" stroke={GREEN} strokeWidth={2} />
+        {years.map((_, i) => <Rect key={i} x={xOf(i)-3} y={yOf(fcfVals[i])-3} width={6} height={6} fill={GREEN} rx={3} />)}
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 1 }}>
+        {years.map(yr => <View key={yr} style={{ alignItems: "center" }}><Text style={{ fontSize: 6, color: GRAY }}>{`FY${yr.slice(0,4)}`}</Text><Text style={{ fontSize: 5, color: NAVY }}>{fmtS(revData[yr] ?? 0)}</Text><Text style={{ fontSize: 5, color: GREEN }}>{fmtS(fcfData[yr] ?? 0)}</Text></View>)}
+      </View>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Revenue (bars)</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>FCF (line)</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Revenue FCF: area variant (variant 2+) ─────────────────────────────────────
+function RevenueAreaChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {}, fcfData = history.free_cash_flow ?? {};
+  const years = Object.keys(revData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const revVals = years.map(y => revData[y] ?? 0);
+  const fcfVals = years.map(y => fcfData[y] ?? 0);
+  const maxV = Math.max(...revVals, ...fcfVals.map(Math.abs), 1);
+  const fmtS = (v: number) => Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+  const n = years.length;
+  const xOf = (i: number) => (i / (n - 1)) * CHART_W;
+  const yOf = (v: number) => CHART_H - (v / maxV) * CHART_H;
+  const revPts = years.map((_, i) => `${xOf(i)},${yOf(revVals[i])}`).join(" ");
+  const fcfPts = years.map((_, i) => `${xOf(i)},${yOf(Math.abs(fcfVals[i]))}`).join(" ");
+  const revArea = revPts + ` ${xOf(n-1)},${CHART_H} 0,${CHART_H}`;
+  const fcfArea = fcfPts + ` ${xOf(n-1)},${CHART_H} 0,${CHART_H}`;
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
+      <Svg width={CHART_W} height={CHART_H + 14}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        <Polyline points={revArea} fill={NAVY} opacity={0.2} strokeWidth={0} />
+        <Polyline points={fcfArea} fill={GREEN} opacity={0.3} strokeWidth={0} />
+        <Polyline points={revPts} fill="none" stroke={NAVY} strokeWidth={1.5} />
+        <Polyline points={fcfPts} fill="none" stroke={GREEN} strokeWidth={1.5} />
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 1 }}>
+        {years.map(yr => <View key={yr} style={{ alignItems: "center" }}><Text style={{ fontSize: 6, color: GRAY }}>{`FY${yr.slice(0,4)}`}</Text><Text style={{ fontSize: 5, color: NAVY }}>{fmtS(revData[yr] ?? 0)}</Text></View>)}
+      </View>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Revenue</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>FCF</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Margins: filled area variant (variant 1+) ──────────────────────────────────
+function MarginAreaChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {}, gpData = history.gross_profit ?? {}, oiData = history.operating_income ?? {}, niData = history.net_income ?? {};
+  const years = Object.keys(revData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const toM = (num: Record<string, number>, y: string) => revData[y] ? (num[y] ?? 0) / revData[y] * 100 : null;
+  const gm = years.map(y => toM(gpData, y)), om = years.map(y => toM(oiData, y)), nm = years.map(y => toM(niData, y));
+  const allV = [...gm, ...om, ...nm].filter((v): v is number => v != null);
+  const minV = Math.floor(Math.min(...allV, 0) / 10) * 10;
+  const maxV = Math.ceil(Math.max(...allV, 1) / 10) * 10;
+  const range = maxV - minV || 1;
+  const YAXIS_W = 32; const PLOT_W = CHART_W - YAXIS_W;
+  const toX = (i: number) => YAXIS_W + (i / (years.length - 1)) * PLOT_W;
+  const toY = (v: number | null) => v == null ? null : CHART_H - ((v - minV) / range) * CHART_H;
+  const ptsStr = (ms: (number|null)[]) => ms.map((v,i) => v==null?null:`${toX(i)},${toY(v)}`).filter(Boolean).join(" ");
+  const areaStr = (ms: (number|null)[]) => ptsStr(ms) + ` ${toX(years.length-1)},${CHART_H} ${YAXIS_W},${CHART_H}`;
+  const gridVals: number[] = []; for (let v = minV; v <= maxV; v += 10) gridVals.push(v);
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
+      <Svg width={CHART_W} height={CHART_H + 2}>
+        {gridVals.map(v => { const y = toY(v); if (y==null) return null; return <G key={v}><Line x1={YAXIS_W} y1={y} x2={CHART_W} y2={y} stroke={BORDER} strokeWidth={0.4} strokeDasharray="2,2"/><Text x={YAXIS_W-2} y={y+2} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "end" }}>{`${v}%`}</Text></G>; })}
+        <Line x1={YAXIS_W} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5}/>
+        <Polyline points={areaStr(gm)} fill={BLUE} opacity={0.1} strokeWidth={0}/>
+        <Polyline points={areaStr(om)} fill={NAVY} opacity={0.15} strokeWidth={0}/>
+        <Polyline points={areaStr(nm)} fill={GREEN} opacity={0.2} strokeWidth={0}/>
+        <Polyline points={ptsStr(gm)} fill="none" stroke={BLUE} strokeWidth={1.5}/>
+        <Polyline points={ptsStr(om)} fill="none" stroke={NAVY} strokeWidth={1.5}/>
+        <Polyline points={ptsStr(nm)} fill="none" stroke={GREEN} strokeWidth={1.5}/>
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2, paddingLeft: YAXIS_W }}>
+        {years.map(yr => <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center" }}>{`FY${yr.slice(0,4)}`}</Text>)}
+      </View>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: BLUE }]} /><Text style={S.legendText}>Gross</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Operating</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Net</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Margins: bar groups variant (variant 2+) ────────────────────────────────────
+function MarginBarGroupChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {}, gpData = history.gross_profit ?? {}, oiData = history.operating_income ?? {}, niData = history.net_income ?? {};
+  const years = Object.keys(revData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const toM = (num: Record<string, number>, y: string) => revData[y] ? Math.max(0, (num[y] ?? 0) / revData[y] * 100) : 0;
+  const gm = years.map(y => toM(gpData, y)), om = years.map(y => toM(oiData, y)), nm = years.map(y => toM(niData, y));
+  const maxV = Math.max(...gm, ...om, ...nm, 1);
+  const n = years.length; const BGRP = (CHART_W - 20) / n; const BW = (BGRP - 8) / 3;
+  const x0 = (i: number, b: number) => 10 + i * BGRP + b * (BW + 2);
+  const bh = (v: number) => Math.max(1, (v / maxV) * CHART_H);
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
+      <Svg width={CHART_W} height={CHART_H + 14}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5}/>
+        {years.map((yr, i) => (
+          <G key={yr}>
+            <Rect x={x0(i,0)} y={CHART_H-bh(gm[i])} width={BW} height={bh(gm[i])} fill={BLUE} rx={1}/>
+            <Rect x={x0(i,1)} y={CHART_H-bh(om[i])} width={BW} height={bh(om[i])} fill={NAVY} rx={1}/>
+            <Rect x={x0(i,2)} y={CHART_H-bh(nm[i])} width={BW} height={bh(nm[i])} fill={GREEN} rx={1}/>
+            <Text x={10+i*BGRP+BGRP/2} y={CHART_H+10} style={{ fontSize: 5.5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{`FY${yr.slice(0,4)}`}</Text>
+          </G>
+        ))}
+      </Svg>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: BLUE }]} /><Text style={S.legendText}>Gross</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Operating</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Net</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── EPS: lollipop variant (variant 1) ──────────────────────────────────────────
+function EpsLollipopChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const epsData = history.eps_diluted ?? {};
+  const years = Object.keys(epsData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const vals = years.map(y => epsData[y] ?? 0);
+  const maxA = Math.max(...vals.map(Math.abs), 0.01);
+  const BAR_W = 44; const GAP = (CHART_W - years.length * BAR_W) / (years.length + 1);
+  const MID_Y = CHART_H / 2;
+  const xOf = (i: number) => GAP + i * (BAR_W + GAP) + BAR_W / 2;
+  const yOf = (v: number) => MID_Y - (v / maxA) * MID_Y;
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
+      <Svg width={CHART_W} height={CHART_H + 14}>
+        <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2"/>
+        {years.map((yr, i) => {
+          const v = epsData[yr] ?? 0; const y = yOf(v); const x = xOf(i);
+          return (
+            <G key={yr}>
+              <Line x1={x} y1={MID_Y} x2={x} y2={y} stroke={v >= 0 ? AMBER : RED} strokeWidth={2}/>
+              <Rect x={x-4} y={y-4} width={8} height={8} fill={v >= 0 ? AMBER : RED} rx={4}/>
+              <Text x={x} y={y > MID_Y ? y + 10 : y - 6} style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2 }}>
+        {years.map(yr => <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center", width: BAR_W + GAP }}>{`FY${yr.slice(0,4)}`}</Text>)}
+      </View>
+    </View>
+  );
+}
+
+// ── EPS: dual-tone variant (variant 2+) ────────────────────────────────────────
+function EpsDualToneChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const epsData = history.eps_diluted ?? {};
+  const years = Object.keys(epsData).sort().slice(-5);
+  if (years.length < 2) return null;
+  const vals = years.map(y => epsData[y] ?? 0);
+  const maxA = Math.max(...vals.map(Math.abs), 0.01);
+  const BAR_W = 44; const GAP = (CHART_W - years.length * BAR_W) / (years.length + 1);
+  const MID_Y = CHART_H / 2;
+  return (
+    <View style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
+      <Svg width={CHART_W} height={CHART_H + 14}>
+        <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2"/>
+        {years.map((yr, i) => {
+          const v = vals[i]; const barH = Math.max(2, (Math.abs(v)/maxA)*MID_Y);
+          const x0 = GAP + i * (BAR_W + GAP); const y0 = v >= 0 ? MID_Y - barH : MID_Y;
+          const labelY = y0 > 8 ? y0 - 4 : y0 + barH/2 + 2;
+          return (
+            <G key={yr}>
+              <Rect x={x0} y={y0} width={BAR_W} height={barH} fill={v >= 0 ? GREEN : RED} rx={1}/>
+              <Text x={x0 + BAR_W/2} y={labelY} style={{ fontSize: 5, fill: y0 > 8 ? (v >= 0 ? GREEN : RED) : "white", fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 2 }}>
+        {years.map(yr => <Text key={yr} style={{ fontSize: 6, color: GRAY, textAlign: "center", width: BAR_W + GAP }}>{`FY${yr.slice(0,4)}`}</Text>)}
+      </View>
+      <View style={S.chartLegend}>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Positive EPS</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: RED }]} /><Text style={S.legendText}>Negative EPS</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Variant selector wrappers ──────────────────────────────────────────────────
+function RevenueFCFChart({ history, variant }: { history: Record<string, Record<string, number>>; variant: number }) {
+  if (variant === 1) return <RevenueLineOverlayChart history={history} />;
+  if (variant === 2 || variant === 3) return <RevenueAreaChart history={history} />;
+  return <RevenueBarChart history={history} />;
+}
+function MarginChart({ history, variant }: { history: Record<string, Record<string, number>>; variant: number }) {
+  if (variant === 1 || variant === 3) return <MarginAreaChart history={history} />;
+  if (variant === 2 || variant === 4) return <MarginBarGroupChart history={history} />;
+  return <MarginLineChart history={history} />;
+}
+function EpsChart({ history, variant }: { history: Record<string, Record<string, number>>; variant: number }) {
+  if (variant === 1 || variant === 3) return <EpsLollipopChart history={history} />;
+  if (variant === 2 || variant === 4) return <EpsDualToneChart history={history} />;
+  return <EpsBarChart history={history} />;
+}
+
 function StockRangeBar({ facts }: { facts: Record<string, number> }) {
   const lo = facts.week52_low, hi = facts.week52_high, cur = facts.stock_price;
   if (!lo || !hi || !cur || hi <= lo) return null;
@@ -1084,8 +1323,8 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 }
                 return null;
               })()}
-              {showChart("revenue_fcf") && <RevenueBarChart history={history} />}
-              {showChart("margins") && <MarginLineChart history={history} />}
+              {showChart("revenue_fcf") && <RevenueFCFChart history={history} variant={chartVariant("revenue_fcf")} />}
+              {showChart("margins") && <MarginChart history={history} variant={chartVariant("margins")} />}
             </>
           )}
           {bal.length > 0 && (
@@ -1115,7 +1354,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             <>
               <SubSectionHdr title="Free Cash Flow & CapEx" />
               {fcf.map((p,i) => <Para key={i} text={p} />)}
-              {showChart("eps") && <EpsBarChart history={history} />}
+              {showChart("eps") && <EpsChart history={history} variant={chartVariant("eps")} />}
             </>
           )}
           {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}

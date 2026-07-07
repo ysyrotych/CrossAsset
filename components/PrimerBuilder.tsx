@@ -487,7 +487,7 @@ function ThesisStage({
         </button>
         <button onClick={onNext} disabled={!selectedThesis}
           style={{ display: "flex", alignItems: "center", gap: 8, background: selectedThesis ? BLUE : ACCENT, border: "none", borderRadius: 8, padding: "10px 24px", cursor: selectedThesis ? "pointer" : "not-allowed", fontSize: 12, fontWeight: 700, color: selectedThesis ? "white" : MUTED, opacity: selectedThesis ? 1 : 0.6 }}>
-          Next: Build Sections <ArrowRight size={14} />
+          Next: Select Charts <ArrowRight size={14} />
         </button>
       </div>
 
