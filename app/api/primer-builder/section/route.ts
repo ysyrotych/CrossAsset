@@ -14,13 +14,13 @@ const SECTION_PROMPTS: Record<string, string> = {
     "Write a thorough business overview. Open with the most important structural fact about this company. Cover: the current product/service portfolio with exact revenue contribution per segment (use the REVENUE SEGMENTS data), named customers or concentration metrics, geographic mix with percentages, the moat sources with hard evidence (retention rates, margin comparison, pricing power), and switching costs. Name specific products and quote segment revenue numbers. Do not use generic placeholders.",
 
   industry_analysis:
-    "Write an industry analysis with a clear directional stance. Cover: the market structure (oligopoly/fragmented/duopoly), the key demand driver right now and where the company sits in its cycle, barriers to entry (capital intensity, regulatory, network effects), pricing dynamics and who sets prices, and exactly where this company sits on the competitive map vs named peers. Conclude with a concrete directional view on the industry over the next 12-24 months. Take a stance.",
+    "Write an industry analysis with a clear directional stance. Cover: the market structure (oligopoly/fragmented/duopoly), the key demand driver right now and where the company sits in its cycle, barriers to entry (capital intensity, regulatory, network effects), pricing dynamics and who sets prices, and exactly where this company sits on the competitive map vs named peers from the PEER COMPARISON data — name each peer, quote their gross margin and revenue growth vs the subject company's, and explain who is gaining or losing share. Conclude with a concrete directional view on the industry over the next 12-24 months. Take a stance.",
 
   financial_analysis:
     "Write a rigorous financial analysis that integrates the computed metrics provided. REQUIRED: (1) Lead with revenue trajectory — use the CAGR from HISTORICAL TRENDS, call out if it is accelerating or decelerating. (2) Gross margin story — is pricing power growing or eroding? (3) Operating leverage — explicitly compare revenue growth to OpEx growth rates from the historical data. (4) Earnings quality — use the accrual ratio or OCF/Net Income ratio from computed metrics; if OCF > net income, say why and by how much. (5) Balance sheet durability — use Net Debt/EBITDA ratio from computed metrics, reference debt maturity if known. (6) FCF conversion — what % of EBITDA converts to FCF and why. Every paragraph must cite at least one specific dollar amount and one percentage from the data provided.",
 
   valuation:
-    "Write a valuation framework that shows explicit math. REQUIRED: (1) Current trading multiples vs the 3-year average — quote P/E, EV/EBITDA, EV/Rev, and FCF yield. (2) What the current multiple mathematically implies about expected growth — show the algebra. (3) Three explicit price target scenarios using the format: [Bear: $X revenue × Y multiple ± $Z net cash/debt ÷ N shares = $TT]. [Base: same format]. [Bull: same format]. Use the shares outstanding and net debt/cash from the data. (4) Conclude with which scenario you weight most heavily and the single number that would cause you to move between scenarios.",
+    "Write a valuation framework that shows explicit math. REQUIRED: (1) Current trading multiples vs the 3-year average — quote P/E, EV/EBITDA, EV/Rev, and FCF yield. (2) PEER MULTIPLES TABLE: use the PEER COMPARISON data to show how this company's P/E, EV/EBITDA, and gross margin compare to each named peer — identify whether the company trades at a premium or discount and explicitly justify or challenge that spread. (3) What the current multiple mathematically implies about expected growth — show the algebra. (4) Three explicit price target scenarios using the format: [Bear: $X revenue × Y EV/EBITDA multiple ± $Z net cash/debt ÷ N shares = $TT]. [Base: same format]. [Bull: same format]. Use the shares outstanding and net debt/cash from the data. (5) Conclude with which scenario you weight most heavily and the single number that would cause you to move between scenarios.",
 
   management_commentary:
     "Write management commentary. Use the EARNINGS SURPRISE HISTORY to assess guidance credibility — what is the beat rate, is it consistent or deteriorating, are beats driven by real upside or just sandbagging? Cover what leadership has communicated about business trends with specific guidance numbers, what sell-side analysts are focused on heading into the next print based on recent news/commentary, and any notable capital allocation language shifts. Reference specific quarters by name.",
@@ -170,6 +170,27 @@ ${Object.entries(history).map(([metric, years]) => {
 }).filter(Boolean).join("\n")}
 ` : "";
 
+  // Peer comparison block for valuation / industry / financial sections
+  const peerSections = ["valuation", "industry_analysis", "financial_analysis", "investment_thesis", "executive_summary"];
+  const peerBlock = peerSections.includes(sectionId) && Array.isArray(fmpExtended?.peer_comparison) && (fmpExtended.peer_comparison as any[]).length > 0
+    ? (() => {
+        const peers = fmpExtended.peer_comparison as Array<{
+          symbol?: string; name?: string; market_cap?: number;
+          pe?: number; ev_ebitda?: number; p_fcf?: number;
+          gross_margin?: number; net_margin?: number; roic?: number;
+          revenue_growth?: number; revenue?: number;
+        }>;
+        const fmtM = (v?: number | null) => v == null ? "—" : Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T` : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+        const fmtPct2 = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
+        const fmtX = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}x`;
+        const header = `Symbol | Mkt Cap | P/E | EV/EBITDA | P/FCF | Gross Mgn | ROIC | Rev Growth`;
+        const rows = peers.slice(0, 6).map(p =>
+          `${p.symbol ?? "?"} (${p.name ? p.name.slice(0, 18) : "?"}) | ${fmtM(p.market_cap)} | ${fmtX(p.pe)} | ${fmtX(p.ev_ebitda)} | ${fmtX(p.p_fcf)} | ${fmtPct2(p.gross_margin)} | ${fmtPct2(p.roic)} | ${fmtPct2(p.revenue_growth)}`
+        );
+        return `\nPEER COMPARISON (use these exact numbers — reference peers by name in your analysis):\n${header}\n${rows.join("\n")}\n`;
+      })()
+    : "";
+
   // Include news for sections that benefit from it
   const newsRelated = ["executive_summary", "news_analysis", "key_risks", "investment_thesis", "management_commentary"];
   const newsBlock = newsRelated.includes(sectionId) && fmpExtended?.news_combined
@@ -199,7 +220,7 @@ ${thesis || "Write from a balanced, analytical perspective with a clear bottom-l
 
 TONE: ${tone ?? "analytical"}
 
-${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${segmentBlock}${insiderBlock}${surpriseBlock}${analystRecBlock}${newsBlock}
+${documentContext ? `ALREADY WRITTEN (maintain consistency, do not repeat):\n${documentContext}\n\n` : ""}${factsBlock}${extBlock}${histBlock}${segmentBlock}${insiderBlock}${surpriseBlock}${analystRecBlock}${peerBlock}${newsBlock}
 TASK: ${sectionGuidance}
 
 FORMATTING:
