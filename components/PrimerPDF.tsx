@@ -1172,6 +1172,40 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             </View>
           </View>
 
+          {/* Company at a Glance — 8 key metric chips */}
+          {(() => {
+            const fmtC = (v?: number | null) => v == null ? "—" : Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T` : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+            const fmtP = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
+            const fmtX = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}x`;
+            const revData = history?.revenue ?? {};
+            const revYrs = Object.keys(revData).sort();
+            const revGrowth = revYrs.length >= 2
+              ? ((revData[revYrs[revYrs.length - 1]] / revData[revYrs[revYrs.length - 2]]) - 1) * 100
+              : null;
+            const fcfYield2 = facts.free_cash_flow && facts.market_cap && facts.market_cap > 0
+              ? (facts.free_cash_flow / facts.market_cap) * 100 : null;
+            const glanceItems = [
+              { label: "Market Cap",    value: fmtC(facts.market_cap),                    color: NAVY },
+              { label: "EV/EBITDA",     value: fmtX(facts.ev_ebitda),                     color: NAVY },
+              { label: "Rev Growth",    value: revGrowth != null ? fmtP(revGrowth) : "—", color: revGrowth != null && revGrowth >= 0 ? GREEN : RED },
+              { label: "Gross Margin",  value: fmtP(facts.gross_margin),                  color: NAVY },
+              { label: "FCF Yield",     value: fcfYield2 != null ? fmtP(fcfYield2) : "—", color: NAVY },
+              { label: "ROIC",          value: fmtP(facts.roic),                           color: facts.roic != null && facts.roic >= 9 ? GREEN : RED },
+              { label: "Net Debt/EBITDA", value: (() => { const nd = facts.net_debt, eb = facts.ebitda; return nd != null && eb && eb !== 0 ? (nd < 0 ? "Net Cash" : `${(nd/eb).toFixed(1)}x`) : "—"; })(), color: (() => { const nd = facts.net_debt, eb = facts.ebitda; if (!nd || !eb) return NAVY; return nd < 0 ? GREEN : nd / eb < 3 ? NAVY : RED; })() },
+              { label: "P/E (NTM)",     value: fmtX(facts.pe_ratio),                      color: NAVY },
+            ];
+            return (
+              <View style={{ flexDirection: "row", gap: 5, marginBottom: 14, flexWrap: "wrap" }}>
+                {glanceItems.map(item => (
+                  <View key={item.label} style={{ flex: 1, minWidth: "10%", backgroundColor: LGRAY, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 6, borderLeftWidth: 2, borderLeftColor: item.color }}>
+                    <Text style={{ fontSize: 6, color: GRAY, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>{item.label}</Text>
+                    <Text style={{ fontSize: 9.5, fontFamily: "Helvetica-Bold", color: item.color }}>{item.value}</Text>
+                  </View>
+                ))}
+              </View>
+            );
+          })()}
+
           {/* I. Executive Summary */}
           <SectionHdr title="I. Executive Summary" accentColor={ACCENT.primary} />
           {execBullets.length > 0
