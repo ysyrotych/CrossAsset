@@ -1728,6 +1728,46 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             <>
               <SectionHdr title="VIII. Management & Governance" accentColor={ACCENT.primary} pageBreak />
               {leadership.length > 0 && <><SubSectionHdr title="Leadership & Track Record" />{leadership.map((p,i) => <Para key={i} text={p} />)}</>}
+              {/* Insider Activity Signal — rendered from real fmpExtended data */}
+              {Array.isArray(fmpExtended?.insider_trading) && (fmpExtended!.insider_trading as {name?: string; title?: string; transaction?: string; shares?: number; price?: number; value?: number; date?: string}[]).length > 0 && (() => {
+                const trades = (fmpExtended!.insider_trading as {name?: string; title?: string; transaction?: string; shares?: number; price?: number; value?: number; date?: string}[]).slice(0, 12);
+                const buys  = trades.filter(t => (t.transaction ?? "").toLowerCase().includes("buy") || (t.transaction ?? "").toLowerCase() === "purchase");
+                const sells = trades.filter(t => (t.transaction ?? "").toLowerCase().includes("sell") || (t.transaction ?? "").toLowerCase() === "sale");
+                const buyVal  = buys.reduce((s, t) => s + Math.abs(t.value ?? 0), 0);
+                const sellVal = sells.reduce((s, t) => s + Math.abs(t.value ?? 0), 0);
+                const net = buyVal - sellVal;
+                const fmtMV = (v: number) => v >= 1e6 ? `$${(v/1e6).toFixed(1)}M` : v >= 1e3 ? `$${(v/1e3).toFixed(0)}K` : `$${v.toFixed(0)}`;
+                const signal = net > 0 ? "NET BUYER" : buys.length === 0 ? "NET SELLER" : "MIXED";
+                const signalColor = signal === "NET BUYER" ? GREEN : signal === "NET SELLER" ? RED : AMBER;
+                return (
+                  <View style={{ borderWidth: 1, borderColor: signalColor, borderRadius: 3, padding: 9, marginBottom: 10, backgroundColor: LGRAY }}>
+                    <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
+                      <View style={{ backgroundColor: signalColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 2 }}>
+                        <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: "white", letterSpacing: 0.8 }}>INSIDER SIGNAL: {signal}</Text>
+                      </View>
+                      <Text style={{ fontSize: 6.5, color: GRAY }}>{trades.length} transactions · Net: {net >= 0 ? "+" : ""}{fmtMV(Math.abs(net))}</Text>
+                    </View>
+                    <View style={{ flexDirection: "row", gap: 6 }}>
+                      <View style={{ flex: 1, backgroundColor: "#dcfce7", borderRadius: 2, padding: 6 }}>
+                        <Text style={{ fontSize: 6, color: GREEN, fontFamily: "Helvetica-Bold", marginBottom: 3 }}>PURCHASES ({buys.length})</Text>
+                        {buys.slice(0, 3).map((t, j) => (
+                          <Text key={j} style={{ fontSize: 6, color: DGRAY, marginBottom: 1 }}>
+                            {t.name ? t.name.split(" ").slice(-1)[0] : "?"} ({t.title?.slice(0, 10) ?? "?"}): {fmtMV(Math.abs(t.value ?? 0))} @ ${t.price?.toFixed(0) ?? "?"}
+                          </Text>
+                        ))}
+                      </View>
+                      <View style={{ flex: 1, backgroundColor: "#fee2e2", borderRadius: 2, padding: 6 }}>
+                        <Text style={{ fontSize: 6, color: RED, fontFamily: "Helvetica-Bold", marginBottom: 3 }}>SALES ({sells.length})</Text>
+                        {sells.slice(0, 3).map((t, j) => (
+                          <Text key={j} style={{ fontSize: 6, color: DGRAY, marginBottom: 1 }}>
+                            {t.name ? t.name.split(" ").slice(-1)[0] : "?"} ({t.title?.slice(0, 10) ?? "?"}): {fmtMV(Math.abs(t.value ?? 0))} @ ${t.price?.toFixed(0) ?? "?"}
+                          </Text>
+                        ))}
+                      </View>
+                    </View>
+                  </View>
+                );
+              })()}
               {capAlloc.length > 0 && (
                 <>
                   <SubSectionHdr title="Capital Allocation Discipline" />
