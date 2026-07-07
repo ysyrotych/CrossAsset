@@ -1234,13 +1234,19 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           )}
 
           {/* VII. Management Commentary & Guidance */}
-          {(callHighlights.length > 0 || fwdGuidance.length > 0) && (
-            <>
-              <SectionHdr title="VII. Management Commentary & Guidance" accentColor={ACCENT.primary} />
-              {callHighlights.length > 0 && <><SubSectionHdr title="Earnings Call Highlights" />{callHighlights.map((p,i) => <Para key={i} text={p} />)}</>}
-              {fwdGuidance.length > 0 && <><SubSectionHdr title="Forward Guidance & Outlook" />{fwdGuidance.map((p,i) => <Para key={i} text={p} />)}</>}
-            </>
-          )}
+          {(() => {
+            const mgmtFallback = parseParas(secs["MANAGEMENT_COMMENTARY"] ?? "");
+            const hasSubsections = callHighlights.length > 0 || fwdGuidance.length > 0;
+            if (!hasSubsections && mgmtFallback.length === 0) return null;
+            return (
+              <>
+                <SectionHdr title="VII. Management Commentary & Guidance" accentColor={ACCENT.primary} />
+                {callHighlights.length > 0 && <><SubSectionHdr title="Earnings Call Highlights" />{callHighlights.map((p,i) => <Para key={i} text={p} />)}</>}
+                {fwdGuidance.length > 0 && <><SubSectionHdr title="Forward Guidance & Outlook" />{fwdGuidance.map((p,i) => <Para key={i} text={p} />)}</>}
+                {!hasSubsections && mgmtFallback.map((p,i) => <Para key={i} text={p} />)}
+              </>
+            );
+          })()}
 
           {/* VIII. Management & Governance */}
           {(leadership.length > 0 || capAlloc.length > 0) && (
@@ -1322,7 +1328,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* X. News Analysis & Market Intelligence */}
           {(() => {
-            const newsAnalysisText = secs["NEWS_ANALYSIS_&_MARKET_INTELLIGENCE"] ?? "";
+            const newsAnalysisText = secs["NEWS_ANALYSIS_&_MARKET_INTELLIGENCE"] ?? secs["NEWS_ANALYSIS"] ?? "";
             if (!newsAnalysisText) return null;
             const subsections = parseNewsAnalysis(newsAnalysisText);
             const sentMatch = newsAnalysisText.match(/\b(Cluster Break|Deterioration|Recovery|Debate|Divergence|Quiet Period|Normal)\b/i);
