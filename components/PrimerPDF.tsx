@@ -1559,6 +1559,106 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       { label: "Cash Build", value: cashBuild, color: AMBER },
                     ].filter(s => s.value > 0);
                     const fmtS = (v: number) => v >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : `$${(v/1e6).toFixed(0)}M`;
+                    const cv = chartVariant("cap_alloc");
+
+                    if (cv === 1 || cv === 2) {
+                      // Vertical grouped bars
+                      const BAR_H = 50; const BARW = Math.min(52, 240 / segs4.length - 8);
+                      const totalW = segs4.length * (BARW + 8);
+                      return (
+                        <View style={S.capAllocRow}>
+                          <Text style={[S.posCardLabel, { marginBottom: 6 }]}>FCF Deployment — {fmtS(fcvCA)} Total FCF</Text>
+                          <Svg width={totalW + 10} height={BAR_H + 22}>
+                            {segs4.map((seg, i) => {
+                              const bh = (seg.value / total4) * BAR_H;
+                              const x = 5 + i * (BARW + 8);
+                              return (
+                                <G key={seg.label}>
+                                  <Rect x={x} y={BAR_H - bh} width={BARW} height={bh} fill={seg.color} rx={2} />
+                                  <Rect x={x} y={BAR_H - bh} width={BARW} height={2} fill={seg.color} />
+                                </G>
+                              );
+                            })}
+                            {segs4.map((seg, i) => {
+                              const x = 5 + i * (BARW + 8);
+                              return (
+                                <G key={`lbl-${seg.label}`}>
+                                  <Polygon points={`${x+BARW/2-3},${BAR_H+3} ${x+BARW/2+3},${BAR_H+3} ${x+BARW/2},${BAR_H}`} fill={seg.color} />
+                                </G>
+                              );
+                            })}
+                          </Svg>
+                          <View style={S.capAllocLeg}>
+                            {segs4.map(seg => (
+                              <View key={seg.label} style={S.capAllocLegItem}>
+                                <View style={[S.capAllocLegDot, { backgroundColor: seg.color }]} />
+                                <Text style={S.capAllocLegText}>{seg.label} {((seg.value/total4)*100).toFixed(0)}% · {fmtS(seg.value)}</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    if (cv === 3 || cv === 4) {
+                      // Treemap-style grid: divide a 300×32 rect proportionally
+                      const BAR_W4 = 300; const BAR_H4 = 28;
+                      let xTM = 0;
+                      return (
+                        <View style={S.capAllocRow}>
+                          <Text style={[S.posCardLabel, { marginBottom: 4 }]}>FCF Deployment ({fmtS(fcvCA)} FCF)</Text>
+                          <Svg width={BAR_W4} height={BAR_H4 + 2}>
+                            {segs4.map(seg => {
+                              const w4 = (seg.value / total4) * BAR_W4;
+                              const rx = xTM; xTM += w4;
+                              const pct = ((seg.value / total4) * 100).toFixed(0);
+                              const cx = rx + w4 / 2;
+                              return (
+                                <G key={seg.label}>
+                                  <Rect x={rx + 0.5} y={0} width={w4 - 1} height={BAR_H4} fill={seg.color} opacity={0.85} rx={1} />
+                                  {w4 > 28 && <Rect x={rx} y={0} width={w4} height={2} fill={seg.color} />}
+                                  {w4 > 32 && (
+                                    <G>
+                                      <Polygon points={`${cx-3},${BAR_H4-3} ${cx+3},${BAR_H4-3} ${cx},${BAR_H4}`} fill="white" opacity={0.4} />
+                                    </G>
+                                  )}
+                                  {w4 > 40 && <Rect x={rx + 2} y={4} width={w4 - 4} height={10} fill="white" opacity={0.08} rx={1} />}
+                                </G>
+                              );
+                            })}
+                            {segs4.map(seg => {
+                              const w4b = (seg.value / total4) * BAR_W4;
+                              let xb = 0;
+                              segs4.forEach(s => { if (s.label === seg.label) return; xb += (s.value / total4) * BAR_W4; });
+                              // Recompute x position properly
+                              let xp = 0;
+                              for (const s of segs4) {
+                                if (s.label === seg.label) break;
+                                xp += (s.value / total4) * BAR_W4;
+                              }
+                              const pct = ((seg.value / total4) * 100).toFixed(0);
+                              if (w4b < 20) return null;
+                              return (
+                                <G key={`txt-${seg.label}`}>
+                                  <Polygon points={`0,0 0,0 0,0`} fill="none" />
+                                  <Rect x={xp} y={BAR_H4 / 2 - 4} width={w4b} height={8} fill="transparent" />
+                                </G>
+                              );
+                            })}
+                          </Svg>
+                          <View style={S.capAllocLeg}>
+                            {segs4.map(seg => (
+                              <View key={seg.label} style={S.capAllocLegItem}>
+                                <View style={[S.capAllocLegDot, { backgroundColor: seg.color }]} />
+                                <Text style={S.capAllocLegText}>{seg.label} {fmtS(seg.value)} ({((seg.value/total4)*100).toFixed(0)}%)</Text>
+                              </View>
+                            ))}
+                          </View>
+                        </View>
+                      );
+                    }
+
+                    // V0: default horizontal stacked bar
                     const BAR_W4 = 300;
                     let x4 = 0;
                     return (
