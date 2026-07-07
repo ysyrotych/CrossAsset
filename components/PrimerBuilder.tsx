@@ -1479,12 +1479,16 @@ function ReviewStage({
           </div>
         </div>
         <div style={{ padding: "20px 24px", maxHeight: 600, overflowY: "auto" }}>
-          {sections.filter(s => s.included && s.content).map((sec, i) => (
+          {sections.filter(s => s.included && s.content).map((sec, i) => {
+            const wc = sec.content.split(/\s+/).filter(Boolean).length;
+            const wcColor = wc < 300 ? RED : wc < 600 ? AMBER : GREEN;
+            return (
             <div key={i} style={{ marginBottom: 28 }}>
               <div style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.12em", textTransform: "uppercase", color: BLUE, marginBottom: 8, paddingBottom: 6, borderBottom: `1px solid ${BORDER}`, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                 <span style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   {sec.title}
                   {sec.userEdited && <span style={{ fontSize: 8, color: AMBER, fontWeight: 600 }}>• edited</span>}
+                  <span style={{ fontSize: 8, color: wcColor, fontWeight: 600 }}>{wc}w</span>
                 </span>
                 <button onClick={() => onEditSection(sec.id)} style={{ fontSize: 8, color: MUTED, background: "none", border: `1px solid ${BORDER}`, borderRadius: 3, padding: "2px 7px", cursor: "pointer", fontWeight: 600, letterSpacing: "0.04em", textTransform: "none" }}>
                   ✎ Edit
@@ -1494,7 +1498,8 @@ function ReviewStage({
                 {sec.content}
               </div>
             </div>
-          ))}
+            );
+          })}
           {sections.filter(s => s.included && !s.content).length > 0 && (
             <div style={{ background: ACCENT + "30", border: `1px solid ${AMBER}30`, borderRadius: 6, padding: "10px 14px", fontSize: 11, color: AMBER }}>
               ⚠ {sections.filter(s => s.included && !s.content).length} section(s) have not been generated yet and are excluded from the export.

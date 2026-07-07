@@ -243,9 +243,21 @@ ${Object.entries(history).map(([metric, years]) => {
   const newsBlock = newsRelated.includes(sectionId) && fmpExtended?.news_combined
     ? `
 RECENT NEWS (${(fmpExtended.news_combined as unknown[]).length} items, use for this section):
-${(fmpExtended.news_combined as Array<{date?: string; title: string; summary?: string; category?: string; stock_change?: number}>)
+${(fmpExtended.news_combined as Array<{date?: string; title: string; summary?: string; category?: string; stock_change?: number | string | null}>)
   .slice(0, 15)
-  .map(n => `[${n.category ?? "NEWS"}] ${n.date ? n.date.slice(0, 10) : ""} | ${n.title}${n.stock_change != null ? ` (stock: ${n.stock_change > 0 ? "+" : ""}${n.stock_change.toFixed(1)}%)` : ""}${n.summary ? "\n  " + n.summary.slice(0, 180) : ""}`)
+  .map(n => {
+    const sc = n.stock_change;
+    let scStr = "";
+    if (sc != null) {
+      // stock_change may be a string like "+2.3%" from Finviz or a number
+      if (typeof sc === "string") {
+        scStr = ` (stock: ${sc})`;
+      } else if (typeof sc === "number" && isFinite(sc)) {
+        scStr = ` (stock: ${sc >= 0 ? "+" : ""}${sc.toFixed(1)}%)`;
+      }
+    }
+    return `[${n.category ?? "NEWS"}] ${n.date ? n.date.slice(0, 10) : ""} | ${n.title}${scStr}${n.summary ? "\n  " + n.summary.slice(0, 180) : ""}`;
+  })
   .join("\n")}
 ` : "";
 
