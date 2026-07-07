@@ -916,25 +916,60 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             );
           })()}
 
-          {/* Charts — Revenue+FCF and EPS side by side */}
-          {(showChart("revenue_fcf") || showChart("eps") || showChart("margins")) && Object.keys(history.revenue ?? {}).length >= 2 && (
-            <>
-              <SubSectionHdr title="Financial Trends" />
-              <View style={{ flexDirection: "row", gap: 16, marginBottom: 8 }}>
-                {showChart("revenue_fcf") && (
-                  <View style={{ flex: 3 }}>
-                    <RevenueBarChart history={history} />
+          {/* Financial Trend Sparklines — compact % change indicators replacing SVG charts */}
+          {allFY.length >= 3 && (() => {
+            const revData = history.revenue ?? {};
+            const fcfData = history.free_cash_flow ?? {};
+            const gpData  = history.gross_profit ?? {};
+            const oiData  = history.operating_income ?? {};
+            const epsData = history.eps_diluted ?? {};
+            const fmtShort = (v: number) => Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B` : Math.abs(v) >= 1e6 ? `$${(v/1e6).toFixed(0)}M` : `$${v.toFixed(0)}`;
+            const fmtPct = (v: number) => `${v >= 0 ? "+" : ""}${v.toFixed(1)}%`;
+            const yoyChange = (data: Record<string, number>, yr: string, prevYr: string) => {
+              const cur = data[yr]; const prev = data[prevYr];
+              return cur != null && prev != null && prev !== 0 ? ((cur - prev) / Math.abs(prev)) * 100 : null;
+            };
+            const sortedYrs = allFY.slice().sort();
+            return (
+              <View style={{ marginBottom: 14 }}>
+                <SubSectionHdr title="Financial Trend — Year-over-Year" />
+                <View style={S.table}>
+                  <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
+                    <Text style={[S.tableHeaderCell, { width: "24%" }]}>Metric</Text>
+                    {sortedYrs.map(y => (
+                      <Text key={y} style={[S.tableHeaderCell, { flex: 1, textAlign: "right" }]}>FY{y.slice(0,4)}</Text>
+                    ))}
                   </View>
-                )}
-                {showChart("eps") && Object.keys(history.eps_diluted ?? {}).length >= 2 && (
-                  <View style={{ flex: 2 }}>
-                    <EpsBarChart history={history} />
-                  </View>
-                )}
+                  {[
+                    { label: "Revenue", data: revData, isKpi: true },
+                    { label: "FCF",     data: fcfData, isKpi: true },
+                    { label: "Gross %", data: Object.fromEntries(sortedYrs.map(y => [y, gpData[y] != null && revData[y] ? gpData[y]/revData[y]*100 : null]).filter(([,v]) => v != null) as [string, number][]), isKpi: false, isPct: true },
+                    { label: "Op. %",   data: Object.fromEntries(sortedYrs.map(y => [y, oiData[y] != null && revData[y] ? oiData[y]/revData[y]*100 : null]).filter(([,v]) => v != null) as [string, number][]), isKpi: false, isPct: true },
+                    { label: "EPS",     data: epsData, isKpi: false, isEps: true },
+                  ].map((row, ri) => (
+                    <View key={row.label} style={ri % 2 === 0 ? S.tableRow : S.tableRowAlt}>
+                      <Text style={[row.isKpi ? S.tableCellBold : S.tableCell, { width: "24%", color: row.isKpi ? NAVY : GRAY }]}>{row.label}</Text>
+                      {sortedYrs.map((y, yi) => {
+                        const v = row.data[y];
+                        const prev = sortedYrs[yi - 1];
+                        const chg = yi > 0 ? yoyChange(row.data, y, prev) : null;
+                        const isPos = v != null && v > 0;
+                        const chgColor = chg == null ? GRAY : chg > 5 ? GREEN : chg < -5 ? RED : AMBER;
+                        return (
+                          <View key={y} style={{ flex: 1, alignItems: "flex-end" }}>
+                            <Text style={{ fontSize: 7.5, color: row.isKpi ? NAVY : DGRAY, fontFamily: row.isKpi ? "Helvetica-Bold" : "Helvetica", textAlign: "right" }}>
+                              {v == null ? "—" : (row as any).isPct ? `${v.toFixed(1)}%` : (row as any).isEps ? `$${v.toFixed(2)}` : fmtShort(v)}
+                            </Text>
+                            {chg != null && <Text style={{ fontSize: 5.5, color: chgColor, textAlign: "right" }}>{fmtPct(chg)} YoY</Text>}
+                          </View>
+                        );
+                      })}
+                    </View>
+                  ))}
+                </View>
               </View>
-              {showChart("margins") && <MarginLineChart history={history} />}
-            </>
-          )}
+            );
+          })()}
 
           {/* 5-Year Financial Summary */}
           {allFY.length > 0 && (

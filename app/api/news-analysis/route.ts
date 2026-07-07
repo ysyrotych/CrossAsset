@@ -4,12 +4,13 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 export async function POST(req: NextRequest) {
-  const { ticker, companyName, sector, newsItems, facts } = await req.json() as {
+  const { ticker, companyName, sector, newsItems, facts, focusArticle } = await req.json() as {
     ticker: string;
     companyName: string;
     sector?: string;
     newsItems?: any[];
     facts?: Record<string, any>;
+    focusArticle?: boolean;
   };
 
   const apiKey = process.env.ANTHROPIC_API_KEY;
@@ -63,6 +64,56 @@ export async function POST(req: NextRequest) {
   const price = facts?.stock_price;
   const high52 = facts?.week52_high;
   const pricePct52w = price && high52 ? `${((price / high52 - 1) * 100).toFixed(1)}% from 52W high` : null;
+
+  // Single-article focused analysis
+  if (focusArticle && newsItems?.length === 1) {
+    const item = newsItems[0];
+    const singlePrompt = `You are a senior equity research analyst. Analyze this single news item about ${ticker} (${companyName}):
+
+HEADLINE: ${item.title}
+SOURCE: ${item.source ?? "Unknown"}
+DATE: ${item.date}
+STOCK REACTION: ${item.stock_change ?? "Not recorded"}
+SUMMARY: ${item.summary ?? "(no summary)"}
+
+COMPANY CONTEXT: Stock $${facts?.stock_price != null ? Number(facts.stock_price).toFixed(2) : "N/A"} | Market Cap ${facts?.market_cap != null ? `$${(Number(facts.market_cap)/1e9).toFixed(1)}B` : "N/A"} | Revenue ${facts?.revenue != null ? `$${(Number(facts.revenue)/1e9).toFixed(1)}B` : "N/A"}
+
+Write a focused 3-paragraph analyst note:
+1. WHAT HAPPENED — explain the event and its precise context (1 tight paragraph)
+2. MARKET READ — what the stock reaction (if any) tells us about what was priced in vs what surprised; what the sell-side is likely saying (1 paragraph)
+3. INVESTMENT IMPLICATION — how this single event changes (or doesn't change) the investment case; what to watch next (1 paragraph)
+
+Be direct. No hedging. No "it is worth noting." Write to a PM with 2 minutes.`;
+
+    const upstreamSingle = await fetch("https://api.anthropic.com/v1/messages", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-api-key": apiKey, "anthropic-version": "2023-06-01" },
+      body: JSON.stringify({ model: "claude-sonnet-4-6", max_tokens: 600, stream: true, messages: [{ role: "user", content: singlePrompt }] }),
+    });
+    if (!upstreamSingle.ok || !upstreamSingle.body) return new Response("Anthropic error", { status: 502 });
+    const encSingle = new TextEncoder();
+    return new Response(new ReadableStream({
+      async start(ctrl) {
+        const reader = upstreamSingle.body!.getReader();
+        const dec = new TextDecoder();
+        let buf = "";
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          buf += dec.decode(value, { stream: true });
+          const lines = buf.split("\n");
+          buf = lines.pop() ?? "";
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            const d = line.slice(6).trim();
+            if (d === "[DONE]") continue;
+            try { const j = JSON.parse(d); const t = j.delta?.text ?? ""; if (t) ctrl.enqueue(encSingle.encode(t)); } catch {}
+          }
+        }
+        ctrl.close();
+      },
+    }), { headers: { "Content-Type": "text/plain; charset=utf-8", "Cache-Control": "no-cache" } });
+  }
 
   const prompt = `You are a senior equity research analyst at a top-tier investment bank. You have ${newsItems?.length ?? 0} news items about ${ticker} (${companyName}, ${sector ?? 'unknown'} sector) from the last 90 days.
 
