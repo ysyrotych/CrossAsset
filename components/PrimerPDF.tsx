@@ -357,7 +357,7 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
     : `$${(v/1e6).toFixed(0)}M`;
 
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
       <Svg width={CHART_W} height={CHART_H + LABEL_H + 2}>
         <Line x1={0} y1={PLOT_H} x2={CHART_W} y2={PLOT_H} stroke={BORDER} strokeWidth={0.5} />
@@ -457,7 +457,7 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
   for (let v = minV; v <= maxV; v += 10) gridLines.push(v);
 
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
       <Svg width={CHART_W} height={CHART_H + 2}>
         {/* Y-axis gridlines and labels */}
@@ -522,7 +522,7 @@ function EpsBarChart({ history }: { history: Record<string, Record<string, numbe
   const MID_Y  = CHART_H / 2;
   const fmtEps = (v: number) => `$${v.toFixed(2)}`;
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />
@@ -571,7 +571,7 @@ function RevenueLineOverlayChart({ history }: { history: Record<string, Record<s
   const yOf = (v: number) => CHART_H - (Math.abs(v) / maxV) * CHART_H;
   const pts = years.map((_, i) => `${xOf(i)},${yOf(fcfVals[i])}`).join(" ");
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
@@ -612,7 +612,7 @@ function RevenueAreaChart({ history }: { history: Record<string, Record<string, 
   const revArea = revPts + ` ${xOf(n-1)},${CHART_H} 0,${CHART_H}`;
   const fcfArea = fcfPts + ` ${xOf(n-1)},${CHART_H} 0,${CHART_H}`;
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
@@ -650,7 +650,7 @@ function MarginAreaChart({ history }: { history: Record<string, Record<string, n
   const areaStr = (ms: (number|null)[]) => ptsStr(ms) + ` ${toX(years.length-1)},${CHART_H} ${YAXIS_W},${CHART_H}`;
   const gridVals: number[] = []; for (let v = minV; v <= maxV; v += 10) gridVals.push(v);
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
       <Svg width={CHART_W} height={CHART_H + 2}>
         {gridVals.map(v => { const y = toY(v); if (y==null) return null; return <G key={v}><Line x1={YAXIS_W} y1={y} x2={CHART_W} y2={y} stroke={BORDER} strokeWidth={0.4} strokeDasharray="2,2"/><Text x={YAXIS_W-2} y={y+2} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "end" }}>{`${v}%`}</Text></G>; })}
@@ -686,7 +686,7 @@ function MarginBarGroupChart({ history }: { history: Record<string, Record<strin
   const x0 = (i: number, b: number) => 10 + i * BGRP + b * (BW + 2);
   const bh = (v: number) => Math.max(1, (v / maxV) * CHART_H);
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Margin Trends — Gross / Operating / Net (%)</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5}/>
@@ -720,7 +720,7 @@ function EpsLollipopChart({ history }: { history: Record<string, Record<string, 
   const xOf = (i: number) => GAP + i * (BAR_W + GAP) + BAR_W / 2;
   const yOf = (v: number) => MID_Y - (v / maxA) * MID_Y;
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2"/>
@@ -752,7 +752,7 @@ function EpsDualToneChart({ history }: { history: Record<string, Record<string, 
   const BAR_W = 44; const GAP = (CHART_W - years.length * BAR_W) / (years.length + 1);
   const MID_Y = CHART_H / 2;
   return (
-    <View style={{ marginBottom: 2 }}>
+    <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
       <Svg width={CHART_W} height={CHART_H + 14}>
         <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2"/>
@@ -802,7 +802,7 @@ function StockRangeBar({ facts }: { facts: Record<string, number> }) {
   const pct52 = Math.round(((cur - lo) / (hi - lo)) * 100);
   const dotX  = ((cur - lo) / (hi - lo)) * 220;
   return (
-    <View style={{ marginTop: 8, marginBottom: 4 }}>
+    <View wrap={false} style={{ marginTop: 8, marginBottom: 4 }}>
       <Svg width={260} height={18}>
         <Rect x={0} y={6} width={220} height={6} fill={BORDER} rx={3} />
         <Rect x={0} y={6} width={dotX} height={6} fill={NAVY2} rx={3} />
@@ -820,7 +820,7 @@ function StockRangeBar({ facts }: { facts: Record<string, number> }) {
 
 function SectionHdr({ title, accentColor, pageBreak }: { title: string; accentColor?: string; pageBreak?: boolean }) {
   return (
-    <View style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]}>
+    <View style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]} minPresenceAhead={60}>
       <View style={[S.sectionHeaderAccent, { backgroundColor: accentColor ?? NAVY }]} />
       <Text style={[S.sectionHeader, { flex: 1 }]}>{title}</Text>
     </View>
@@ -828,14 +828,14 @@ function SectionHdr({ title, accentColor, pageBreak }: { title: string; accentCo
 }
 
 function SubSectionHdr({ title }: { title: string }) {
-  return <Text style={S.subsectionHeader}>{title}</Text>;
+  return <Text style={S.subsectionHeader} minPresenceAhead={40}>{title}</Text>;
 }
 function Para({ text }: { text: string }) {
   return <RichText text={text} style={S.para} />;
 }
 function CalloutBox({ label, value, context, color }: { label: string; value: string; context: string; color: string }) {
   return (
-    <View style={{ borderLeftWidth: 3, borderLeftColor: color, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 7, marginVertical: 6, borderRadius: 2 }}>
+    <View wrap={false} style={{ borderLeftWidth: 3, borderLeftColor: color, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 7, marginVertical: 6, borderRadius: 2 }}>
       <Text style={{ fontSize: 6.5, color, fontFamily: "Helvetica-Bold", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>{label}</Text>
       <Text style={{ fontSize: 12, color: NAVY, fontFamily: "Helvetica-Bold", marginBottom: 2 }}>{value}</Text>
       <Text style={{ fontSize: 7.5, color: GRAY, lineHeight: 1.4 }}>{context}</Text>
@@ -860,7 +860,7 @@ function SnapshotTable({ rows }: { rows: { label: string; value: string }[] }) {
     pairs.push(rows[i + 1] ? [rows[i], rows[i + 1]] : [rows[i]]);
   }
   return (
-    <View style={{ marginBottom: 16 }}>
+    <View wrap={false} style={{ marginBottom: 16 }}>
       {pairs.map((pair, pi) => (
         <View key={pi} style={{ flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, minHeight: 22 }}>
           {pair.map((r, ri) => (
@@ -1157,7 +1157,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
         <View style={S.body}>
 
           {/* Table of Contents */}
-          <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 12, marginBottom: 16 }}>
+          <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 12, marginBottom: 16 }}>
             <Text style={{ fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>Table of Contents</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
               {[
@@ -1198,7 +1198,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               { label: "P/E (NTM)",     value: fmtX(facts.pe_ratio),                      color: NAVY },
             ];
             return (
-              <View style={{ flexDirection: "row", gap: 5, marginBottom: 14, flexWrap: "wrap" }}>
+              <View wrap={false} style={{ flexDirection: "row", gap: 5, marginBottom: 14, flexWrap: "wrap" }}>
                 {glanceItems.map(item => (
                   <View key={item.label} style={{ flex: 1, minWidth: "10%", backgroundColor: LGRAY, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 6, borderLeftWidth: 2, borderLeftColor: item.color }}>
                     <Text style={{ fontSize: 6, color: GRAY, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>{item.label}</Text>
@@ -1220,7 +1220,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             const label = stance[1];
             const color = label === "BUY" ? GREEN : label === "SELL" ? RED : AMBER;
             return (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <View wrap={false} style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 10 }}>
                 <View style={{ backgroundColor: color, paddingHorizontal: 12, paddingVertical: 5, borderRadius: 3 }}>
                   <Text style={{ fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", letterSpacing: 1.5 }}>{label}</Text>
                 </View>
@@ -1242,7 +1242,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             : parseParas(secs["EXECUTIVE_SUMMARY"] ?? "").map((p, i) => <Para key={i} text={p} />)}
           {/* Pull quote — most impactful exec bullet */}
           {execBullets.length > 0 && (
-            <View style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER, paddingVertical: 9, marginVertical: 8 }}>
+            <View wrap={false} style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER, paddingVertical: 9, marginVertical: 8 }}>
               <Text style={{ fontSize: 9.5, color: NAVY, fontFamily: "Helvetica-Bold", lineHeight: 1.65 }}>
                 {`"${(execBullets[0].replace(/\*\*([^*]+)\*\*/g, "$1")).slice(0, 200)}${execBullets[0].length > 200 ? "…" : ""}"`}
               </Text>
@@ -1284,7 +1284,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               },
             ];
             return (
-              <View style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
+              <View wrap={false} style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
                 {signals.map((sig, i) => (
                   <View key={i} style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderTopWidth: 2, borderTopColor: sig.color, borderRadius: 3, padding: 8 }}>
                     <Text style={{ fontSize: 6, color: GRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>{sig.label}</Text>
@@ -1316,9 +1316,9 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             };
             const sortedYrs = allFY.slice().sort();
             return (
-              <View style={{ marginBottom: 14 }}>
+              <View wrap={false} style={{ marginBottom: 14 }}>
                 <SubSectionHdr title="Financial Trend — Year-over-Year" />
-                <View style={S.table}>
+                <View wrap={false} style={S.table}>
                   <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                     <Text style={[S.tableHeaderCell, { width: "24%" }]}>Metric</Text>
                     {sortedYrs.map(y => (
@@ -1360,7 +1360,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {allFY.length > 0 && (
             <>
               <SubSectionHdr title="5-Year Financial Summary" />
-              <View style={S.table}>
+              <View wrap={false} style={S.table}>
                 <View style={S.tableHeader}>
                   <Text style={[S.tableHeaderCell, { width: "28%" }]}>Metric</Text>
                   {allFY.map(y => (
@@ -1509,7 +1509,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 return (
                   <>
                     <SubSectionHdr title="Peer Valuation Benchmarking" />
-                    <View style={S.table}>
+                    <View wrap={false} style={S.table}>
                       <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                         {[["Company","20%"],["Revenue","10%"],["Mkt Cap","10%"],["P/E","8%"],["EV/EBITDA","10%"],["EV/Rev","8%"],["Gross Mgn","10%"],["ROIC","8%"],["Rev Gr","8%"]].map(([h, w]) => (
                           <Text key={h} style={[S.tableHeaderCell, { width: w, textAlign: h === "Company" ? "left" : "right" }]}>{h}</Text>
@@ -1567,7 +1567,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 return (
                   <>
                     <SubSectionHdr title="Sell-Side Forward Estimates (Consensus)" />
-                    <View style={S.table}>
+                    <View wrap={false} style={S.table}>
                       <View style={[S.tableHeader, { backgroundColor: NAVY2 }]}>
                         {["Period", "Revenue Est.", "EPS Est.", "EBITDA Est.", "# Analysts"].map((h, hi) => (
                           <Text key={h} style={[S.tableHeaderCell, { flex: hi === 0 ? 1.5 : 1, textAlign: hi === 0 ? "left" : "right" }]}>{h}</Text>
@@ -1623,7 +1623,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       // Stagger labels: sort by price, alternate above/below
                       const sortedPts = [...pts].sort((a, b) => a.price - b.price);
                       return (
-                        <View style={{ marginVertical: 8, padding: 8, backgroundColor: LGRAY, borderRadius: 3 }}>
+                        <View wrap={false} style={{ marginVertical: 8, padding: 8, backgroundColor: LGRAY, borderRadius: 3 }}>
                           <Text style={{ fontSize: 6.5, color: GRAY, textTransform: "uppercase", letterSpacing: 0.6, marginBottom: 4 }}>Price Range Visual</Text>
                           <Svg width={BAR_W3 + 40} height={56}>
                             {/* Track */}
@@ -1686,7 +1686,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   const beatRate = surps.length > 0 ? (beats / surps.length * 100).toFixed(0) : "?";
                   const avgSurp = surps.length > 0 ? surps.reduce((a, s) => a + (s.surprise_pct ?? 0), 0) / surps.length : null;
                   return (
-                    <View style={{ marginTop: 10, marginBottom: 4 }}>
+                    <View wrap={false} style={{ marginTop: 10, marginBottom: 4 }}>
                       <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginBottom: 5 }}>
                         <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: NAVY, textTransform: "uppercase", letterSpacing: 0.6 }}>EPS Beat/Miss History</Text>
                         <View style={{ backgroundColor: beats >= surps.length * 0.7 ? GREEN : beats >= surps.length * 0.5 ? AMBER : RED, paddingHorizontal: 6, paddingVertical: 1, borderRadius: 2 }}>
@@ -1696,7 +1696,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                           <Text style={{ fontSize: 6, color: avgSurp >= 0 ? GREEN : RED }}>Avg {avgSurp >= 0 ? "+" : ""}{avgSurp.toFixed(1)}% vs consensus</Text>
                         )}
                       </View>
-                      <View style={S.table}>
+                      <View wrap={false} style={S.table}>
                         <View style={[S.tableHeader, { backgroundColor: NAVY2 }]}>
                           {["Period", "Actual EPS", "Consensus", "Surprise"].map((h, hi) => (
                             <Text key={hi} style={[S.tableHeaderCell, { flex: hi === 0 ? 2 : 1, textAlign: hi === 0 ? "left" : "right" }]}>{h}</Text>
@@ -1740,7 +1740,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 const signal = net > 0 ? "NET BUYER" : buys.length === 0 ? "NET SELLER" : "MIXED";
                 const signalColor = signal === "NET BUYER" ? GREEN : signal === "NET SELLER" ? RED : AMBER;
                 return (
-                  <View style={{ borderWidth: 1, borderColor: signalColor, borderRadius: 3, padding: 9, marginBottom: 10, backgroundColor: LGRAY }}>
+                  <View wrap={false} style={{ borderWidth: 1, borderColor: signalColor, borderRadius: 3, padding: 9, marginBottom: 10, backgroundColor: LGRAY }}>
                     <View style={{ flexDirection: "row", alignItems: "center", gap: 8, marginBottom: 6 }}>
                       <View style={{ backgroundColor: signalColor, paddingHorizontal: 7, paddingVertical: 3, borderRadius: 2 }}>
                         <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: "white", letterSpacing: 0.8 }}>INSIDER SIGNAL: {signal}</Text>
@@ -1799,7 +1799,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       const BAR_H = 50; const BARW = Math.min(52, 240 / segs4.length - 8);
                       const totalW = segs4.length * (BARW + 8);
                       return (
-                        <View style={S.capAllocRow}>
+                        <View wrap={false} style={S.capAllocRow}>
                           <Text style={[S.posCardLabel, { marginBottom: 6 }]}>FCF Deployment — {fmtS(fcvCA)} Total FCF</Text>
                           <Svg width={totalW + 10} height={BAR_H + 22}>
                             {segs4.map((seg, i) => {
@@ -1838,7 +1838,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       const BAR_W4 = 300; const BAR_H4 = 28;
                       let xTM = 0;
                       return (
-                        <View style={S.capAllocRow}>
+                        <View wrap={false} style={S.capAllocRow}>
                           <Text style={[S.posCardLabel, { marginBottom: 4 }]}>FCF Deployment ({fmtS(fcvCA)} FCF)</Text>
                           <Svg width={BAR_W4} height={BAR_H4 + 2}>
                             {segs4.map(seg => {
@@ -1895,7 +1895,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                     const BAR_W4 = 300;
                     let x4 = 0;
                     return (
-                      <View style={S.capAllocRow}>
+                      <View wrap={false} style={S.capAllocRow}>
                         <Text style={[S.posCardLabel, { marginBottom: 4 }]}>FCF Deployment ({fmtS(fcvCA)} FCF)</Text>
                         <Svg width={BAR_W4} height={14}>
                           {segs4.map(seg => {
@@ -1937,7 +1937,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 const other  = categorized.filter(r => r.prob === null);
                 if (high.length + medium.length + low.length === 0) return null;
                 return (
-                  <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 14, backgroundColor: LGRAY }}>
+                  <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 14, backgroundColor: LGRAY }}>
                     <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: DGRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>Risk Probability Heatmap</Text>
                     <View style={{ flexDirection: "row", gap: 8 }}>
                       {[
@@ -1962,7 +1962,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                     const prob = r.body.match(/\[\s*(HIGH|MEDIUM|LOW)\s*\]\s*probability/i)?.[1]?.toUpperCase();
                     const accentColor = prob === "HIGH" ? RED : prob === "MEDIUM" ? AMBER : GRAY;
                     return (
-                      <View key={i} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: accentColor }}>
+                      <View key={i} wrap={false} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: accentColor }}>
                         {r.title ? (
                           <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: accentColor === RED ? RED : NAVY, marginBottom: 3 }}>
                             {r.title}
@@ -2002,7 +2002,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                     const col = subColors[sub.icon] ?? NAVY;
                     const lines = sub.body.split("\n").map(l => l.trim()).filter(Boolean);
                     return (
-                      <View key={i} style={{ marginBottom: 10, borderLeftWidth: 2, borderLeftColor: col }}>
+                      <View key={i} wrap={false} style={{ marginBottom: 10, borderLeftWidth: 2, borderLeftColor: col }}>
                         <View style={{ backgroundColor: col, paddingHorizontal: 8, paddingVertical: 3, marginBottom: 4 }}>
                           <Text style={{ color: "white", fontSize: 7, fontFamily: "Helvetica-Bold", letterSpacing: 0.8, textTransform: "uppercase" }}>
                             {sub.icon}. {sub.label}
@@ -2106,7 +2106,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             const wtdReturn = (bullWt && bullRet != null ? bullWt * bullRet / 100 : 0)
               + (bearWt && bearRet != null ? bearWt * bearRet / 100 : 0);
             return (
-              <View style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 12, backgroundColor: LGRAY }}>
+              <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 12, backgroundColor: LGRAY }}>
                 <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: DGRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>Scenario Probability Weights</Text>
                 {/* Probability bar */}
                 <View style={{ flexDirection: "row", height: 10, borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
@@ -2141,13 +2141,13 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             );
           })()}
           {bull.length > 0 && (
-            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
+            <View wrap={false} style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
               <Text style={S.colHeaderBull}>Bull Case</Text>
               <Bullets items={bull} color={GREEN} />
             </View>
           )}
           {bear.length > 0 && (
-            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: RED, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#fff1f2" }}>
+            <View wrap={false} style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: RED, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#fff1f2" }}>
               <Text style={S.colHeaderBear}>Bear Case</Text>
               <Bullets items={bear} color={RED} />
             </View>
@@ -2166,7 +2166,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             return null;
           })()}
           {note.length > 0 && (
-            <View style={S.noteBox}>
+            <View wrap={false} style={S.noteBox}>
               <Text style={S.noteLabel}>Analyst Note</Text>
               {note.map((p, i) => <Text key={i} style={S.noteText}>{p.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>)}
             </View>
@@ -2176,7 +2176,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {kpiRows.length > 0 && (
             <>
               <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} pageBreak />
-              <View style={S.table}>
+              <View wrap={false} style={S.table}>
                 <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                   {[["KPI", "20%"], ["LTM", "13%"], ["NTM Est", "12%"], ["Watch Threshold", "20%"], ["Why It Matters Here", "35%"]].map(([h, w]) => (
                     <Text key={h} style={[S.tableHeaderCell, { width: w }]}>{h}</Text>
@@ -2201,7 +2201,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SectionHdr title="XIII. Earnings Call Questions" accentColor={ACCENT.primary} pageBreak />
               <Text style={[S.para, { color: GRAY, marginBottom: 8 }]}>Institutional-grade questions for the upcoming earnings call:</Text>
               {qaItems.map((q, i) => (
-                <View key={i} style={[S.bullet, { marginBottom: 7 }]}>
+                <View key={i} wrap={false} style={[S.bullet, { marginBottom: 7 }]}>
                   <Text style={[S.bulletDot, { color: BLUE, minWidth: 18 }]}>{i + 1}.</Text>
                   <Text style={[S.bulletText, { fontFamily: "Helvetica" }]}>{q.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text>
                 </View>
