@@ -730,7 +730,7 @@ function EpsLollipopChart({ history }: { history: Record<string, Record<string, 
             <G key={yr}>
               <Line x1={x} y1={MID_Y} x2={x} y2={y} stroke={v >= 0 ? AMBER : RED} strokeWidth={2}/>
               <Rect x={x-4} y={y-4} width={8} height={8} fill={v >= 0 ? AMBER : RED} rx={4}/>
-              <Text x={x} y={y > MID_Y ? y + 10 : y - 6} style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
+              <Text x={x} y={Math.max(8, y > MID_Y ? y + 10 : y - 6)} style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
             </G>
           );
         })}
@@ -794,6 +794,162 @@ function EpsChart({ history, variant }: { history: Record<string, Record<string,
   if (variant === 1 || variant === 3) return <EpsLollipopChart history={history} />;
   if (variant === 2 || variant === 4) return <EpsDualToneChart history={history} />;
   return <EpsBarChart history={history} />;
+}
+
+// ── Balance Sheet: Cash vs Long-Term Debt ─────────────────────────────────────
+function BalanceSheetChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const cashData = history.cash ?? {};
+  const debtData = history.long_term_debt ?? {};
+  const yrs = [...new Set([...Object.keys(cashData), ...Object.keys(debtData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const cash = yrs.map(y => cashData[y] ?? 0);
+  const debt = yrs.map(y => debtData[y] ?? 0);
+  const mx = Math.max(...cash, ...debt, 1);
+  const BW = Math.max(18, (CHART_W - 40) / yrs.length / 2 - 4);
+  const GAP = 4;
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Cash vs Long-Term Debt — Balance Sheet Trend</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const totalW = yrs.length * (BW * 2 + GAP) + (yrs.length - 1) * 8;
+          const x = (CHART_W - totalW) / 2 + i * (BW * 2 + GAP + 8);
+          const ch = (cash[i] / mx) * (CHART_H - 8);
+          const dh = (debt[i] / mx) * (CHART_H - 8);
+          return (
+            <G key={yr}>
+              <Rect x={x} y={CHART_H - ch} width={BW} height={Math.max(ch, 1)} fill={GREEN} rx={1} />
+              <Rect x={x + BW + GAP} y={CHART_H - dh} width={BW} height={Math.max(dh, 1)} fill={RED} rx={1} opacity={0.8} />
+              <Text x={x + BW} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 14, marginTop: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: GREEN }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Cash & Equivalents</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: RED }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Long-Term Debt</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── FCF Quality: OCF vs FCF ────────────────────────────────────────────────────
+function FcfQualityChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const ocfData = history.operating_cf ?? {};
+  const fcfData = history.free_cash_flow ?? {};
+  const yrs = [...new Set([...Object.keys(ocfData), ...Object.keys(fcfData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const ocf = yrs.map(y => ocfData[y] ?? 0);
+  const fcf = yrs.map(y => fcfData[y] ?? 0);
+  const mx = Math.max(...ocf.map(Math.abs), ...fcf.map(Math.abs), 1);
+  const BW = Math.max(18, (CHART_W - 40) / yrs.length / 2 - 4);
+  const GAP = 3;
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Operating CF vs Free Cash Flow — Quality Signal</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const totalW = yrs.length * (BW * 2 + GAP) + (yrs.length - 1) * 8;
+          const x = (CHART_W - totalW) / 2 + i * (BW * 2 + GAP + 8);
+          const oh = (Math.max(0, ocf[i]) / mx) * (CHART_H - 8);
+          const fh = (Math.max(0, fcf[i]) / mx) * (CHART_H - 8);
+          return (
+            <G key={yr}>
+              <Rect x={x} y={CHART_H - oh} width={BW} height={Math.max(oh, 1)} fill={BLUE} rx={1} opacity={0.85} />
+              <Rect x={x + BW + GAP} y={CHART_H - fh} width={BW} height={Math.max(fh, 1)} fill={GREEN} rx={1} />
+              <Text x={x + BW} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 14, marginTop: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: BLUE }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Operating Cash Flow</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: GREEN }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Free Cash Flow</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Buyback & Dividends vs SBC Dilution ───────────────────────────────────────
+function BuybackSbcChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const bbData  = history.buybacks ?? {};
+  const sbcData = history.sbc_expense ?? {};
+  const divData = history.dividends_paid ?? {};
+  const yrs = [...new Set([...Object.keys(bbData), ...Object.keys(sbcData), ...Object.keys(divData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const bb  = yrs.map(y => Math.abs(bbData[y] ?? 0));
+  const sbc = yrs.map(y => Math.abs(sbcData[y] ?? 0));
+  const div = yrs.map(y => Math.abs(divData[y] ?? 0));
+  const maxReturn = Math.max(...bb.map((b, i) => b + div[i]), 1);
+  const mx = Math.max(maxReturn, ...sbc, 1);
+  const BW = Math.max(20, (CHART_W - 40) / yrs.length - 10);
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Shareholder Returns vs SBC Dilution — Annual</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const x = 10 + i * (BW + 12);
+          const bbH = (bb[i] / mx) * (CHART_H - 8);
+          const divH = (div[i] / mx) * (CHART_H - 8);
+          const sbcH = (sbc[i] / mx) * (CHART_H - 8);
+          const sbcW = Math.max(6, BW * 0.4);
+          return (
+            <G key={yr}>
+              <Rect x={x} y={CHART_H - bbH - divH} width={BW} height={Math.max(divH, 1)} fill={GREEN} rx={0} />
+              <Rect x={x} y={CHART_H - bbH} width={BW} height={Math.max(bbH, 1)} fill={BLUE} rx={1} />
+              <Rect x={x + BW + 2} y={CHART_H - sbcH} width={sbcW} height={Math.max(sbcH, 1)} fill={RED} rx={1} opacity={0.75} />
+              <Text x={x + BW * 0.5} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: BLUE }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Buybacks</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: GREEN }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Dividends</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: RED }} /><Text style={{ fontSize: 5.5, color: GRAY }}>SBC Dilution</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── CapEx Intensity (% of Revenue) ────────────────────────────────────────────
+function CapexTrendChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData   = history.revenue ?? {};
+  const capexData = history.capex ?? {};
+  const yrs = [...new Set([...Object.keys(revData), ...Object.keys(capexData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const pcts = yrs.map(y => {
+    const r = revData[y]; const c = capexData[y];
+    return (r && r !== 0 && c != null) ? (Math.abs(c) / r) * 100 : null;
+  });
+  const valid = pcts.filter(p => p != null) as number[];
+  if (valid.length < 2) return null;
+  const mx = Math.max(...valid, 1);
+  const BW = Math.max(24, (CHART_W - 30) / yrs.length - 8);
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>CapEx Intensity — % of Revenue (Reinvestment Rate)</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const pct = pcts[i];
+          const x = 10 + i * (BW + 8);
+          if (pct == null) return <Text key={yr} x={x + BW / 2} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>;
+          const h = (pct / mx) * (CHART_H - 8);
+          return (
+            <G key={yr}>
+              <Rect x={x} y={CHART_H - h} width={BW} height={Math.max(h, 1)} fill={AMBER} rx={1} />
+              <Text x={x + BW / 2} y={Math.max(8, CHART_H - h - 3)} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{pct.toFixed(1)}%</Text>
+              <Text x={x + BW / 2} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+    </View>
+  );
 }
 
 function StockRangeBar({ facts }: { facts: Record<string, number> }) {
@@ -907,7 +1063,7 @@ interface PrimerPDFProps {
   fmpExtended?: Record<string, unknown>;
 }
 
-const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"];
+const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc", "balance_sheet", "fcf_quality", "buyback_sbc", "capex_trend"];
 
 export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts, chartVariants, fmpExtended }: PrimerPDFProps) {
   const showChart = (id: string) => !selectedCharts || selectedCharts.length === 0 || selectedCharts.includes(id);
@@ -1483,6 +1639,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   />
                 );
               })()}
+              {showChart("balance_sheet") && <BalanceSheetChart history={history} />}
             </>
           )}
           {fcf.length > 0 && (
@@ -1490,6 +1647,8 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SubSectionHdr title="Free Cash Flow & CapEx" />
               {fcf.map((p,i) => <Para key={i} text={p} />)}
               {showChart("eps") && <EpsChart history={history} variant={chartVariant("eps")} />}
+              {showChart("fcf_quality") && <FcfQualityChart history={history} />}
+              {showChart("capex_trend") && <CapexTrendChart history={history} />}
             </>
           )}
           {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}
@@ -1768,6 +1927,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   </View>
                 );
               })()}
+              {showChart("buyback_sbc") && <BuybackSbcChart history={history} />}
               {capAlloc.length > 0 && (
                 <>
                   <SubSectionHdr title="Capital Allocation Discipline" />
@@ -2176,14 +2336,14 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {kpiRows.length > 0 && (
             <>
               <SectionHdr title="XII. Key Metrics Dashboard" accentColor={ACCENT.primary} pageBreak />
-              <View wrap={false} style={S.table}>
-                <View style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
+              <View style={S.table}>
+                <View wrap={false} style={[S.tableHeader, { backgroundColor: ACCENT.primary }]}>
                   {[["KPI", "20%"], ["LTM", "13%"], ["NTM Est", "12%"], ["Watch Threshold", "20%"], ["Why It Matters Here", "35%"]].map(([h, w]) => (
                     <Text key={h} style={[S.tableHeaderCell, { width: w }]}>{h}</Text>
                   ))}
                 </View>
                 {kpiRows.map((row, i) => (
-                  <View key={i} style={[i % 2 === 0 ? S.tableRow : S.tableRowAlt, { alignItems: "flex-start" }]}>
+                  <View key={i} wrap={false} style={[i % 2 === 0 ? S.tableRow : S.tableRowAlt, { alignItems: "flex-start" }]}>
                     <Text style={[S.tableCellBold, { width: "20%", lineHeight: 1.4 }]}>{stripMd(row.kpi)}</Text>
                     <Text style={[S.tableCell,     { width: "13%", lineHeight: 1.4 }]}>{stripMd(row.current)}</Text>
                     <Text style={[S.tableCell,     { width: "12%", lineHeight: 1.4, color: BLUE }]}>{row.ntm ? stripMd(row.ntm) : "—"}</Text>

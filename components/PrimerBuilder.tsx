@@ -566,6 +566,34 @@ const CHART_DEFS = [
     dataKeys: [],
     type: "cards",
   },
+  {
+    id: "balance_sheet",
+    label: "Balance Sheet — Cash vs Debt",
+    desc: "5-year cash & equivalents vs long-term debt bars. Reveals de-leveraging trends, net cash position, and financial flexibility.",
+    dataKeys: ["cash", "long_term_debt"],
+    type: "bar",
+  },
+  {
+    id: "fcf_quality",
+    label: "OCF vs FCF Quality",
+    desc: "Operating cash flow vs free cash flow side-by-side. FCF conversion gap exposes CapEx drag and earnings quality.",
+    dataKeys: ["operating_cf", "free_cash_flow"],
+    type: "bar",
+  },
+  {
+    id: "buyback_sbc",
+    label: "Shareholder Returns vs SBC Dilution",
+    desc: "Buybacks + dividends (stacked) vs stock-based compensation cost per year. Net value return to shareholders.",
+    dataKeys: ["buybacks", "dividends_paid", "sbc_expense"],
+    type: "bar",
+  },
+  {
+    id: "capex_trend",
+    label: "CapEx Intensity (% of Revenue)",
+    desc: "CapEx as a percent of revenue each year. Asset-light vs capital-intensive business model trend at a glance.",
+    dataKeys: ["capex", "revenue"],
+    type: "line",
+  },
 ];
 
 // ── Chart variant thumbnail renderers ──────────────────────────────────────────
@@ -1099,6 +1127,303 @@ function buildVariants(history: Record<string, Record<string, number>>, _facts: 
         { name: "Gauge Arcs", el: PqV3() },
         { name: "Badge Circles", el: PqV4() },
         { name: "Progress Bars", el: PqV5() },
+      ];
+    })(),
+    balance_sheet: (() => {
+      const cashData = history.cash ?? {}, debtData = history.long_term_debt ?? {};
+      const bsYrs = [...new Set([...Object.keys(cashData), ...Object.keys(debtData)])].sort().slice(-5);
+      const csh = bsYrs.map(y => cashData[y] ?? 0);
+      const dbt = bsYrs.map(y => debtData[y] ?? 0);
+      const bsMx = Math.max(...csh, ...dbt, 1);
+      const bw2 = Math.max(6, (TW - 20) / Math.max(bsYrs.length, 1) / 2 - 2);
+      function BsV1() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {bsYrs.map((yr, i) => {
+            const totalW = bsYrs.length * (bw2 * 2 + 2) + (bsYrs.length - 1) * 4;
+            const x = (TW - totalW) / 2 + i * (bw2 * 2 + 2 + 4);
+            const ch = (csh[i] / bsMx) * (TH - 18); const dh = (dbt[i] / bsMx) * (TH - 18);
+            return <g key={yr}><rect x={x} y={TH-12-ch} width={bw2} height={Math.max(ch,1)} fill="#0d6b45" rx={1}/><rect x={x+bw2+2} y={TH-12-dh} width={bw2} height={Math.max(dh,1)} fill="#b42318" rx={1} opacity={0.8}/><text x={x+bw2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function BsV2() {
+        const n = bsYrs.length; const bw3 = Math.max(4, (TW-16)/n-3);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {bsYrs.map((yr, i) => {
+            const x = 4+i*(bw3+3); const ch=(csh[i]/bsMx)*(TH-18); const dh=(dbt[i]/bsMx)*(TH-18);
+            return <g key={yr}>
+              <rect x={x} y={TH-12-ch} width={bw3} height={Math.max(ch,1)} fill="#1a56db" rx={1}/>
+              <line x1={x} y1={TH-12-dh} x2={x+bw3} y2={TH-12-dh} stroke="#b42318" strokeWidth={1.5}/>
+              <text x={x+bw3/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      function BsV3() {
+        const netDebt = bsYrs.map((_,i) => dbt[i] - csh[i]);
+        const ndMx = Math.max(...netDebt.map(Math.abs),1);
+        const n = bsYrs.length; const bw3 = Math.max(4,(TW-16)/n-3);
+        const mid = TH/2-4;
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={mid} x2={TW} y2={mid} stroke="#2a3a55" strokeWidth={0.5}/>
+          {bsYrs.map((yr,i) => {
+            const x=4+i*(bw3+3); const v=netDebt[i]; const h=(Math.abs(v)/ndMx)*(mid-4);
+            return <g key={yr}>
+              <rect x={x} y={v>=0?mid:mid-h} width={bw3} height={Math.max(h,1)} fill={v>=0?"#b42318":"#0d6b45"} rx={1}/>
+              <text x={x+bw3/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      function BsV4() {
+        const n = bsYrs.length; const xOf = (i:number) => 6+(i/(n-1))*(TW-12);
+        const yCsh = (v:number) => TH-12-(v/bsMx)*(TH-18);
+        const yDbt = (v:number) => TH-12-(v/bsMx)*(TH-18);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polyline points={bsYrs.map((_,i)=>`${xOf(i)},${yCsh(csh[i])}`).join(" ")} fill="none" stroke="#0d6b45" strokeWidth={1.5}/>
+          <polyline points={bsYrs.map((_,i)=>`${xOf(i)},${yDbt(dbt[i])}`).join(" ")} fill="none" stroke="#b42318" strokeWidth={1.5}/>
+          {bsYrs.map((_,i)=><circle key={i} cx={xOf(i)} cy={yCsh(csh[i])} r={2} fill="#0d6b45"/>)}
+          {bsYrs.map((_,i)=><circle key={i+"d"} cx={xOf(i)} cy={yDbt(dbt[i])} r={2} fill="#b42318"/>)}
+        </svg>;
+      }
+      function BsV5() {
+        const n = bsYrs.length; const bw3 = Math.max(5,(TW-16)/n-3);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {bsYrs.map((yr,i)=>{
+            const x=4+i*(bw3+3); const ch=(csh[i]/bsMx)*(TH-18); const dh=(dbt[i]/bsMx)*(TH-18); const top=TH-12-Math.max(ch,dh);
+            return <g key={yr}>
+              <rect x={x} y={TH-12-dh} width={bw3} height={Math.max(dh,1)} fill="#b42318" rx={1} opacity={0.35}/>
+              <rect x={x} y={TH-12-ch} width={bw3} height={Math.max(ch,1)} fill="#0d6b45" rx={1} opacity={0.9}/>
+              <line x1={x} y1={top} x2={x+bw3} y2={top} stroke={csh[i]>dbt[i]?"#0d6b45":"#b42318"} strokeWidth={1}/>
+              <text x={x+bw3/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      return [
+        { name: "Paired Bars", el: BsV1() },
+        { name: "Bar + Line", el: BsV2() },
+        { name: "Net Debt View", el: BsV3() },
+        { name: "Dual Line", el: BsV4() },
+        { name: "Overlay Bars", el: BsV5() },
+      ];
+    })(),
+    fcf_quality: (() => {
+      const ocfData = history.operating_cf ?? {}, fcfData2 = history.free_cash_flow ?? {};
+      const qYrs = [...new Set([...Object.keys(ocfData), ...Object.keys(fcfData2)])].sort().slice(-5);
+      const ocf = qYrs.map(y => ocfData[y] ?? 0);
+      const fcf2 = qYrs.map(y => fcfData2[y] ?? 0);
+      const qMx = Math.max(...ocf.map(Math.abs), ...fcf2.map(Math.abs), 1);
+      const bwQ = Math.max(5,(TW-16)/Math.max(qYrs.length,1)/2-2);
+      function FqV1() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {qYrs.map((yr,i)=>{
+            const totalW=qYrs.length*(bwQ*2+2)+(qYrs.length-1)*4;
+            const x=(TW-totalW)/2+i*(bwQ*2+2+4);
+            const oh=(Math.max(0,ocf[i])/qMx)*(TH-18); const fh=(Math.max(0,fcf2[i])/qMx)*(TH-18);
+            return <g key={yr}><rect x={x} y={TH-12-oh} width={bwQ} height={Math.max(oh,1)} fill="#1a56db" rx={1} opacity={0.85}/><rect x={x+bwQ+2} y={TH-12-fh} width={bwQ} height={Math.max(fh,1)} fill="#0d6b45" rx={1}/><text x={x+bwQ} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function FqV2() {
+        const n=qYrs.length; const xOf=(i:number)=>6+(i/(n-1))*(TW-12);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polyline points={qYrs.map((_,i)=>`${xOf(i)},${TH-12-(Math.max(0,ocf[i])/qMx)*(TH-18)}`).join(" ")} fill="none" stroke="#1a56db" strokeWidth={1.5}/>
+          <polyline points={qYrs.map((_,i)=>`${xOf(i)},${TH-12-(Math.max(0,fcf2[i])/qMx)*(TH-18)}`).join(" ")} fill="none" stroke="#0d6b45" strokeWidth={1.5} strokeDasharray="3,2"/>
+          {qYrs.map((_,i)=><circle key={i} cx={xOf(i)} cy={TH-12-(Math.max(0,ocf[i])/qMx)*(TH-18)} r={2} fill="#1a56db"/>)}
+        </svg>;
+      }
+      function FqV3() {
+        const ratios = qYrs.map((_,i) => ocf[i] !== 0 ? fcf2[i]/ocf[i] : null);
+        const n=qYrs.length; const bwQ2=Math.max(5,(TW-16)/n-4);
+        const rMx = Math.max(...ratios.filter(r=>r!=null) as number[], 1);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {qYrs.map((yr,i)=>{
+            const r=ratios[i]; const x=4+i*(bwQ2+4);
+            const h=r!=null?(Math.max(0,r)/rMx)*(TH-18):0;
+            return <g key={yr}><rect x={x} y={TH-12-h} width={bwQ2} height={Math.max(h,1)} fill={r!=null&&r>0.85?"#0d6b45":r!=null&&r>0.6?"#b45309":"#b42318"} rx={1}/><text x={x+bwQ2/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function FqV4() {
+        const n=qYrs.length; const bwQ2=Math.max(4,(TW-16)/n-3);
+        return <svg width={TW} height={TH}>
+          {qYrs.map((yr,i)=>{
+            const x=4+i*(bwQ2+3); const oh=(Math.max(0,ocf[i])/qMx)*(TH-12); const fh=(Math.max(0,fcf2[i])/qMx)*(TH-12);
+            return <g key={yr}>
+              <rect x={x} y={TH-oh} width={bwQ2} height={Math.max(oh,1)} fill="#0c1b38" rx={1} opacity={0.3}/>
+              <rect x={x+bwQ2*0.15} y={TH-fh} width={bwQ2*0.7} height={Math.max(fh,1)} fill="#1a56db" rx={1}/>
+              <text x={x+bwQ2/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      function FqV5() {
+        const n=qYrs.length; const xOf=(i:number)=>6+(i/(n-1||1))*(TW-12);
+        const polyO=qYrs.map((_,i)=>`${xOf(i)},${TH-12-(Math.max(0,ocf[i])/qMx)*(TH-18)}`).join(" ")+` ${xOf(n-1)},${TH-12} 6,${TH-12}`;
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polygon points={polyO} fill="#1a56db" opacity={0.2}/>
+          <polyline points={qYrs.map((_,i)=>`${xOf(i)},${TH-12-(Math.max(0,ocf[i])/qMx)*(TH-18)}`).join(" ")} fill="none" stroke="#1a56db" strokeWidth={1.2}/>
+          <polyline points={qYrs.map((_,i)=>`${xOf(i)},${TH-12-(Math.max(0,fcf2[i])/qMx)*(TH-18)}`).join(" ")} fill="none" stroke="#0d6b45" strokeWidth={1.5}/>
+        </svg>;
+      }
+      return [
+        { name: "Paired Bars", el: FqV1() },
+        { name: "Dual Line", el: FqV2() },
+        { name: "Conversion %", el: FqV3() },
+        { name: "Overlay Bars", el: FqV4() },
+        { name: "Area + Line", el: FqV5() },
+      ];
+    })(),
+    buyback_sbc: (() => {
+      const bbData2 = history.buybacks ?? {}, sbcData2 = history.sbc_expense ?? {}, divData2 = history.dividends_paid ?? {};
+      const sYrs = [...new Set([...Object.keys(bbData2), ...Object.keys(sbcData2)])].sort().slice(-5);
+      const bb2 = sYrs.map(y => Math.abs(bbData2[y] ?? 0));
+      const sbc2 = sYrs.map(y => Math.abs(sbcData2[y] ?? 0));
+      const div2 = sYrs.map(y => Math.abs(divData2[y] ?? 0));
+      const sMx = Math.max(...bb2.map((b,i)=>b+div2[i]), ...sbc2, 1);
+      const bwS = Math.max(5,(TW-16)/Math.max(sYrs.length,1)-6);
+      function SbV1() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {sYrs.map((yr,i)=>{
+            const x=4+i*(bwS+6); const bbH=(bb2[i]/sMx)*(TH-18); const divH=(div2[i]/sMx)*(TH-18); const sbcH=(sbc2[i]/sMx)*(TH-18);
+            return <g key={yr}>
+              <rect x={x} y={TH-12-bbH-divH} width={bwS} height={Math.max(divH,1)} fill="#0d6b45" rx={0}/>
+              <rect x={x} y={TH-12-bbH} width={bwS} height={Math.max(bbH,1)} fill="#1a56db" rx={1}/>
+              <rect x={x+bwS+2} y={TH-12-sbcH} width={Math.max(3,bwS*0.4)} height={Math.max(sbcH,1)} fill="#b42318" rx={1} opacity={0.75}/>
+              <text x={x+bwS/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      function SbV2() {
+        const n=sYrs.length; const xOf=(i:number)=>6+(i/(n-1||1))*(TW-12);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polyline points={sYrs.map((_,i)=>`${xOf(i)},${TH-12-(bb2[i]/sMx)*(TH-18)}`).join(" ")} fill="none" stroke="#1a56db" strokeWidth={1.5}/>
+          <polyline points={sYrs.map((_,i)=>`${xOf(i)},${TH-12-(sbc2[i]/sMx)*(TH-18)}`).join(" ")} fill="none" stroke="#b42318" strokeWidth={1.5} strokeDasharray="3,2"/>
+          {sYrs.map((_,i)=>[
+            <circle key={i+"bb"} cx={xOf(i)} cy={TH-12-(bb2[i]/sMx)*(TH-18)} r={2} fill="#1a56db"/>,
+            <circle key={i+"s"} cx={xOf(i)} cy={TH-12-(sbc2[i]/sMx)*(TH-18)} r={2} fill="#b42318"/>
+          ])}
+        </svg>;
+      }
+      function SbV3() {
+        const net = sYrs.map((_,i) => bb2[i]+div2[i]-sbc2[i]);
+        const nMx=Math.max(...net.map(Math.abs),1); const mid=TH/2-2; const n=sYrs.length; const bwS2=Math.max(5,(TW-16)/n-4);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={mid} x2={TW} y2={mid} stroke="#2a3a55" strokeWidth={0.5}/>
+          {sYrs.map((yr,i)=>{
+            const x=4+i*(bwS2+4); const v=net[i]; const h=(Math.abs(v)/nMx)*(mid-4);
+            return <g key={yr}><rect x={x} y={v>=0?mid-h:mid} width={bwS2} height={Math.max(h,1)} fill={v>=0?"#0d6b45":"#b42318"} rx={1}/><text x={x+bwS2/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function SbV4() {
+        const n=sYrs.length; const bwS2=Math.max(4,(TW-16)/n-3);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {sYrs.map((yr,i)=>{
+            const x=4+i*(bwS2+3); const ret=bb2[i]+div2[i]; const retH=(ret/sMx)*(TH-18); const sbcH=(sbc2[i]/sMx)*(TH-18);
+            return <g key={yr}>
+              <rect x={x} y={TH-12-retH} width={bwS2} height={Math.max(retH,1)} fill="#1a56db" rx={1} opacity={0.9}/>
+              <line x1={x} y1={TH-12-sbcH} x2={x+bwS2} y2={TH-12-sbcH} stroke="#b42318" strokeWidth={1.5}/>
+              <text x={x+bwS2/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      function SbV5() {
+        const n=sYrs.length; const xOf=(i:number)=>6+(i/(n-1||1))*(TW-12);
+        const polyB=sYrs.map((_,i)=>`${xOf(i)},${TH-12-((bb2[i]+div2[i])/sMx)*(TH-18)}`).join(" ")+` ${xOf(n-1)},${TH-12} 6,${TH-12}`;
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polygon points={polyB} fill="#1a56db" opacity={0.2}/>
+          <polyline points={sYrs.map((_,i)=>`${xOf(i)},${TH-12-((bb2[i]+div2[i])/sMx)*(TH-18)}`).join(" ")} fill="none" stroke="#1a56db" strokeWidth={1.5}/>
+          <polyline points={sYrs.map((_,i)=>`${xOf(i)},${TH-12-(sbc2[i]/sMx)*(TH-18)}`).join(" ")} fill="none" stroke="#b42318" strokeWidth={1.2} strokeDasharray="3,2"/>
+        </svg>;
+      }
+      return [
+        { name: "Stacked Returns", el: SbV1() },
+        { name: "Dual Line", el: SbV2() },
+        { name: "Net Return Bar", el: SbV3() },
+        { name: "Bar + Threshold", el: SbV4() },
+        { name: "Area vs Line", el: SbV5() },
+      ];
+    })(),
+    capex_trend: (() => {
+      const cxYrs = [...new Set([...Object.keys(history.revenue ?? {}), ...Object.keys(history.capex ?? {})])].sort().slice(-5);
+      const cxPcts = cxYrs.map(y => {
+        const r = (history.revenue ?? {})[y]; const c = (history.capex ?? {})[y];
+        return (r && r !== 0 && c != null) ? (Math.abs(c)/r)*100 : null;
+      });
+      const cxMx = Math.max(...(cxPcts.filter(p=>p!=null) as number[]), 1);
+      const bwCx = Math.max(5,(TW-16)/Math.max(cxYrs.length,1)-5);
+      function CxV1() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {cxYrs.map((yr,i)=>{
+            const p=cxPcts[i]; const x=4+i*(bwCx+5);
+            const h=p!=null?(p/cxMx)*(TH-18):0;
+            return <g key={yr}><rect x={x} y={TH-12-h} width={bwCx} height={Math.max(h,1)} fill="#b45309" rx={1}/><text x={x+bwCx/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function CxV2() {
+        const n=cxYrs.length; const xOf=(i:number)=>6+(i/(n-1||1))*(TW-12);
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polyline points={cxYrs.map((_,i)=>{const p=cxPcts[i];return `${xOf(i)},${p!=null?TH-12-(p/cxMx)*(TH-18):TH-12}`;}).join(" ")} fill="none" stroke="#b45309" strokeWidth={1.5}/>
+          {cxYrs.map((_,i)=>{const p=cxPcts[i];return <circle key={i} cx={xOf(i)} cy={p!=null?TH-12-(p/cxMx)*(TH-18):TH-12} r={2.5} fill="#b45309"/>;}).filter(Boolean)}
+        </svg>;
+      }
+      function CxV3() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {cxYrs.map((yr,i)=>{
+            const p=cxPcts[i]; const x=4+i*(bwCx+5); const h=p!=null?(p/cxMx)*(TH-18):0;
+            const color=p!=null&&p>15?"#b42318":p!=null&&p>8?"#b45309":"#0d6b45";
+            return <g key={yr}><rect x={x} y={TH-12-h} width={bwCx} height={Math.max(h,1)} fill={color} rx={1}/><text x={x+bwCx/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text></g>;
+          })}
+        </svg>;
+      }
+      function CxV4() {
+        const n=cxYrs.length; const xOf=(i:number)=>6+(i/(n-1||1))*(TW-12);
+        const poly=cxYrs.map((_,i)=>{const p=cxPcts[i];return `${xOf(i)},${p!=null?TH-12-(p/cxMx)*(TH-18):TH-12}`;}).join(" ")+` ${xOf(n-1)},${TH-12} 6,${TH-12}`;
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          <polygon points={poly} fill="#b45309" opacity={0.2}/>
+          <polyline points={cxYrs.map((_,i)=>{const p=cxPcts[i];return `${xOf(i)},${p!=null?TH-12-(p/cxMx)*(TH-18):TH-12}`;}).join(" ")} fill="none" stroke="#b45309" strokeWidth={1.5}/>
+        </svg>;
+      }
+      function CxV5() {
+        return <svg width={TW} height={TH}>
+          <line x1={0} y1={TH-12} x2={TW} y2={TH-12} stroke="#2a3a55" strokeWidth={0.5}/>
+          {cxYrs.map((yr,i)=>{
+            const p=cxPcts[i]; const x=4+i*(bwCx+5); const h=p!=null?(p/cxMx)*(TH-18):0;
+            return <g key={yr}>
+              <rect x={x} y={TH-12-h} width={bwCx} height={Math.max(h,1)} fill="#0c1b38" rx={1} opacity={0.85}/>
+              <rect x={x} y={TH-12-h} width={bwCx} height={2} fill="#b45309"/>
+              <text x={x+bwCx/2} y={TH-2} textAnchor="middle" fill="#4b6484" fontSize={5}>{yr.slice(2,4)}</text>
+            </g>;
+          })}
+        </svg>;
+      }
+      return [
+        { name: "Amber Bars", el: CxV1() },
+        { name: "Line + Dots", el: CxV2() },
+        { name: "Color-Coded", el: CxV3() },
+        { name: "Filled Area", el: CxV4() },
+        { name: "Navy + Cap", el: CxV5() },
       ];
     })(),
   } as Record<string, { name: string; el: React.ReactNode }[]>;
@@ -1879,7 +2204,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
   const [length, setLength] = useState<Length>("standard");
   const [theses, setTheses] = useState<ThesisOption[]>([]);
   const [selectedThesis, setSelectedThesis] = useState("");
-  const [selectedCharts, setSelectedCharts] = useState<string[]>(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
+  const [selectedCharts, setSelectedCharts] = useState<string[]>(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc", "balance_sheet", "fcf_quality", "buyback_sbc", "capex_trend"]);
   const [chartVariants, setChartVariants] = useState<Record<string, number>>({});
   const [editTargetId, setEditTargetId] = useState<string | undefined>(undefined);
 
@@ -1889,7 +2214,7 @@ export default function PrimerBuilder({ ticker, data }: PrimerBuilderProps) {
     setLength("standard");
     setTheses([]);
     setSelectedThesis("");
-    setSelectedCharts(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc"]);
+    setSelectedCharts(["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc", "balance_sheet", "fcf_quality", "buyback_sbc", "capex_trend"]);
     setChartVariants({});
     setStage("configure");
   }
