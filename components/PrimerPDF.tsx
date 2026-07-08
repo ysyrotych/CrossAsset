@@ -952,6 +952,224 @@ function CapexTrendChart({ history }: { history: Record<string, Record<string, n
   );
 }
 
+// ── Operating Leverage: Revenue Growth vs Op Income Growth ────────────────────
+function OpLeverageChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {};
+  const oiData  = history.operating_income ?? {};
+  const yrs = Object.keys(revData).sort().slice(-5);
+  if (yrs.length < 3) return null;
+  const pairs: { yr: string; rev: number | null; oi: number | null }[] = [];
+  for (let i = 1; i < yrs.length; i++) {
+    const r0 = revData[yrs[i - 1]], r1 = revData[yrs[i]];
+    const o0 = oiData[yrs[i - 1]],  o1 = oiData[yrs[i]];
+    pairs.push({
+      yr:  yrs[i],
+      rev: r0 && r0 !== 0 ? ((r1 - r0) / Math.abs(r0)) * 100 : null,
+      oi:  o0 && o0 !== 0 ? ((o1 - o0) / Math.abs(o0)) * 100 : null,
+    });
+  }
+  const allVals = pairs.flatMap(p => [p.rev ?? 0, p.oi ?? 0]);
+  const mx = Math.max(...allVals.map(Math.abs), 1);
+  const MID = CHART_H / 2;
+  const BW  = Math.max(12, (CHART_W - 40) / pairs.length / 2 - 4);
+  const GAP = 4;
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Operating Leverage — Revenue Growth vs Operating Income Growth (YoY %)</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={MID} x2={CHART_W} y2={MID} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />
+        {pairs.map((p, i) => {
+          const total = pairs.length * (BW * 2 + GAP) + (pairs.length - 1) * 8;
+          const x = (CHART_W - total) / 2 + i * (BW * 2 + GAP + 8);
+          const revH = p.rev != null ? (Math.abs(p.rev) / mx) * (MID - 4) : 0;
+          const oiH  = p.oi  != null ? (Math.abs(p.oi)  / mx) * (MID - 4) : 0;
+          const revY = p.rev != null && p.rev >= 0 ? MID - revH : MID;
+          const oiY  = p.oi  != null && p.oi  >= 0 ? MID - oiH  : MID;
+          return (
+            <G key={p.yr}>
+              <Rect x={x}        y={revY} width={BW} height={Math.max(revH, 1)} fill={p.rev != null && p.rev >= 0 ? BLUE  : RED}  rx={1} opacity={0.85} />
+              <Rect x={x+BW+GAP} y={oiY}  width={BW} height={Math.max(oiH,  1)} fill={p.oi  != null && p.oi  >= 0 ? GREEN : RED}  rx={1} opacity={0.85} />
+              {p.rev != null && <Text x={x + BW/2}      y={Math.max(8, revY - 2)} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{p.rev >= 0 ? "+" : ""}{p.rev.toFixed(0)}%</Text>}
+              {p.oi  != null && <Text x={x+BW+GAP+BW/2} y={Math.max(8, oiY  - 2)} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{p.oi >= 0 ? "+" : ""}{p.oi.toFixed(0)}%</Text>}
+              <Text x={x + BW} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{p.yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 14, marginTop: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: BLUE }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Revenue Growth %</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: GREEN }} /><Text style={{ fontSize: 5.5, color: GRAY }}>Operating Income Growth %</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Net Debt Trend ────────────────────────────────────────────────────────────
+function NetDebtTrendChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const cashData = history.cash ?? {};
+  const debtData = history.long_term_debt ?? {};
+  const yrs = [...new Set([...Object.keys(cashData), ...Object.keys(debtData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const netDebts = yrs.map(y => (debtData[y] ?? 0) - (cashData[y] ?? 0));
+  const mx = Math.max(...netDebts.map(Math.abs), 1);
+  const MID = CHART_H / 2;
+  const BW  = Math.max(20, (CHART_W - 30) / yrs.length - 8);
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Net Debt Evolution — Long-Term Debt minus Cash (Net Cash if negative)</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={MID} x2={CHART_W} y2={MID} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2" />
+        {yrs.map((yr, i) => {
+          const v  = netDebts[i];
+          const h  = (Math.abs(v) / mx) * (MID - 4);
+          const x  = 10 + i * (BW + 8);
+          const y  = v >= 0 ? MID : MID - h;
+          const clr = v < 0 ? GREEN : v / mx < 0.33 ? AMBER : RED;
+          const abbr = (n: number) => Math.abs(n) >= 1e9 ? `${n < 0 ? "-" : ""}$${(Math.abs(n)/1e9).toFixed(1)}B` : `${n < 0 ? "-" : ""}$${(Math.abs(n)/1e6).toFixed(0)}M`;
+          return (
+            <G key={yr}>
+              <Rect x={x} y={y} width={BW} height={Math.max(h, 1)} fill={clr} rx={1} />
+              <Text x={x + BW/2} y={Math.max(8, y - 3)} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{abbr(v)}</Text>
+              <Text x={x + BW/2} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <Text style={{ fontSize: 5.5, color: GRAY, marginTop: 2 }}>Green = net cash position · Amber/Red = net debt · Height = magnitude relative to peak</Text>
+    </View>
+  );
+}
+
+// ── FCF/Share vs EPS/Share ────────────────────────────────────────────────────
+function FcfPerShareChart({ history, facts }: { history: Record<string, Record<string, number>>; facts: Record<string, number> }) {
+  const fcfData = history.free_cash_flow ?? {};
+  const epsData = history.eps_diluted ?? {};
+  const shares  = facts.shares_diluted_wtd;
+  const yrs = Object.keys(epsData).sort().slice(-5);
+  if (yrs.length < 2 || !shares || shares <= 0) return null;
+  const fcfPS = yrs.map(y => { const f = fcfData[y]; return f != null ? f / shares : null; });
+  const eps   = yrs.map(y => epsData[y] ?? null);
+  const allV  = [...fcfPS.filter(v => v != null), ...eps.filter(v => v != null)] as number[];
+  if (allV.length < 2) return null;
+  const mx = Math.max(...allV.map(Math.abs), 1);
+  const BW = Math.max(14, (CHART_W - 40) / yrs.length / 2 - 4);
+  const GAP = 3;
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>FCF/Share vs EPS/Share — Cash Earnings Quality Check</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const total = yrs.length * (BW * 2 + GAP) + (yrs.length - 1) * 8;
+          const x   = (CHART_W - total) / 2 + i * (BW * 2 + GAP + 8);
+          const fh  = fcfPS[i] != null ? (Math.max(0, fcfPS[i]!) / mx) * (CHART_H - 8) : 0;
+          const eh  = eps[i]   != null ? (Math.max(0, eps[i]!)   / mx) * (CHART_H - 8) : 0;
+          return (
+            <G key={yr}>
+              <Rect x={x}        y={CHART_H - fh} width={BW} height={Math.max(fh, 1)} fill={GREEN} rx={1} />
+              <Rect x={x+BW+GAP} y={CHART_H - eh} width={BW} height={Math.max(eh, 1)} fill={AMBER} rx={1} />
+              <Text x={x + BW} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 14, marginTop: 2 }}>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: GREEN }} /><Text style={{ fontSize: 5.5, color: GRAY }}>FCF / Share</Text></View>
+        <View style={{ flexDirection: "row", alignItems: "center", gap: 3 }}><View style={{ width: 8, height: 4, backgroundColor: AMBER }} /><Text style={{ fontSize: 5.5, color: GRAY }}>EPS (Diluted)</Text></View>
+      </View>
+    </View>
+  );
+}
+
+// ── Earnings Quality Trend: OCF/NI Ratio ─────────────────────────────────────
+function QualityTrendChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const ocfData = history.operating_cf ?? {};
+  const niData  = history.net_income   ?? {};
+  const yrs = [...new Set([...Object.keys(ocfData), ...Object.keys(niData)])].sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const ratios = yrs.map(y => {
+    const o = ocfData[y], n = niData[y];
+    return o != null && n != null && n !== 0 ? o / n : null;
+  });
+  const valid = ratios.filter(r => r != null) as number[];
+  if (valid.length < 2) return null;
+  const mx = Math.max(...valid, 1);
+  const BW = Math.max(20, (CHART_W - 30) / yrs.length - 8);
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Earnings Quality — OCF / Net Income Ratio (above 1.0x = accrual-free)</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        {/* 1.0x reference line */}
+        {(() => { const refY = CHART_H - (1.0 / mx) * (CHART_H - 8); return <Line x1={0} y1={refY} x2={CHART_W} y2={refY} stroke={AMBER} strokeWidth={0.8} strokeDasharray="4,3" />; })()}
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const r = ratios[i];
+          const x = 10 + i * (BW + 8);
+          const h = r != null ? (Math.max(0, r) / mx) * (CHART_H - 8) : 0;
+          const clr = r != null ? (r >= 1.1 ? GREEN : r >= 0.8 ? AMBER : RED) : GRAY;
+          return (
+            <G key={yr}>
+              {r != null && <Rect x={x} y={CHART_H - h} width={BW} height={Math.max(h, 1)} fill={clr} rx={1} />}
+              {r != null && <Text x={x + BW/2} y={Math.max(8, CHART_H - h - 3)} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{r.toFixed(2)}x</Text>}
+              <Text x={x + BW/2} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+        <Text x={CHART_W - 2} y={(() => { const refY = CHART_H - (1.0 / mx) * (CHART_H - 8); return Math.max(8, refY - 2); })()} style={{ fontSize: 4.5, fill: AMBER, fontFamily: "Helvetica-Bold", textAnchor: "end" }}>1.0x</Text>
+      </Svg>
+      <Text style={{ fontSize: 5.5, color: GRAY, marginTop: 2 }}>Dashed line = 1.0x threshold · Green ≥ 1.1x · Amber ≥ 0.8x · Red below</Text>
+    </View>
+  );
+}
+
+// ── Revenue Composition: Revenue → Gross Profit stacked ──────────────────────
+function RevenueCompositionChart({ history }: { history: Record<string, Record<string, number>> }) {
+  const revData = history.revenue ?? {};
+  const gpData  = history.gross_profit ?? {};
+  const oiData  = history.operating_income ?? {};
+  const niData  = history.net_income ?? {};
+  const yrs = Object.keys(revData).sort().slice(-5);
+  if (yrs.length < 2) return null;
+  const rev = yrs.map(y => revData[y] ?? 0);
+  const gp  = yrs.map(y => gpData[y]  ?? 0);
+  const oi  = yrs.map(y => oiData[y]  ?? 0);
+  const ni  = yrs.map(y => niData[y]  ?? 0);
+  const mx  = Math.max(...rev, 1);
+  const BW  = Math.max(30, (CHART_W - 30) / yrs.length - 8);
+  const colors = [BLUE, GREEN, AMBER, RED];
+  const labels = ["Revenue", "Gross Profit", "Op. Income", "Net Income"];
+  return (
+    <View wrap={false} style={{ marginBottom: 2 }}>
+      <Text style={S.chartLabel}>Revenue Decomposition — Value Retained at Each P&amp;L Layer</Text>
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={CHART_H} x2={CHART_W} y2={CHART_H} stroke={BORDER} strokeWidth={0.5} />
+        {yrs.map((yr, i) => {
+          const vals = [rev[i], gp[i], oi[i], ni[i]];
+          const x = 10 + i * (BW + 8);
+          return (
+            <G key={yr}>
+              {vals.map((v, j) => {
+                const h = (Math.max(0, v) / mx) * (CHART_H - 8);
+                const offset = j * 2;
+                return <Rect key={j} x={x + offset} y={CHART_H - h} width={Math.max(1, BW - offset * 2)} height={Math.max(h, 1)} fill={colors[j]} rx={1} opacity={j === 0 ? 0.25 : j === 1 ? 0.55 : j === 2 ? 0.8 : 1} />;
+              })}
+              <Text x={x + BW/2} y={CHART_H + 9} style={{ fontSize: 5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>{yr.slice(0, 4)}</Text>
+            </G>
+          );
+        })}
+      </Svg>
+      <View style={{ flexDirection: "row", gap: 10, marginTop: 2 }}>
+        {labels.map((l, j) => (
+          <View key={l} style={{ flexDirection: "row", alignItems: "center", gap: 3 }}>
+            <View style={{ width: 8, height: 4, backgroundColor: colors[j] }} />
+            <Text style={{ fontSize: 5.5, color: GRAY }}>{l}</Text>
+          </View>
+        ))}
+      </View>
+    </View>
+  );
+}
+
 function StockRangeBar({ facts }: { facts: Record<string, number> }) {
   const lo = facts.week52_low, hi = facts.week52_high, cur = facts.stock_price;
   if (!lo || !hi || !cur || hi <= lo) return null;
@@ -1063,7 +1281,7 @@ interface PrimerPDFProps {
   fmpExtended?: Record<string, unknown>;
 }
 
-const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc", "balance_sheet", "fcf_quality", "buyback_sbc", "capex_trend"];
+const ALL_CHARTS = ["revenue_fcf", "eps", "margins", "positioning", "price_range", "cap_alloc", "balance_sheet", "fcf_quality", "buyback_sbc", "capex_trend", "op_leverage", "net_debt_trend", "fcf_per_share", "quality_trend", "revenue_composition"];
 
 export function PrimerDocument({ ticker, companyName, industry, content, generatedDate, history, facts, sector, selectedCharts, chartVariants, fmpExtended }: PrimerPDFProps) {
   const showChart = (id: string) => !selectedCharts || selectedCharts.length === 0 || selectedCharts.includes(id);
@@ -1615,6 +1833,8 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 return null;
               })()}
               {showChart("revenue_fcf") && <RevenueFCFChart history={history} variant={chartVariant("revenue_fcf")} />}
+              {showChart("revenue_composition") && <RevenueCompositionChart history={history} />}
+              {showChart("op_leverage") && <OpLeverageChart history={history} />}
               {showChart("margins") && <MarginChart history={history} variant={chartVariant("margins")} />}
             </>
           )}
@@ -1640,6 +1860,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 );
               })()}
               {showChart("balance_sheet") && <BalanceSheetChart history={history} />}
+              {showChart("net_debt_trend") && <NetDebtTrendChart history={history} />}
             </>
           )}
           {fcf.length > 0 && (
@@ -1647,12 +1868,19 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <SubSectionHdr title="Free Cash Flow & CapEx" />
               {fcf.map((p,i) => <Para key={i} text={p} />)}
               {showChart("eps") && <EpsChart history={history} variant={chartVariant("eps")} />}
+              {showChart("fcf_per_share") && <FcfPerShareChart history={history} facts={facts} />}
               {showChart("fcf_quality") && <FcfQualityChart history={history} />}
               {showChart("capex_trend") && <CapexTrendChart history={history} />}
             </>
           )}
           {parseParas(sectionFallback(secs, "FINANCIAL_ANALYSIS", ["REVENUE_&_PROFITABILITY_TRENDS","BALANCE_SHEET_&_CAPITAL_ALLOCATION","FREE_CASH_FLOW_&_CAPEX","QUALITY_OF_EARNINGS_&_CASH_CONVERSION"])).map((p,i) => <Para key={i} text={p} />)}
-          {qoe.length > 0 && <><SubSectionHdr title="Quality of Earnings & Cash Conversion" />{qoe.map((p,i) => <Para key={i} text={p} />)}</>}
+          {qoe.length > 0 && (
+            <>
+              <SubSectionHdr title="Quality of Earnings & Cash Conversion" />
+              {qoe.map((p,i) => <Para key={i} text={p} />)}
+              {showChart("quality_trend") && <QualityTrendChart history={history} />}
+            </>
+          )}
 
           {/* VI. Valuation Framework */}
           {(valCurrHist.length > 0 || valPeer.length > 0 || valScen.length > 0 || (Array.isArray(fmpExtended?.peer_comparison) && (fmpExtended!.peer_comparison as PeerRow[]).length > 0)) && (
