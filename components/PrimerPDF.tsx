@@ -1201,7 +1201,7 @@ function StockRangeBar({ facts }: { facts: Record<string, number> }) {
 
 function SectionHdr({ title, accentColor, pageBreak }: { title: string; accentColor?: string; pageBreak?: boolean }) {
   return (
-    <View wrap={false} style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]} minPresenceAhead={60}>
+    <View wrap={false} break={pageBreak} style={S.sectionHeaderWrap} minPresenceAhead={60}>
       <View style={[S.sectionHeaderAccent, { backgroundColor: accentColor ?? NAVY }]} />
       <Text style={[S.sectionHeader, { flex: 1 }]}>{title}</Text>
     </View>
@@ -1299,18 +1299,26 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const chartVariant = (id: string) => chartVariants?.[id] ?? 0;
   const secs = parsePrimerSections(content);
 
-  const execBullets  = parseBullets(secs["EXECUTIVE_SUMMARY"] ?? "");
+  // Executive bullets: LLM often puts them under a ### subsection (e.g. "### Executive Bullets")
+  // so secs["EXECUTIVE_SUMMARY"] only has the intro paragraph — search all subsection keys too.
+  const execSummaryPara = secs["EXECUTIVE_SUMMARY"] ?? "";
+  const execBulletsSrc  = ["EXECUTIVE_BULLETS","INVESTMENT_HIGHLIGHTS","KEY_TAKEAWAYS","SUMMARY_BULLETS"]
+    .map(k => secs[k] ?? "").find(v => v.trim().length > 20) ?? "";
+  const execBullets = parseBullets(execBulletsSrc).length > 0
+    ? parseBullets(execBulletsSrc)
+    : parseBullets(execSummaryPara);
   const snapshotRows = parseSnapshotTable(secs["COMPANY_SNAPSHOT"] ?? "");
 
-  const execBulletsText = execBullets.join(" ");
-  const ratingMatch = execBulletsText.match(/\b(STRONG BUY|STRONG SELL|OUTPERFORM|UNDERPERFORM|BUY|SELL|HOLD|NEUTRAL)\b/);
+  // Search the full exec section (para + bullets) for rating and price target
+  const execSearchText  = execSummaryPara + " " + execBulletsSrc;
+  const ratingMatch = execSearchText.match(/\b(STRONG BUY|STRONG SELL|OUTPERFORM|UNDERPERFORM|BUY|SELL|HOLD|NEUTRAL)\b/);
   const ratingText  = ratingMatch ? ratingMatch[1].toUpperCase() : null;
   const ratingColor = ratingText
     ? (["STRONG BUY","BUY","OUTPERFORM"].includes(ratingText) ? GREEN
       : ["STRONG SELL","SELL","UNDERPERFORM"].includes(ratingText) ? RED : AMBER)
     : null;
-  const ptMatch = execBulletsText.match(/(?:(?:12[- ]?month|one[- ]?year|1[- ]?yr?)[- ]?(?:price )?target|price target|target price)[^\$]{0,20}\$\s*(\d+(?:\.\d{1,2})?)/i)
-    ?? execBulletsText.match(/(?:target)[^\$]{0,10}\$\s*(\d+(?:\.\d{1,2})?)/i);
+  const ptMatch = execSearchText.match(/(?:(?:12[- ]?month|one[- ]?year|1[- ]?yr?)[- ]?(?:price )?target|price target|target price)[^\$]{0,20}\$\s*(\d+(?:\.\d{1,2})?)/i)
+    ?? execSearchText.match(/(?:target)[^\$]{0,10}\$\s*(\d+(?:\.\d{1,2})?)/i);
   const priceTarget = ptMatch ? `$${Math.round(parseFloat(ptMatch[1]))}` : null;
 
   const bg   = parseParas(secs["COMPANY_BACKGROUND"] ?? "");
