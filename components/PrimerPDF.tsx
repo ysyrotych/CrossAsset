@@ -73,32 +73,32 @@ const S = StyleSheet.create({
 
   // Sections
   sectionHeader: {
-    backgroundColor: NAVY, color: "white", fontSize: 7, fontFamily: "Helvetica-Bold",
-    letterSpacing: 1.5, textTransform: "uppercase", paddingHorizontal: 12, paddingVertical: 6,
-    marginBottom: 12, marginTop: 0,
+    backgroundColor: NAVY, color: "white", fontSize: 7.5, fontFamily: "Helvetica-Bold",
+    letterSpacing: 1.8, textTransform: "uppercase", paddingHorizontal: 14, paddingVertical: 8,
+    marginBottom: 14, marginTop: 0,
   },
   sectionHeaderWrap: {
-    flexDirection: "row", marginTop: 24, marginBottom: 0,
+    flexDirection: "row", marginTop: 20, marginBottom: 0,
   },
   sectionHeaderAccent: {
-    width: 4, marginBottom: 0,
+    width: 5, marginBottom: 0,
   },
   subsectionHeader: {
-    fontSize: 8.5, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 6, marginTop: 12,
-    borderBottomWidth: 0.75, borderBottomColor: BORDER, paddingBottom: 3,
+    fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 7, marginTop: 14,
+    borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 4,
   },
 
-  para:       { fontSize: 8.5, lineHeight: 1.65, color: DGRAY, marginBottom: 8 },
-  bullet:     { flexDirection: "row", marginBottom: 6 },
-  bulletDot:  { width: 12, fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
-  bulletText: { flex: 1, fontSize: 8.5, lineHeight: 1.65, color: DGRAY },
+  para:       { fontSize: 8.5, lineHeight: 1.7, color: DGRAY, marginBottom: 9 },
+  bullet:     { flexDirection: "row", marginBottom: 7 },
+  bulletDot:  { width: 13, fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold" },
+  bulletText: { flex: 1, fontSize: 8.5, lineHeight: 1.7, color: DGRAY },
 
   // Table
   table:          { marginVertical: 10 },
-  tableHeader:    { flexDirection: "row", backgroundColor: NAVY, paddingVertical: 5, paddingHorizontal: 8 },
-  tableHeaderCell:{ color: "white", fontSize: 7.5, fontFamily: "Helvetica-Bold", letterSpacing: 0.5 },
-  tableRow:       { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 4, paddingHorizontal: 8 },
-  tableRowAlt:    { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 4, paddingHorizontal: 8, backgroundColor: LGRAY },
+  tableHeader:    { flexDirection: "row", backgroundColor: NAVY, paddingVertical: 6, paddingHorizontal: 10 },
+  tableHeaderCell:{ color: "white", fontSize: 7.5, fontFamily: "Helvetica-Bold", letterSpacing: 0.6 },
+  tableRow:       { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 5, paddingHorizontal: 10 },
+  tableRowAlt:    { flexDirection: "row", borderBottomWidth: 1, borderBottomColor: BORDER, paddingVertical: 5, paddingHorizontal: 10, backgroundColor: LGRAY },
   tableCell:      { fontSize: 8, color: DGRAY },
   tableCellBold:  { fontSize: 8, color: NAVY, fontFamily: "Helvetica-Bold" },
   tableCellNum:   { fontSize: 8, color: DGRAY, textAlign: "right" },
@@ -114,16 +114,16 @@ const S = StyleSheet.create({
   footerText: { fontSize: 7, color: GRAY },
 
   // Analyst note box
-  noteBox:   { borderLeftWidth: 3, borderLeftColor: NAVY, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 8, marginTop: 10 },
-  noteLabel: { fontSize: 7, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 },
-  noteText:  { fontSize: 8.5, lineHeight: 1.6, color: DGRAY },
+  noteBox:   { borderLeftWidth: 4, borderLeftColor: NAVY, backgroundColor: LGRAY, paddingHorizontal: 12, paddingVertical: 10, marginTop: 12, borderRadius: 2, borderWidth: 1, borderColor: BORDER },
+  noteLabel: { fontSize: 6.5, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 },
+  noteText:  { fontSize: 8.5, lineHeight: 1.65, color: DGRAY },
 
   // Chart containers
-  chartLabel: { fontSize: 6.5, color: GRAY, marginBottom: 3 },
-  chartLegend:{ flexDirection: "row", gap: 12, marginTop: 3, marginBottom: 8 },
-  legendDot:  { width: 7, height: 7, borderRadius: 3.5, marginRight: 3 },
+  chartLabel: { fontSize: 7, color: GRAY, marginBottom: 4, fontFamily: "Helvetica-Bold", letterSpacing: 0.3 },
+  chartLegend:{ flexDirection: "row", gap: 14, marginTop: 4, marginBottom: 8 },
+  legendDot:  { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
   legendItem: { flexDirection: "row", alignItems: "center" },
-  legendText: { fontSize: 6.5, color: GRAY },
+  legendText: { fontSize: 7, color: GRAY },
 
   // Positioning card (4-box row)
   positioningRow:  { flexDirection: "row", gap: 6, marginBottom: 14 },
@@ -145,7 +145,7 @@ const S = StyleSheet.create({
 
   // Capital alloc bar
   capAllocRow:     { marginVertical: 8 },
-  capAllocBar:     { flexDirection: "row", height: 14, borderRadius: 2, overflow: "hidden", marginBottom: 3 },
+  capAllocBar:     { flexDirection: "row", height: 14, borderRadius: 2, marginBottom: 3 },
   capAllocLeg:     { flexDirection: "row", gap: 10 },
   capAllocLegItem: { flexDirection: "row", alignItems: "center", gap: 3 },
   capAllocLegDot:  { width: 8, height: 8, borderRadius: 2 },
@@ -331,7 +331,7 @@ function parseNewsAnalysis(text: string): { label: string; icon: string; body: s
 // ── SVG Chart Components ──────────────────────────────────────────────────────
 
 const CHART_W  = 460;
-const CHART_H  = 72;
+const CHART_H  = 88;
 
 function RevenueBarChart({ history }: { history: Record<string, Record<string, number>> }) {
   const revData = history.revenue ?? {};
@@ -1216,10 +1216,14 @@ function Para({ text }: { text: string }) {
 }
 function CalloutBox({ label, value, context, color }: { label: string; value: string; context: string; color: string }) {
   return (
-    <View wrap={false} style={{ borderLeftWidth: 3, borderLeftColor: color, backgroundColor: LGRAY, paddingHorizontal: 10, paddingVertical: 7, marginVertical: 6, borderRadius: 2 }}>
-      <Text style={{ fontSize: 6.5, color, fontFamily: "Helvetica-Bold", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 2 }}>{label}</Text>
-      <Text style={{ fontSize: 12, color: NAVY, fontFamily: "Helvetica-Bold", marginBottom: 2 }}>{value}</Text>
-      <Text style={{ fontSize: 7.5, color: GRAY, lineHeight: 1.4 }}>{context}</Text>
+    <View wrap={false} style={{ flexDirection: "row", borderWidth: 1, borderColor: BORDER, borderLeftWidth: 4, borderLeftColor: color, borderRadius: 2, marginVertical: 8 }}>
+      <View style={{ backgroundColor: LGRAY, paddingHorizontal: 14, paddingVertical: 10, justifyContent: "center", minWidth: 120 }}>
+        <Text style={{ fontSize: 6, color, fontFamily: "Helvetica-Bold", letterSpacing: 1, textTransform: "uppercase", marginBottom: 3 }}>{label}</Text>
+        <Text style={{ fontSize: 20, color, fontFamily: "Helvetica-Bold", lineHeight: 1.1 }}>{value}</Text>
+      </View>
+      <View style={{ flex: 1, backgroundColor: "white", paddingHorizontal: 12, paddingVertical: 10, justifyContent: "center", borderLeftWidth: 1, borderLeftColor: BORDER }}>
+        <Text style={{ fontSize: 8, color: DGRAY, lineHeight: 1.55 }}>{context}</Text>
+      </View>
     </View>
   );
 }
@@ -1494,7 +1498,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                   {rec && total > 0 && (
                     <View style={{ flex: 1 }}>
                       <Text style={{ fontSize: 6, color: "rgba(255,255,255,0.45)", letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 4 }}>Sell-Side ({total} analysts)</Text>
-                      <View style={{ flexDirection: "row", height: 6, borderRadius: 2, overflow: "hidden", marginBottom: 3 }}>
+                      <View style={{ flexDirection: "row", height: 6, borderRadius: 2, marginBottom: 3 }}>
                         <View style={{ flex: bullish, backgroundColor: "#22c55e" }} />
                         <View style={{ flex: hold, backgroundColor: "#f59e0b" }} />
                         <View style={{ flex: bearish, backgroundColor: "#ef4444" }} />
@@ -1692,15 +1696,13 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             return (
               <View wrap={false} style={{ flexDirection: "row", gap: 8, marginBottom: 14 }}>
                 {signals.map((sig, i) => (
-                  <View key={i} style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderTopWidth: 2, borderTopColor: sig.color, borderRadius: 3, padding: 8 }}>
-                    <Text style={{ fontSize: 6, color: GRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 3 }}>{sig.label}</Text>
-                    <View style={{ flexDirection: "row", alignItems: "center", gap: 5, marginBottom: 2 }}>
-                      <Text style={{ fontSize: 14, fontFamily: "Helvetica-Bold", color: NAVY }}>{sig.value}</Text>
-                      <View style={{ backgroundColor: LGRAY, borderRadius: 2, paddingHorizontal: 4, paddingVertical: 1, borderWidth: 1, borderColor: sig.color }}>
-                        <Text style={{ fontSize: 5.5, fontFamily: "Helvetica-Bold", color: sig.color }}>{sig.badge}</Text>
-                      </View>
+                  <View key={i} style={{ flex: 1, borderWidth: 1, borderColor: BORDER, borderTopWidth: 3, borderTopColor: sig.color, borderRadius: 3, padding: 10, backgroundColor: "white" }}>
+                    <Text style={{ fontSize: 6, color: GRAY, letterSpacing: 1, textTransform: "uppercase", marginBottom: 5 }}>{sig.label}</Text>
+                    <Text style={{ fontSize: 18, fontFamily: "Helvetica-Bold", color: sig.color, marginBottom: 4, lineHeight: 1 }}>{sig.value}</Text>
+                    <View style={{ backgroundColor: sig.color, borderRadius: 2, paddingHorizontal: 5, paddingVertical: 2, alignSelf: "flex-start", marginBottom: 5 }}>
+                      <Text style={{ fontSize: 6, fontFamily: "Helvetica-Bold", color: "white", letterSpacing: 0.6 }}>{sig.badge}</Text>
                     </View>
-                    <Text style={{ fontSize: 6, color: GRAY, lineHeight: 1.4 }}>{sig.desc}</Text>
+                    <Text style={{ fontSize: 6.5, color: GRAY, lineHeight: 1.45 }}>{sig.desc}</Text>
                   </View>
                 ))}
               </View>
@@ -2545,7 +2547,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 10, marginBottom: 12, backgroundColor: LGRAY }}>
                 <Text style={{ fontSize: 6.5, fontFamily: "Helvetica-Bold", color: DGRAY, letterSpacing: 0.8, textTransform: "uppercase", marginBottom: 8 }}>Scenario Probability Weights</Text>
                 {/* Probability bar */}
-                <View style={{ flexDirection: "row", height: 10, borderRadius: 2, overflow: "hidden", marginBottom: 6 }}>
+                <View style={{ flexDirection: "row", height: 10, borderRadius: 2, marginBottom: 6 }}>
                   {bearWt ? <View style={{ flex: bearWt, backgroundColor: RED }} /> : null}
                   {baseWt ? <View style={{ flex: baseWt, backgroundColor: AMBER }} /> : null}
                   {bullWt ? <View style={{ flex: bullWt, backgroundColor: GREEN }} /> : null}
