@@ -84,8 +84,8 @@ const S = StyleSheet.create({
     width: 4, marginBottom: 0,
   },
   subsectionHeader: {
-    fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 6, marginTop: 14,
-    borderBottomWidth: 1, borderBottomColor: BORDER, paddingBottom: 3,
+    fontSize: 8.5, fontFamily: "Helvetica-Bold", color: NAVY2, marginBottom: 6, marginTop: 12,
+    borderBottomWidth: 0.75, borderBottomColor: BORDER, paddingBottom: 3,
   },
 
   para:       { fontSize: 8.5, lineHeight: 1.65, color: DGRAY, marginBottom: 8 },
@@ -348,22 +348,29 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
   const BAR_W = 30;
   const PAIR_W = BAR_W * 2 + 4;
   const GAP    = (CHART_W - years.length * PAIR_W) / (years.length + 1);
-  const LABEL_H = 14;
-  const PLOT_H  = CHART_H - LABEL_H;
+  const TOP_PAD = 14; // space for YoY % labels above bars
+  const PLOT_H  = CHART_H - TOP_PAD;
 
   const fmtShort = (v: number) =>
     Math.abs(v) >= 1e12 ? `$${(v/1e12).toFixed(1)}T`
     : Math.abs(v) >= 1e9 ? `$${(v/1e9).toFixed(1)}B`
     : `$${(v/1e6).toFixed(0)}M`;
+  const fmtYoY = (cur: number, prev: number) => {
+    if (!prev) return "";
+    const pct = ((cur - prev) / Math.abs(prev)) * 100;
+    return `${pct >= 0 ? "+" : ""}${pct.toFixed(0)}%`;
+  };
 
   return (
     <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>Revenue vs Free Cash Flow — 5-Year</Text>
-      <Svg width={CHART_W} height={CHART_H + LABEL_H + 2}>
-        <Line x1={0} y1={PLOT_H} x2={CHART_W} y2={PLOT_H} stroke={BORDER} strokeWidth={0.5} />
+      <Svg width={CHART_W} height={CHART_H + 18}>
+        <Line x1={0} y1={TOP_PAD + PLOT_H} x2={CHART_W} y2={TOP_PAD + PLOT_H} stroke={BORDER} strokeWidth={0.5} />
         {years.map((yr, i) => {
           const rev = revData[yr] ?? 0;
           const fcf = fcfData[yr] ?? 0;
+          const prevYr = years[i - 1];
+          const prevRev = prevYr ? revData[prevYr] ?? 0 : 0;
           const x0 = GAP + i * (PAIR_W + GAP);
           const revH = Math.max(2, (rev / maxV) * PLOT_H);
           const fcfH = Math.max(2, (Math.abs(fcf) / maxV) * PLOT_H);
@@ -371,40 +378,31 @@ function RevenueBarChart({ history }: { history: Record<string, Record<string, n
           const fcfLabel = fmtShort(fcf);
           const revLabelInside = revH >= 14;
           const fcfLabelInside = fcfH >= 14;
+          const yoyLabel = i > 0 ? fmtYoY(rev, prevRev) : "";
+          const yoyColor = i > 0 && rev >= prevRev ? GREEN : RED;
           return (
             <G key={yr}>
+              {/* YoY growth label above bars */}
+              {yoyLabel ? <Text x={x0 + PAIR_W/2} y={TOP_PAD - 3} style={{ fontSize: 5, fill: yoyColor, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{yoyLabel}</Text> : null}
               {/* Revenue bar */}
-              <Rect x={x0} y={PLOT_H - revH} width={BAR_W} height={revH} fill={NAVY} rx={1} />
-              {/* Revenue label */}
+              <Rect x={x0} y={TOP_PAD + PLOT_H - revH} width={BAR_W} height={revH} fill={NAVY} rx={1} />
               {revLabelInside
-                ? <Text x={x0 + BAR_W/2} y={PLOT_H - revH/2 + 2} style={{ fontSize: 4.5, fill: "white", fontFamily: "Helvetica", textAnchor: "middle" }}>{revLabel}</Text>
-                : <Text x={x0 + BAR_W/2} y={PLOT_H - revH - 2} style={{ fontSize: 4.5, fill: NAVY, fontFamily: "Helvetica", textAnchor: "middle" }}>{revLabel}</Text>}
+                ? <Text x={x0 + BAR_W/2} y={TOP_PAD + PLOT_H - revH/2 + 2} style={{ fontSize: 5, fill: "white", fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{revLabel}</Text>
+                : <Text x={x0 + BAR_W/2} y={TOP_PAD + PLOT_H - revH - 2} style={{ fontSize: 5, fill: NAVY, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{revLabel}</Text>}
               {/* FCF bar */}
-              <Rect x={x0 + BAR_W + 4} y={PLOT_H - fcfH} width={BAR_W} height={fcfH} fill={fcf >= 0 ? GREEN : RED} rx={1} />
-              {/* FCF label */}
+              <Rect x={x0 + BAR_W + 4} y={TOP_PAD + PLOT_H - fcfH} width={BAR_W} height={fcfH} fill={fcf >= 0 ? GREEN : RED} rx={1} />
               {fcfLabelInside
-                ? <Text x={x0 + BAR_W + 4 + BAR_W/2} y={PLOT_H - fcfH/2 + 2} style={{ fontSize: 4.5, fill: "white", fontFamily: "Helvetica", textAnchor: "middle" }}>{fcfLabel}</Text>
-                : <Text x={x0 + BAR_W + 4 + BAR_W/2} y={PLOT_H - fcfH - 2} style={{ fontSize: 4.5, fill: fcf >= 0 ? GREEN : RED, fontFamily: "Helvetica", textAnchor: "middle" }}>{fcfLabel}</Text>}
+                ? <Text x={x0 + BAR_W + 4 + BAR_W/2} y={TOP_PAD + PLOT_H - fcfH/2 + 2} style={{ fontSize: 5, fill: "white", fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{fcfLabel}</Text>
+                : <Text x={x0 + BAR_W + 4 + BAR_W/2} y={TOP_PAD + PLOT_H - fcfH - 2} style={{ fontSize: 5, fill: fcf >= 0 ? GREEN : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>{fcfLabel}</Text>}
+              {/* Year label */}
+              <Text x={x0 + PAIR_W/2} y={TOP_PAD + PLOT_H + 9} style={{ fontSize: 5.5, fill: GRAY, fontFamily: "Helvetica", textAnchor: "middle" }}>FY{yr.slice(0,4)}</Text>
             </G>
           );
         })}
       </Svg>
-      <View style={{ flexDirection: "row", justifyContent: "space-around", marginTop: 1 }}>
-        {years.map(yr => {
-          const rev = revData[yr] ?? 0;
-          const fcf = fcfData[yr] ?? 0;
-          return (
-            <View key={yr} style={{ width: PAIR_W + GAP, alignItems: "center" }}>
-              <Text style={{ fontSize: 6, color: GRAY, textAlign: "center" }}>FY{yr.slice(0,4)}</Text>
-              <Text style={{ fontSize: 5.5, color: NAVY, textAlign: "center" }}>{fmtShort(rev)}</Text>
-              <Text style={{ fontSize: 5.5, color: fcf >= 0 ? GREEN : RED, textAlign: "center" }}>{fmtShort(fcf)}</Text>
-            </View>
-          );
-        })}
-      </View>
       <View style={S.chartLegend}>
         <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Revenue</Text></View>
-        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>FCF</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Free Cash Flow</Text></View>
       </View>
     </View>
   );
@@ -484,15 +482,20 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
         {grossPts && <Polyline points={grossPts} fill="none" stroke={BLUE} strokeWidth={1.5} strokeLinejoin="round" />}
         {opPts    && <Polyline points={opPts}    fill="none" stroke={NAVY} strokeWidth={1.5} strokeLinejoin="round" />}
         {netPts   && <Polyline points={netPts}   fill="none" stroke={GREEN} strokeWidth={1.5} strokeLinejoin="round" />}
-        {/* Dot markers at each year for the last value */}
+        {/* Dot markers + value labels at each year */}
         {years.map((yr, i) => {
           const gv = grossM[i]; const ov = opM[i]; const nv = netM[i];
           const x = toX(i);
+          const isLast = i === years.length - 1;
           return (
             <G key={yr}>
               {gv != null && <Rect x={x-2} y={(toY(gv) ?? 0)-2} width={4} height={4} fill={BLUE} rx={2} />}
               {ov != null && <Rect x={x-2} y={(toY(ov) ?? 0)-2} width={4} height={4} fill={NAVY} rx={2} />}
               {nv != null && <Rect x={x-2} y={(toY(nv) ?? 0)-2} width={4} height={4} fill={GREEN} rx={2} />}
+              {/* Value labels on last data point */}
+              {isLast && gv != null && <Text x={x+5} y={(toY(gv) ?? 0)+2} style={{ fontSize: 5, fill: BLUE, fontFamily: "Helvetica-Bold" }}>{gv.toFixed(1)}%</Text>}
+              {isLast && ov != null && <Text x={x+5} y={(toY(ov) ?? 0)+2} style={{ fontSize: 5, fill: NAVY, fontFamily: "Helvetica-Bold" }}>{ov.toFixed(1)}%</Text>}
+              {isLast && nv != null && <Text x={x+5} y={(toY(nv) ?? 0)+2} style={{ fontSize: 5, fill: GREEN, fontFamily: "Helvetica-Bold" }}>{nv.toFixed(1)}%</Text>}
             </G>
           );
         })}
@@ -503,9 +506,9 @@ function MarginLineChart({ history }: { history: Record<string, Record<string, n
         ))}
       </View>
       <View style={S.chartLegend}>
-        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: BLUE }]} /><Text style={S.legendText}>Gross</Text></View>
-        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Operating</Text></View>
-        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Net</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: BLUE }]} /><Text style={S.legendText}>Gross Margin</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: NAVY }]} /><Text style={S.legendText}>Op. Margin</Text></View>
+        <View style={S.legendItem}><View style={[S.legendDot, { backgroundColor: GREEN }]} /><Text style={S.legendText}>Net Margin</Text></View>
       </View>
     </View>
   );
@@ -1401,6 +1404,15 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const investmentFrame = snapshotRows.find(r => r.label.toLowerCase().includes("investment frame"))?.value ?? "";
 
   const fcfMarginCover = facts.free_cash_flow && facts.revenue ? (facts.free_cash_flow / facts.revenue * 100) : null;
+  // Compute cover gross margin from history if missing
+  const coverHistGP = history?.gross_profit ?? {}; const coverHistRev = history?.revenue ?? {};
+  const coverLastYr = Object.keys(coverHistRev).sort().pop();
+  const coverGrossMargin = facts.gross_margin != null ? facts.gross_margin
+    : (coverLastYr && coverHistGP[coverLastYr] && coverHistRev[coverLastYr] ? coverHistGP[coverLastYr] / coverHistRev[coverLastYr] * 100 : null);
+  const coverRevGrowth = (() => {
+    const yrs = Object.keys(coverHistRev).sort(); if (yrs.length < 2) return null;
+    return ((coverHistRev[yrs[yrs.length-1]] / coverHistRev[yrs[yrs.length-2]]) - 1) * 100;
+  })();
 
   return (
     <Document title={`${companyName} (${ticker}) — Equity Research Primer`} author="Edgewood Management">
@@ -1451,14 +1463,15 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               {[
                 { label: "Market Cap", value: fmtCover(facts.market_cap) },
                 { label: "Revenue (FY)", value: fmtCover(facts.revenue) },
+                { label: "Rev Growth", value: coverRevGrowth != null ? `${coverRevGrowth >= 0 ? "+" : ""}${coverRevGrowth.toFixed(1)}%` : "N/A" },
+                { label: "Gross Margin", value: coverGrossMargin != null ? `${coverGrossMargin.toFixed(1)}%` : "N/A" },
                 { label: "FCF Margin", value: fcfMarginCover != null ? `${fcfMarginCover.toFixed(1)}%` : "N/A" },
                 { label: "EV/EBITDA", value: facts.ev_ebitda != null ? `${facts.ev_ebitda.toFixed(1)}x` : "N/A" },
                 { label: "ROIC", value: facts.roic != null ? `${facts.roic.toFixed(1)}%` : "N/A" },
-                { label: "P/E", value: facts.pe_ratio != null ? `${facts.pe_ratio.toFixed(1)}x` : "N/A" },
               ].map(chip => (
-                <View key={chip.label} style={[S.coverChip, { backgroundColor: "rgba(255,255,255,0.1)" }]}>
-                  <Text style={[S.coverChipLabel, { color: "rgba(255,255,255,0.5)" }]}>{chip.label}</Text>
-                  <Text style={[S.coverChipValue, { color: "white" }]}>{chip.value}</Text>
+                <View key={chip.label} style={[S.coverChip, { backgroundColor: "rgba(255,255,255,0.08)", borderWidth: 1, borderColor: "rgba(255,255,255,0.12)" }]}>
+                  <Text style={[S.coverChipLabel, { color: "rgba(255,255,255,0.45)" }]}>{chip.label}</Text>
+                  <Text style={[S.coverChipValue, { color: "white", fontSize: 11 }]}>{chip.value}</Text>
                 </View>
               ))}
             </View>
@@ -1535,19 +1548,19 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
         <View style={S.body}>
 
           {/* Table of Contents */}
-          <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, padding: 12, marginBottom: 16 }}>
-            <Text style={{ fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 8 }}>Table of Contents</Text>
+          <View wrap={false} style={{ borderWidth: 1, borderColor: BORDER, borderRadius: 3, paddingHorizontal: 12, paddingVertical: 8, marginBottom: 12 }}>
+            <Text style={{ fontSize: 7, fontFamily: "Helvetica-Bold", color: NAVY, letterSpacing: 1.2, textTransform: "uppercase", marginBottom: 6 }}>Table of Contents</Text>
             <View style={{ flexDirection: "row", flexWrap: "wrap" }}>
               {[
                 "I. Executive Summary", "II. Company Snapshot", "III. Business Overview",
                 "IV. Industry Analysis", "V. Financial Analysis", "VI. Valuation Framework",
-                "VII. Management Commentary & Guidance", "VIII. Management & Governance",
-                "IX. Key Risks", "X. News Analysis & Market Intelligence",
-                "XI. Investment Thesis", "XII. Key Metrics Dashboard", "XIII. Earnings Call Questions",
+                "VII. Management Commentary", "VIII. Management & Governance",
+                "IX. Key Risks", "X. News & Market Intelligence",
+                "XI. Investment Thesis", "XII. Key Metrics Dashboard", "XIII. Earnings Q&A",
               ].map((item, i) => (
-                <View key={i} style={{ width: "50%", paddingRight: 8, paddingVertical: 2, flexDirection: "row", alignItems: "center", gap: 5 }}>
-                  <View style={{ width: 3, height: 3, borderRadius: 1.5, backgroundColor: ACCENT.primary, flexShrink: 0 }} />
-                  <Text style={{ fontSize: 7.5, color: DGRAY }}>{item}</Text>
+                <View key={i} style={{ width: "33.33%", paddingRight: 6, paddingVertical: 1.5, flexDirection: "row", alignItems: "center", gap: 4 }}>
+                  <View style={{ width: 2.5, height: 2.5, borderRadius: 1.25, backgroundColor: ACCENT.primary, flexShrink: 0 }} />
+                  <Text style={{ fontSize: 6.5, color: DGRAY }}>{item}</Text>
                 </View>
               ))}
             </View>
@@ -1585,11 +1598,11 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               { label: "P/E (NTM)",     value: fmtX(facts.pe_ratio),                      color: NAVY },
             ];
             return (
-              <View wrap={false} style={{ flexDirection: "row", gap: 5, marginBottom: 14, flexWrap: "wrap" }}>
+              <View wrap={false} style={{ flexDirection: "row", gap: 4, marginBottom: 12 }}>
                 {glanceItems.map(item => (
-                  <View key={item.label} style={{ flex: 1, minWidth: "10%", backgroundColor: LGRAY, borderRadius: 3, paddingHorizontal: 8, paddingVertical: 6, borderLeftWidth: 2, borderLeftColor: item.color }}>
-                    <Text style={{ fontSize: 6, color: GRAY, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 2 }}>{item.label}</Text>
-                    <Text style={{ fontSize: 9.5, fontFamily: "Helvetica-Bold", color: item.color }}>{item.value}</Text>
+                  <View key={item.label} style={{ flex: 1, backgroundColor: LGRAY, borderRadius: 2, paddingHorizontal: 7, paddingVertical: 5, borderBottomWidth: 2, borderBottomColor: item.color }}>
+                    <Text style={{ fontSize: 5.5, color: GRAY, textTransform: "uppercase", letterSpacing: 0.4, marginBottom: 2 }}>{item.label}</Text>
+                    <Text style={{ fontSize: 9, fontFamily: "Helvetica-Bold", color: NAVY }}>{item.value}</Text>
                   </View>
                 ))}
               </View>
@@ -1629,9 +1642,10 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             : parseParas(secs["EXECUTIVE_SUMMARY"] ?? "").map((p, i) => <Para key={i} text={p} />)}
           {/* Pull quote — most impactful exec bullet */}
           {execBullets.length > 0 && (
-            <View wrap={false} style={{ borderTopWidth: 1, borderBottomWidth: 1, borderColor: BORDER, paddingVertical: 9, marginVertical: 8 }}>
-              <Text style={{ fontSize: 9.5, color: NAVY, fontFamily: "Helvetica-Bold", lineHeight: 1.65 }}>
-                {`"${(execBullets[0].replace(/\*\*([^*]+)\*\*/g, "$1")).slice(0, 200)}${execBullets[0].length > 200 ? "…" : ""}"`}
+            <View wrap={false} style={{ borderLeftWidth: 3, borderLeftColor: ACCENT.primary, paddingLeft: 12, paddingVertical: 8, marginVertical: 8, backgroundColor: LGRAY, borderRadius: 2 }}>
+              <Text style={{ fontSize: 6, color: ACCENT.primary, fontFamily: "Helvetica-Bold", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Key Thesis Statement</Text>
+              <Text style={{ fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold", lineHeight: 1.6, fontStyle: "italic" }}>
+                {`"${(execBullets[0].replace(/\*\*([^*]+)\*\*/g, "$1")).slice(0, 280)}${execBullets[0].length > 280 ? "…" : ""}"`}
               </Text>
             </View>
           )}
@@ -1737,7 +1751,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                             <Text style={{ fontSize: 7.5, color: row.isKpi ? NAVY : DGRAY, fontFamily: row.isKpi ? "Helvetica-Bold" : "Helvetica", textAlign: "right" }}>
                               {v == null ? "—" : (row as any).isPct ? `${v.toFixed(1)}%` : (row as any).isEps ? `$${v.toFixed(2)}` : fmtShort(v)}
                             </Text>
-                            {chg != null && <Text style={{ fontSize: 5.5, color: chgColor, textAlign: "right" }}>{fmtPct(chg)} YoY</Text>}
+                            {chg != null && <Text style={{ fontSize: 5.5, color: chgColor, textAlign: "right" }}>{chg > 0 ? "+" : ""}{chg.toFixed(1)}% YoY</Text>}
                           </View>
                         );
                       })}
@@ -2373,16 +2387,24 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               })()}
               {riskItems.length > 0
                 ? riskItems.map((r, i) => {
-                    const prob = r.body.match(/\[\s*(HIGH|MEDIUM|LOW)\s*\]\s*probability/i)?.[1]?.toUpperCase();
+                    const prob = r.body.match(/\[\s*(HIGH|MEDIUM|LOW|MEDIUM-HIGH|LOW-MEDIUM)\s*\]\s*probability/i)?.[1]?.toUpperCase().replace("MEDIUM-HIGH","MEDIUM").replace("LOW-MEDIUM","LOW");
                     const accentColor = prob === "HIGH" ? RED : prob === "MEDIUM" ? AMBER : GRAY;
+                    const badgeBg = prob === "HIGH" ? "#fef2f2" : prob === "MEDIUM" ? "#fffbeb" : "#f9fafb";
                     return (
-                      <View key={i} wrap={false} style={{ marginBottom: 10, paddingLeft: 8, borderLeftWidth: 2, borderLeftColor: accentColor }}>
-                        {r.title ? (
-                          <Text style={{ fontSize: 8, fontFamily: "Helvetica-Bold", color: accentColor === RED ? RED : NAVY, marginBottom: 3 }}>
-                            {r.title}
-                          </Text>
-                        ) : null}
-                        {r.body ? <Text style={S.para}>{r.body.replace(/\*\*([^*]+)\*\*/g, "$1")}</Text> : null}
+                      <View key={i} wrap={false} style={{ marginBottom: 10, borderWidth: 1, borderColor: BORDER, borderLeftWidth: 3, borderLeftColor: accentColor, borderRadius: 2, padding: 8 }}>
+                        <View style={{ flexDirection: "row", alignItems: "center", gap: 6, marginBottom: 3 }}>
+                          {r.title ? (
+                            <Text style={{ fontSize: 7.5, fontFamily: "Helvetica-Bold", color: NAVY, flex: 1 }}>
+                              {r.title}
+                            </Text>
+                          ) : null}
+                          {prob && (
+                            <View style={{ backgroundColor: badgeBg, borderRadius: 2, paddingHorizontal: 5, paddingVertical: 2, borderWidth: 1, borderColor: accentColor }}>
+                              <Text style={{ fontSize: 5.5, fontFamily: "Helvetica-Bold", color: accentColor, letterSpacing: 0.5 }}>{prob}</Text>
+                            </View>
+                          )}
+                        </View>
+                        {r.body ? <RichText text={r.body.replace(/\[\s*(HIGH|MEDIUM|LOW|MEDIUM-HIGH|LOW-MEDIUM)\s*\]\s*probability[^—\n]*/gi, "").trim()} style={[S.para, { marginBottom: 0 }]} /> : null}
                       </View>
                     );
                   })
