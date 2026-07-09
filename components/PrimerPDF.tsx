@@ -716,9 +716,11 @@ function EpsLollipopChart({ history }: { history: Record<string, Record<string, 
   const vals = years.map(y => epsData[y] ?? 0);
   const maxA = Math.max(...vals.map(Math.abs), 0.01);
   const BAR_W = 44; const GAP = (CHART_W - years.length * BAR_W) / (years.length + 1);
-  const MID_Y = CHART_H / 2;
+  const TOP_PAD = 12;
+  const PLOT_H = CHART_H - TOP_PAD;
+  const MID_Y = TOP_PAD + PLOT_H / 2;
   const xOf = (i: number) => GAP + i * (BAR_W + GAP) + BAR_W / 2;
-  const yOf = (v: number) => MID_Y - (v / maxA) * MID_Y;
+  const yOf = (v: number) => MID_Y - (v / maxA) * (PLOT_H / 2);
   return (
     <View wrap={false} style={{ marginBottom: 2 }}>
       <Text style={S.chartLabel}>EPS Diluted — 5-Year ($)</Text>
@@ -726,11 +728,13 @@ function EpsLollipopChart({ history }: { history: Record<string, Record<string, 
         <Line x1={0} y1={MID_Y} x2={CHART_W} y2={MID_Y} stroke={BORDER} strokeWidth={0.5} strokeDasharray="3,2"/>
         {years.map((yr, i) => {
           const v = epsData[yr] ?? 0; const y = yOf(v); const x = xOf(i);
+          const labelY = y > MID_Y ? Math.min(y + 11, CHART_H + 8) : Math.max(y - 7, TOP_PAD - 2);
+          const labelFill = v >= 0 ? AMBER : RED;
           return (
             <G key={yr}>
-              <Line x1={x} y1={MID_Y} x2={x} y2={y} stroke={v >= 0 ? AMBER : RED} strokeWidth={2}/>
-              <Rect x={x-4} y={y-4} width={8} height={8} fill={v >= 0 ? AMBER : RED} rx={4}/>
-              <Text x={x} y={Math.max(8, y > MID_Y ? y + 10 : y - 6)} style={{ fontSize: 5, fill: v >= 0 ? AMBER : RED, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
+              <Line x1={x} y1={MID_Y} x2={x} y2={y} stroke={labelFill} strokeWidth={2}/>
+              <Rect x={x-4} y={y-4} width={8} height={8} fill={labelFill} rx={4}/>
+              <Text x={x} y={labelY} style={{ fontSize: 5.5, fill: labelFill, fontFamily: "Helvetica-Bold", textAnchor: "middle" }}>${v.toFixed(2)}</Text>
             </G>
           );
         })}
@@ -1194,7 +1198,7 @@ function StockRangeBar({ facts }: { facts: Record<string, number> }) {
 
 function SectionHdr({ title, accentColor, pageBreak }: { title: string; accentColor?: string; pageBreak?: boolean }) {
   return (
-    <View style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]} minPresenceAhead={60}>
+    <View wrap={false} style={[S.sectionHeaderWrap, pageBreak ? { break: "before" } as any : {}]} minPresenceAhead={60}>
       <View style={[S.sectionHeaderAccent, { backgroundColor: accentColor ?? NAVY }]} />
       <Text style={[S.sectionHeader, { flex: 1 }]}>{title}</Text>
     </View>
@@ -1292,7 +1296,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
   const snapshotRows = parseSnapshotTable(secs["COMPANY_SNAPSHOT"] ?? "");
 
   const execBulletsText = execBullets.join(" ");
-  const ratingMatch = execBulletsText.match(/\b(STRONG BUY|STRONG SELL|OUTPERFORM|UNDERPERFORM|BUY|SELL|HOLD|NEUTRAL)\b/i);
+  const ratingMatch = execBulletsText.match(/\b(STRONG BUY|STRONG SELL|OUTPERFORM|UNDERPERFORM|BUY|SELL|HOLD|NEUTRAL)\b/);
   const ratingText  = ratingMatch ? ratingMatch[1].toUpperCase() : null;
   const ratingColor = ratingText
     ? (["STRONG BUY","BUY","OUTPERFORM"].includes(ratingText) ? GREEN
@@ -1561,14 +1565,23 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
               : null;
             const fcfYield2 = facts.free_cash_flow && facts.market_cap && facts.market_cap > 0
               ? (facts.free_cash_flow / facts.market_cap) * 100 : null;
+            // Compute gross_margin from history when API doesn't return it directly
+            const histGP = history?.gross_profit ?? {}; const histRev = history?.revenue ?? {};
+            const histLastYr = Object.keys(histRev).sort().pop();
+            const computedGM = facts.gross_margin != null ? facts.gross_margin
+              : (histLastYr && histGP[histLastYr] && histRev[histLastYr] ? histGP[histLastYr] / histRev[histLastYr] * 100 : null);
+            // Compute net_debt from history when API doesn't return it directly
+            const histLTD = history?.long_term_debt ?? {}; const histCash = history?.cash ?? {};
+            const computedNetDebt = facts.net_debt != null ? facts.net_debt
+              : (histLastYr ? (histLTD[histLastYr] ?? 0) - (histCash[histLastYr] ?? 0) : null);
             const glanceItems = [
               { label: "Market Cap",    value: fmtC(facts.market_cap),                    color: NAVY },
               { label: "EV/EBITDA",     value: fmtX(facts.ev_ebitda),                     color: NAVY },
               { label: "Rev Growth",    value: revGrowth != null ? fmtP(revGrowth) : "—", color: revGrowth != null && revGrowth >= 0 ? GREEN : RED },
-              { label: "Gross Margin",  value: fmtP(facts.gross_margin),                  color: NAVY },
+              { label: "Gross Margin",  value: fmtP(computedGM),                          color: NAVY },
               { label: "FCF Yield",     value: fcfYield2 != null ? fmtP(fcfYield2) : "—", color: NAVY },
               { label: "ROIC",          value: fmtP(facts.roic),                           color: facts.roic != null && facts.roic >= 9 ? GREEN : RED },
-              { label: "Net Debt/EBITDA", value: (() => { const nd = facts.net_debt, eb = facts.ebitda; return nd != null && eb && eb !== 0 ? (nd < 0 ? "Net Cash" : `${(nd/eb).toFixed(1)}x`) : "—"; })(), color: (() => { const nd = facts.net_debt, eb = facts.ebitda; if (!nd || !eb) return NAVY; return nd < 0 ? GREEN : nd / eb < 3 ? NAVY : RED; })() },
+              { label: "Net Debt/EBITDA", value: (() => { const nd = computedNetDebt, eb = facts.ebitda; return nd != null && eb && eb !== 0 ? (nd < 0 ? "Net Cash" : `${(nd/eb).toFixed(1)}x`) : "—"; })(), color: (() => { const nd = computedNetDebt, eb = facts.ebitda; if (nd == null || !eb) return NAVY; return nd < 0 ? GREEN : nd / eb < 3 ? NAVY : RED; })() },
               { label: "P/E (NTM)",     value: fmtX(facts.pe_ratio),                      color: NAVY },
             ];
             return (
@@ -1629,7 +1642,12 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
 
           {/* Quality signal row — ROIC/WACC, leverage, earnings quality (controlled by positioning chart toggle) */}
           {showChart("positioning") && (() => {
-            const nd = facts.net_debt; const eb = facts.ebitda;
+            // Compute net_debt from history if API doesn't return it
+            const sigHistLTD = history?.long_term_debt ?? {}; const sigHistCash = history?.cash ?? {};
+            const sigLastYr = Object.keys(history?.revenue ?? {}).sort().pop();
+            const ndComputed = facts.net_debt != null ? facts.net_debt
+              : (sigLastYr ? (sigHistLTD[sigLastYr] ?? 0) - (sigHistCash[sigLastYr] ?? 0) : null);
+            const nd = ndComputed; const eb = facts.ebitda;
             const ndEb = nd != null && eb != null && eb !== 0 ? nd / eb : null;
             const roicSpread2 = facts.roic != null ? facts.roic - 9 : null;
             const fcfConv = facts.operating_cf && facts.net_income && facts.net_income !== 0
@@ -1893,6 +1911,15 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                 const fmtX = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}x`;
                 const fmtPct3 = (v?: number | null) => v == null ? "—" : `${Number(v).toFixed(1)}%`;
                 const subjectPe = facts.pe_ratio; const subjectEv = facts.ev_ebitda;
+                // Compute gross_margin from history if missing from facts
+                const peerHistGP = history?.gross_profit ?? {}; const peerHistRev = history?.revenue ?? {};
+                const peerLastYr = Object.keys(peerHistRev).sort().pop();
+                const subjectGM = facts.gross_margin != null ? facts.gross_margin
+                  : (peerLastYr && peerHistGP[peerLastYr] && peerHistRev[peerLastYr] ? peerHistGP[peerLastYr] / peerHistRev[peerLastYr] * 100 : null);
+                // Compute revenue_growth from history if missing
+                const peerRevYrs = Object.keys(peerHistRev).sort();
+                const subjectRevGr = facts.revenue_growth != null ? facts.revenue_growth
+                  : (peerRevYrs.length >= 2 ? ((peerHistRev[peerRevYrs[peerRevYrs.length-1]] / peerHistRev[peerRevYrs[peerRevYrs.length-2]]) - 1) * 100 : null);
                 return (
                   <>
                     <SubSectionHdr title="Peer Valuation Benchmarking" />
@@ -1904,11 +1931,10 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                       </View>
                       {/* Subject company row */}
                       {(() => {
-                        const fcfYld2 = facts.free_cash_flow && facts.market_cap ? facts.market_cap / facts.free_cash_flow : null;
                         const subEvRev = facts.ev_revenue;
                         return (
                           <View style={[S.tableRow, { backgroundColor: ACCENT.light }]}>
-                            <Text style={[S.tableCellBold, { width: "20%", color: ACCENT.primary }]}>{ticker} ◀</Text>
+                            <Text style={[S.tableCellBold, { width: "20%", color: ACCENT.primary }]}>{ticker} [H]</Text>
                             <Text style={[S.tableCellNum, { width: "10%", fontFamily: "Helvetica-Bold", color: NAVY }]}>
                               {facts.revenue ? (facts.revenue >= 1e9 ? `$${(facts.revenue/1e9).toFixed(1)}B` : `$${(facts.revenue/1e6).toFixed(0)}M`) : "—"}
                             </Text>
@@ -1918,9 +1944,9 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                             <Text style={[S.tableCellNum, { width: "8%", fontFamily: "Helvetica-Bold" }]}>{fmtX(subjectPe)}</Text>
                             <Text style={[S.tableCellNum, { width: "10%", fontFamily: "Helvetica-Bold" }]}>{fmtX(subjectEv)}</Text>
                             <Text style={[S.tableCellNum, { width: "8%", fontFamily: "Helvetica-Bold" }]}>{fmtX(subEvRev)}</Text>
-                            <Text style={[S.tableCellNum, { width: "10%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.gross_margin)}</Text>
+                            <Text style={[S.tableCellNum, { width: "10%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(subjectGM)}</Text>
                             <Text style={[S.tableCellNum, { width: "8%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.roic)}</Text>
-                            <Text style={[S.tableCellNum, { width: "8%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(facts.revenue_growth)}</Text>
+                            <Text style={[S.tableCellNum, { width: "8%", fontFamily: "Helvetica-Bold" }]}>{fmtPct3(subjectRevGr)}</Text>
                           </View>
                         );
                       })()}
@@ -1934,7 +1960,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
                           <Text style={[S.tableCellNum, { width: "8%", color: subjectPe && p.pe ? (p.pe < subjectPe ? GREEN : RED) : DGRAY }]}>{fmtX(p.pe)}</Text>
                           <Text style={[S.tableCellNum, { width: "10%", color: subjectEv && p.ev_ebitda ? (p.ev_ebitda < subjectEv ? GREEN : RED) : DGRAY }]}>{fmtX(p.ev_ebitda)}</Text>
                           <Text style={[S.tableCellNum, { width: "8%" }]}>{fmtX(p.ev_revenue)}</Text>
-                          <Text style={[S.tableCellNum, { width: "10%", color: facts.gross_margin && p.gross_margin ? (p.gross_margin < facts.gross_margin ? GREEN : RED) : DGRAY }]}>{fmtPct3(p.gross_margin)}</Text>
+                          <Text style={[S.tableCellNum, { width: "10%", color: subjectGM && p.gross_margin ? (p.gross_margin < subjectGM ? GREEN : RED) : DGRAY }]}>{fmtPct3(p.gross_margin)}</Text>
                           <Text style={[S.tableCellNum, { width: "8%" }]}>{fmtPct3(p.roic)}</Text>
                           <Text style={[S.tableCellNum, { width: "8%" }]}>{fmtPct3(p.revenue_growth)}</Text>
                         </View>
@@ -2529,14 +2555,14 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
             );
           })()}
           {bull.length > 0 && (
-            <View wrap={false} style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
-              <Text style={S.colHeaderBull}>Bull Case</Text>
+            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: GREEN, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#f0fdf4" }}>
+              <Text wrap={false} style={S.colHeaderBull} minPresenceAhead={40}>Bull Case</Text>
               <Bullets items={bull} color={GREEN} />
             </View>
           )}
           {bear.length > 0 && (
-            <View wrap={false} style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: RED, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#fff1f2" }}>
-              <Text style={S.colHeaderBear}>Bear Case</Text>
+            <View style={{ marginBottom: 12, borderLeftWidth: 3, borderLeftColor: RED, paddingLeft: 10, paddingTop: 8, paddingBottom: 8, paddingRight: 8, backgroundColor: "#fff1f2" }}>
+              <Text wrap={false} style={S.colHeaderBear} minPresenceAhead={40}>Bear Case</Text>
               <Bullets items={bear} color={RED} />
             </View>
           )}
