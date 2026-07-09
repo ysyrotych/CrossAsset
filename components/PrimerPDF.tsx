@@ -1648,7 +1648,7 @@ export function PrimerDocument({ ticker, companyName, industry, content, generat
           {execBullets.length > 0 && (
             <View wrap={false} style={{ borderLeftWidth: 3, borderLeftColor: ACCENT.primary, paddingLeft: 12, paddingVertical: 8, marginVertical: 8, backgroundColor: LGRAY, borderRadius: 2 }}>
               <Text style={{ fontSize: 6, color: ACCENT.primary, fontFamily: "Helvetica-Bold", letterSpacing: 1, textTransform: "uppercase", marginBottom: 4 }}>Key Thesis Statement</Text>
-              <Text style={{ fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-Bold", lineHeight: 1.6, fontStyle: "italic" }}>
+              <Text style={{ fontSize: 8.5, color: NAVY, fontFamily: "Helvetica-BoldOblique", lineHeight: 1.6 }}>
                 {`"${(execBullets[0].replace(/\*\*([^*]+)\*\*/g, "$1")).slice(0, 280)}${execBullets[0].length > 280 ? "…" : ""}"`}
               </Text>
             </View>
