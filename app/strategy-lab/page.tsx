@@ -456,6 +456,13 @@ export default function StrategyLabPage() {
   const [backtestLoading,setBacktestLoading]= useState(false);
   const [backtestError,  setBacktestError]  = useState<string | null>(null);
 
+  // ── Universe screener + optimizer state ────────────────────────────────────
+  const [universeScores,       setUniverseScores]       = useState<FactorScoreResult[] | null>(null);
+  const [universeLoading,      setUniverseLoading]      = useState(false);
+  const [universeSectorFilter, setUniverseSectorFilter] = useState<string>("All");
+  const [universeSortBy,       setUniverseSortBy]       = useState<string>("regime");
+  const [suggestedWeights,     setSuggestedWeights]     = useState<Record<string, number> | null>(null);
+
   // Load portfolio from localStorage on mount
   useEffect(() => {
     try {
@@ -505,6 +512,23 @@ export default function StrategyLabPage() {
       fetchBacktest();
     }
   }, [activeTab, backtestData, backtestLoading, fetchBacktest]);
+
+  const fetchUniverseScores = useCallback(async () => {
+    setUniverseLoading(true);
+    try {
+      const r = await fetch("/api/strategy-lab/universe-scores");
+      if (!r.ok) return;
+      const d = await r.json();
+      setUniverseScores(d.scores ?? null);
+    } catch { /* silently ignore */ }
+    finally { setUniverseLoading(false); }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "Factor Model" && !universeScores && !universeLoading) {
+      fetchUniverseScores();
+    }
+  }, [activeTab, universeScores, universeLoading, fetchUniverseScores]);
 
   // Derived values — recomputed when user edits indicator weights
   const factorTargets = useMemo<FactorTarget[]>(() => {
@@ -606,7 +630,117 @@ export default function StrategyLabPage() {
     setHoldings(DEFAULT_PORTFOLIO);
     setFactorScores(null); setPortExposures(null);
   }, []);
+
+  // ── Optimizer: regime-weighted softmax weights with 15% cap ──────────────
+  const optimizeWeights = useCallback(() => {
+    if (!factorScores || !currentRegime) return;
+    const equityHoldings = holdings.filter(
+      h => h.ticker !== "USD" && !h.ticker.includes("Crncy") && !h.name?.toLowerCase().includes("cash")
+    );
+    const equityBudget = equityHoldings.reduce((s, h) => s + h.weight, 0);
+    type FKey = "Momentum" | "LowVolatility" | "Value" | "Quality" | "Size";
+    const FACTOR_KEYS: FKey[] = ["Momentum", "LowVolatility", "Value", "Quality", "Size"];
+    // Factor weights: allocation 0=avoid→-1, 1=neutral→0, 2=overweight→+1
+    const factorWts = FACTOR_KEYS.reduce((acc, f) => {
+      acc[f] = (allocation[currentRegime][f] - 1) as -1 | 0 | 1;
+      return acc;
+    }, {} as Record<FKey, number>);
+    // Regime-weighted composite score per holding
+    const scored = equityHoldings.map(h => {
+      const fs = factorScores.find(s => s.ticker === h.ticker);
+      if (!fs) return { ticker: h.ticker, score: 0 };
+      const zMap: Record<FKey, number | null> = {
+        Momentum: fs.zMomentum, LowVolatility: fs.zLowVol,
+        Value: fs.zValue, Quality: fs.zQuality, Size: fs.zSize,
+      };
+      let sum = 0; let wsum = 0;
+      FACTOR_KEYS.forEach(f => {
+        const w = factorWts[f]; const z = zMap[f];
+        if (z != null && w !== 0) { sum += w * z; wsum += Math.abs(w); }
+      });
+      return { ticker: h.ticker, score: wsum > 0 ? sum / wsum : 0 };
+    });
+    // Softmax temperature 0.5
+    const T = 0.5;
+    const maxS = Math.max(...scored.map(s => s.score));
+    const exps = scored.map(s => ({ ticker: s.ticker, e: Math.exp((s.score - maxS) / T) }));
+    const expSum = exps.reduce((a, x) => a + x.e, 0);
+    let wts = exps.map(x => ({ ticker: x.ticker, w: (x.e / expSum) * equityBudget }));
+    // Cap at 15%, redistribute excess iteratively
+    const MAX_W = 0.15;
+    for (let i = 0; i < 8; i++) {
+      const totalExcess = wts.reduce((s, x) => x.w > MAX_W ? s + x.w - MAX_W : s, 0);
+      if (totalExcess < 0.0005) break;
+      const belowSum = wts.reduce((s, x) => x.w < MAX_W ? s + x.w : s, 0);
+      wts = wts.map(x =>
+        x.w >= MAX_W ? { ...x, w: MAX_W } : { ...x, w: x.w + (belowSum > 0 ? (x.w / belowSum) * totalExcess : 0) }
+      );
+    }
+    const result: Record<string, number> = {};
+    wts.forEach(x => { result[x.ticker] = Math.round(x.w * 1000) / 1000; });
+    setSuggestedWeights(result);
+  }, [factorScores, currentRegime, holdings, allocation]);
+
+  const applyOptimizedWeights = useCallback(() => {
+    if (!suggestedWeights) return;
+    setHoldings(prev => prev.map(h =>
+      suggestedWeights[h.ticker] != null ? { ...h, weight: suggestedWeights[h.ticker] } : h
+    ));
+    setSuggestedWeights(null);
+    setFactorScores(null);
+    setPortExposures(null);
+  }, [suggestedWeights]);
+
+  const exportCSV = useCallback(() => {
+    const rows = [
+      "Ticker,Name,Weight%",
+      ...holdings.map(h => `${h.ticker},"${h.name ?? h.ticker}",${(h.weight * 100).toFixed(2)}`),
+    ].join("\n");
+    const url = URL.createObjectURL(new Blob([rows], { type: "text/csv" }));
+    const a = Object.assign(document.createElement("a"), { href: url, download: "portfolio.csv" });
+    a.click();
+    URL.revokeObjectURL(url);
+  }, [holdings]);
+
   const totalWeight = holdings.reduce((s, h) => s + h.weight, 0);
+
+  // Regime-scored + filtered + sorted universe list for screener
+  type ScoredUniverse = FactorScoreResult & { regimeScore: number };
+  const filteredUniverseScores = useMemo<ScoredUniverse[]>(() => {
+    if (!universeScores) return [];
+    type FKey = "Momentum" | "LowVolatility" | "Value" | "Quality" | "Size";
+    const FACTOR_KEYS: FKey[] = ["Momentum", "LowVolatility", "Value", "Quality", "Size"];
+    const factorWts = FACTOR_KEYS.reduce((acc, f) => {
+      acc[f] = currentRegime ? (allocation[currentRegime][f] - 1) : 0;
+      return acc;
+    }, {} as Record<FKey, number>);
+    const withRegime = universeScores.map(s => {
+      const zMap: Record<FKey, number | null> = {
+        Momentum: s.zMomentum, LowVolatility: s.zLowVol,
+        Value: s.zValue, Quality: s.zQuality, Size: s.zSize,
+      };
+      let sum = 0; let wsum = 0;
+      FACTOR_KEYS.forEach(f => {
+        const w = factorWts[f]; const z = zMap[f];
+        if (z != null && w !== 0) { sum += w * z; wsum += Math.abs(w); }
+      });
+      const regimeScore = wsum > 0 ? sum / wsum : s.compositeScore;
+      return { ...s, regimeScore };
+    });
+    const filtered = universeSectorFilter === "All"
+      ? withRegime
+      : withRegime.filter(s => s.sector === universeSectorFilter);
+    return [...filtered].sort((a, b) => {
+      switch (universeSortBy) {
+        case "momentum": return (b.zMomentum ?? -99) - (a.zMomentum ?? -99);
+        case "quality":  return (b.zQuality  ?? -99) - (a.zQuality  ?? -99);
+        case "value":    return (b.zValue     ?? -99) - (a.zValue    ?? -99);
+        case "lowvol":   return (b.zLowVol    ?? -99) - (a.zLowVol   ?? -99);
+        case "size":     return (b.zSize      ?? -99) - (a.zSize     ?? -99);
+        default:         return b.regimeScore - a.regimeScore;
+      }
+    });
+  }, [universeScores, universeSectorFilter, universeSortBy, currentRegime, allocation]);
 
   const regimeColors = currentRegime ? REGIME_COLORS[currentRegime] : null;
   const prevRegime   = history.length >= 2 ? history[history.length - 2].regime : null;
@@ -1371,6 +1505,135 @@ export default function StrategyLabPage() {
               </div>
             </Card>
 
+            {/* ── Universe Screener ─────────────────────────────────────── */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-4 gap-4">
+                <div>
+                  <SectionLabel>Universe Screener</SectionLabel>
+                  <p className="mt-1 text-[10.5px] text-[#bbb]">
+                    Factor scores for all {universeScores ? universeScores.length : "~60"} universe stocks · cross-sectional z-scores · sorted by {currentRegime ?? "equal-weight"} regime score · click + to add to portfolio
+                  </p>
+                </div>
+                <div className="flex items-center gap-2 shrink-0">
+                  <select value={universeSectorFilter} onChange={e => setUniverseSectorFilter(e.target.value)}
+                    className="border border-[#e8e3da] bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
+                    {["All","Technology","Communication","Consumer Disc.","Consumer Staples","Healthcare","Financials","Industrials","Energy","Materials"].map(s => (
+                      <option key={s}>{s}</option>
+                    ))}
+                  </select>
+                  <select value={universeSortBy} onChange={e => setUniverseSortBy(e.target.value)}
+                    className="border border-[#e8e3da] bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
+                    {[["regime","Regime Score"],["momentum","Momentum"],["quality","Quality"],["value","Value"],["lowvol","Low Vol"],["size","Size"]].map(([v,l]) => (
+                      <option key={v} value={v}>{l}</option>
+                    ))}
+                  </select>
+                  <button onClick={fetchUniverseScores} disabled={universeLoading}
+                    className="flex items-center gap-1.5 border border-[#e8e3da] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
+                    <span className={universeLoading ? "inline-block animate-spin" : ""}>↻</span>
+                    {universeLoading ? "Loading…" : "Refresh"}
+                  </button>
+                </div>
+              </div>
+
+              {universeLoading && (
+                <div className="text-center py-8">
+                  <p className="text-[11px] text-[#999]">Scoring universe (~60 stocks from Yahoo Finance)…</p>
+                  <p className="text-[10px] text-[#bbb] mt-1">This takes 10–20 seconds on first load.</p>
+                </div>
+              )}
+
+              {!universeScores && !universeLoading && (
+                <div className="text-center py-8 border border-dashed border-[#e8e3da]">
+                  <p className="text-[12px] font-semibold text-[#0c1b38] mb-2">Universe not loaded</p>
+                  <p className="text-[11px] text-[#999] mb-4">Click Refresh to score all universe stocks against current regime factor weights.</p>
+                  <button onClick={fetchUniverseScores}
+                    className="bg-[#0c1b38] text-white px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#162d5c] transition-colors">
+                    Screen Universe
+                  </button>
+                </div>
+              )}
+
+              {filteredUniverseScores.length > 0 && (
+                <div className="border border-[#eee9df] overflow-x-auto">
+                  <table className="w-full text-left min-w-[820px]">
+                    <thead>
+                      <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16">Ticker</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Name</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-24">Sector</th>
+                        {(["Mom","LV","Val","Qlty","Sz"] as const).map(f => (
+                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16 text-center">{f}</th>
+                        ))}
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] w-20 text-center">Regime</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-10 text-center">+</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredUniverseScores.map((s, rank) => {
+                        const inPortfolio = holdings.some(h => h.ticker === s.ticker);
+                        const zCell = (z: number | null) => {
+                          if (z == null) return <td className="px-2 py-1.5 text-center"><span className="text-[9.5px] text-[#ddd]">—</span></td>;
+                          const abs = Math.min(Math.abs(z) / 2, 1);
+                          const bg = z > 0 ? `rgba(20,122,79,${abs * 0.15})` : `rgba(180,35,24,${abs * 0.15})`;
+                          const color = z > 0 ? "#147a4f" : "#b42318";
+                          return (
+                            <td className="px-2 py-1.5 text-center" style={{ background: bg }}>
+                              <span className="text-[10.5px] font-semibold tabular-nums" style={{ color }}>
+                                {z >= 0 ? "+" : ""}{z.toFixed(1)}
+                              </span>
+                            </td>
+                          );
+                        };
+                        return (
+                          <tr key={s.ticker} className={`border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7] ${inPortfolio ? "bg-[#f5f7ff]" : ""}`}>
+                            <td className="px-3 py-1.5">
+                              <div className="flex items-center gap-1.5">
+                                <span className="text-[9px] tabular-nums text-[#ccc] w-4">#{rank+1}</span>
+                                <span className="text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</span>
+                              </div>
+                            </td>
+                            <td className="px-3 py-1.5 text-[10.5px] text-[#555]">
+                              {s.name}
+                              {inPortfolio && <span className="ml-1.5 text-[8.5px] border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] px-1 py-0.5">IN PORTFOLIO</span>}
+                            </td>
+                            <td className="px-3 py-1.5 text-[9.5px] text-[#999]">{s.sector}</td>
+                            {zCell(s.zMomentum)}
+                            {zCell(s.zLowVol)}
+                            {zCell(s.zValue)}
+                            {zCell(s.zQuality)}
+                            {zCell(s.zSize)}
+                            <td className="px-2 py-1.5 text-center">
+                              <span className={`text-[11px] font-bold tabular-nums ${s.regimeScore >= 0 ? "text-[#0c1b38]" : "text-[#b42318]"}`}>
+                                {s.regimeScore >= 0 ? "+" : ""}{s.regimeScore.toFixed(2)}
+                              </span>
+                            </td>
+                            <td className="px-2 py-1.5 text-center">
+                              {!inPortfolio ? (
+                                <button
+                                  onClick={() => {
+                                    setHoldings(prev => [...prev.filter(h => h.ticker !== "USD"), { ticker: s.ticker, weight: 0.03, name: s.name }, ...prev.filter(h => h.ticker === "USD")]);
+                                    setFactorScores(null); setPortExposures(null);
+                                  }}
+                                  className="w-6 h-6 border border-[#0c1b38] text-[#0c1b38] text-[11px] font-bold hover:bg-[#0c1b38] hover:text-white transition-colors"
+                                  title="Add to portfolio at 3% weight">
+                                  +
+                                </button>
+                              ) : (
+                                <span className="text-[9px] text-[#c8d0e8] font-bold">✓</span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+              {universeScores && filteredUniverseScores.length === 0 && (
+                <p className="text-center py-4 text-[11px] text-[#bbb]">No stocks in sector "{universeSectorFilter}"</p>
+              )}
+            </Card>
+
             {/* Factor definitions */}
             {factorDefs.map(def => (
               <Card key={def.factor} className="p-5">
@@ -1449,10 +1712,17 @@ export default function StrategyLabPage() {
                 </div>
                 <div className="flex items-center gap-2">
                   <button
+                    onClick={exportCSV}
+                    className="text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                    title="Export holdings as CSV"
+                  >
+                    Export CSV
+                  </button>
+                  <button
                     onClick={resetPortfolio}
                     className="text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
                   >
-                    Reset to Default
+                    Reset
                   </button>
                   <button
                     onClick={analyzePortfolio}
@@ -1743,6 +2013,93 @@ export default function StrategyLabPage() {
                   <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#147a4f] inline-block" /> Regime target (overweight)</span>
                   <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#b42318] inline-block" /> Regime target (underweight)</span>
                 </div>
+              </Card>
+            )}
+
+            {/* ── Portfolio Optimizer ───────────────────────────────────────── */}
+            {factorScores && factorScores.length > 0 && currentRegime && (
+              <Card className="p-6">
+                <div className="flex items-center justify-between mb-4">
+                  <div>
+                    <SectionLabel>Portfolio Optimizer</SectionLabel>
+                    <p className="mt-1 text-[10.5px] text-[#bbb]">
+                      {currentRegime} regime · regime-weighted factor scores → softmax (T=0.5) → 15% max weight
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {suggestedWeights && (
+                      <button onClick={applyOptimizedWeights}
+                        className="bg-[#147a4f] text-white px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#0f5e3a] transition-colors">
+                        Apply Suggestions
+                      </button>
+                    )}
+                    <button onClick={optimizeWeights}
+                      className="border border-[#0c1b38] text-[#0c1b38] px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#0c1b38] hover:text-white transition-colors">
+                      {suggestedWeights ? "Re-optimize" : "Optimize Weights"}
+                    </button>
+                    <button onClick={() => setSuggestedWeights(null)}
+                      className={`border border-[#e8e3da] text-[#bbb] px-3 py-2 text-[10px] hover:border-[#b42318] hover:text-[#b42318] transition-colors ${suggestedWeights ? "" : "hidden"}`}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+
+                {!suggestedWeights && (
+                  <div className="border border-dashed border-[#e8e3da] px-5 py-6 text-center">
+                    <p className="text-[11px] text-[#999]">
+                      Click "Optimize Weights" to compute regime-optimal position sizes using current {currentRegime} factor allocations and your portfolio factor scores.
+                    </p>
+                  </div>
+                )}
+
+                {suggestedWeights && (() => {
+                  const equityHoldings = holdings.filter(
+                    h => h.ticker !== "USD" && !h.ticker.includes("Crncy") && !h.name?.toLowerCase().includes("cash")
+                  );
+                  return (
+                    <>
+                      <div className="border border-[#eee9df] overflow-hidden mb-4">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                              {["Ticker","Name","Current","Change","Suggested"].map(h => (
+                                <th key={h} className={`px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] ${h === "Change" || h === "Suggested" || h === "Current" ? "text-right" : ""}`}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {[...equityHoldings]
+                              .sort((a, b) => (suggestedWeights[b.ticker] ?? b.weight) - (suggestedWeights[a.ticker] ?? a.weight))
+                              .map(h => {
+                                const current   = h.weight;
+                                const suggested = suggestedWeights[h.ticker] ?? current;
+                                const diff      = suggested - current;
+                                const isUp      = diff > 0.003;
+                                const isDn      = diff < -0.003;
+                                return (
+                                  <tr key={h.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                                    <td className="px-3 py-2 text-[11.5px] font-bold text-[#0c1b38] w-16">{h.ticker}</td>
+                                    <td className="px-3 py-2 text-[11px] text-[#555]">{h.name ?? h.ticker}</td>
+                                    <td className="px-3 py-2 text-[11px] tabular-nums text-[#999] text-right">{(current * 100).toFixed(1)}%</td>
+                                    <td className="px-3 py-2 text-[11.5px] font-semibold tabular-nums text-right"
+                                      style={{ color: isUp ? "#147a4f" : isDn ? "#b42318" : "#bbb" }}>
+                                      {diff >= 0 ? "+" : ""}{(diff * 100).toFixed(1)}%
+                                    </td>
+                                    <td className="px-3 py-2 text-[11.5px] font-bold tabular-nums text-right text-[#0c1b38]">
+                                      {(suggested * 100).toFixed(1)}%
+                                    </td>
+                                  </tr>
+                                );
+                              })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="text-[9.5px] text-[#bbb]">
+                        Weights are computed using {currentRegime} factor allocations. Cash position preserved. After applying, re-run "Analyze Portfolio" to update factor exposures.
+                      </p>
+                    </>
+                  );
+                })()}
               </Card>
             )}
 
