@@ -1418,11 +1418,9 @@ export default function StrategyLabPage() {
                     };
                     return (
                       <div key={e.factor}>
-                        <div className="flex items-center justify-between mb-1.5 min-w-0">
-                          <span className="text-[11px] font-semibold text-[#0a0a0a] w-24 shrink-0">{factorLabels[e.factor] ?? e.factor}</span>
-                          <div className="flex items-center gap-3 text-[10px] tabular-nums flex-wrap justify-end">
-                            <span className="text-[#555]">Ptf: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "—"}</span></span>
-                            <span className="text-[#555]">Tgt: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <div className="flex items-center gap-2">
+                            <span className="text-[11px] font-semibold text-[#0a0a0a] w-20 shrink-0">{factorLabels[e.factor] ?? e.factor}</span>
                             {!hasData ? (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 border border-[#ddd] bg-[#f9f9f9] text-[#bbb]">no data</span>
                             ) : (
@@ -1430,6 +1428,10 @@ export default function StrategyLabPage() {
                                 {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} under` : `${gap!.toFixed(2)} over`}
                               </span>
                             )}
+                          </div>
+                          <div className="flex items-center gap-4 text-[10px] tabular-nums">
+                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "—"}</span></span>
+                            <span className="text-[#555]">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
                           </div>
                         </div>
                         <div className="relative h-5 bg-[#f5f2ed] overflow-hidden">
