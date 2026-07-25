@@ -39,9 +39,9 @@ export type FactorScoreResult = {
 
 export type PortfolioExposure = {
   factor:            "Momentum" | "LowVolatility" | "Value" | "Quality" | "Size";
-  portfolioExposure: number;   // weight-averaged z-score
-  regimeTarget:      number;   // from factor targets (active: -1 to +1)
-  gap:               number;   // regimeTarget - portfolioExposure
+  portfolioExposure: number | null;  // null when no stocks have data for this factor
+  regimeTarget:      number;
+  gap:               number | null;
 };
 
 // ── Default portfolio ─────────────────────────────────────────────────────────
@@ -71,6 +71,7 @@ export const DEFAULT_PORTFOLIO: PortfolioPosition[] = [
   { ticker: "LIN",   weight: 0.020, name: "Linde" },
   { ticker: "LLY",   weight: 0.051, name: "Eli Lilly" },
   { ticker: "ASML",  weight: 0.096, name: "ASML Holding" },
+  { ticker: "USD",   weight: 0.015, name: "Cash (USD)" },
 ];
 
 // ── Statistical helpers ───────────────────────────────────────────────────────

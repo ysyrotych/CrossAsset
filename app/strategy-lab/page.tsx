@@ -521,8 +521,19 @@ export default function StrategyLabPage() {
   }, []);
 
   // ── Portfolio analysis ────────────────────────────────────────────────────
+  const [resultsReady, setResultsReady] = useState(false);
+
+  useEffect(() => {
+    if (!resultsReady) return;
+    const id = setTimeout(() => {
+      document.querySelector("[data-factor-scores-anchor]")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+    return () => clearTimeout(id);
+  }, [resultsReady]);
+
   const analyzePortfolio = useCallback(async () => {
     setComputingScores(true);
+    setResultsReady(false);
     setScoreError(null);
     try {
       const r = await fetch("/api/strategy-lab/factor-scores", {
@@ -530,22 +541,23 @@ export default function StrategyLabPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ holdings }),
       });
-      if (!r.ok) throw new Error(`API ${r.status}`);
+      if (!r.ok) throw new Error(`API ${r.status}: ${await r.text()}`);
       const data = await r.json();
       setFactorScores(data.scores);
-      // Merge regime targets into exposures
       const targets = computeFactorTargets(
         regimeData?.probabilities ?? null,
         regimeData?.regime ?? null,
         mode,
       );
       const exposures: PortfolioExposure[] = (data.portfolioExposures as PortfolioExposure[]).map(e => {
-        const t = targets.find(ft => ft.factor === e.factor || (ft.factor === "LowVolatility" && e.factor === "LowVolatility"));
+        const t = targets.find(ft => ft.factor === e.factor);
         const regimeTarget = t ? (mode === "enhanced" ? t.enhancedActive : t.baselineActive) : 0;
-        return { ...e, regimeTarget, gap: regimeTarget - e.portfolioExposure };
+        const gap = e.portfolioExposure != null ? regimeTarget - e.portfolioExposure : null;
+        return { ...e, regimeTarget, gap };
       });
       setPortExposures(exposures);
       setScoreTimestamp(new Date().toLocaleTimeString());
+      setResultsReady(true);
     } catch (e) {
       setScoreError(e instanceof Error ? e.message : "Failed to compute scores");
     } finally {
@@ -1317,23 +1329,24 @@ export default function StrategyLabPage() {
 
             {/* ── Factor score heatmap ─────────────────────────────────────── */}
             {factorScores && factorScores.length > 0 && (
+              <div data-factor-scores-anchor>
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <SectionLabel>Factor Scores</SectionLabel>
                   <span className="text-[9.5px] text-[#bbb]">cross-sectional z-scores within portfolio universe · clamped ±3σ</span>
                 </div>
                 <div className="border border-[#eee9df] overflow-x-auto">
-                  <table className="w-full text-left min-w-[720px]">
+                  <table className="w-full text-left min-w-[820px]">
                     <thead>
                       <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16">Ticker</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Name</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-14 text-right">Weight</th>
                         {(["Momentum","Low Vol","Value","Quality","Size"] as const).map(f => (
-                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-20 text-center">{f}</th>
+                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-[88px] text-center">{f}</th>
                         ))}
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] w-20 text-center">Score</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16 text-center">Data</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-14 text-center">Data</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1386,6 +1399,7 @@ export default function StrategyLabPage() {
                   Momentum = 0.6×12-1M + 0.4×6-1M · Low Vol = 0.5×(−σ) + 0.5×(−β) · Value = 0.35×EY + 0.35×FCF + 0.30×(−EV/EBITDA) · Quality = 0.40×ROIC + 0.35×GM + 0.25×(−leverage)
                 </p>
               </Card>
+              </div>
             )}
 
             {/* ── Portfolio factor exposures vs regime target ───────────────── */}
@@ -1400,10 +1414,10 @@ export default function StrategyLabPage() {
                     const pct = e.portfolioExposure;
                     const tgt = e.regimeTarget;
                     const gap = e.gap;
+                    const hasData = pct != null;
                     const barMax = 1.5;
-                    const pctWidth = Math.min(Math.abs(pct) / barMax * 100, 100);
-                    const tgtWidth = Math.min(Math.abs(tgt) / barMax * 100, 100);
-                    const aligned = Math.abs(gap) < 0.3;
+                    const pctWidth = hasData ? Math.min(Math.abs(pct) / barMax * 100, 100) : 0;
+                    const aligned = gap != null && Math.abs(gap) < 0.3;
                     const factorLabels: Record<string, string> = {
                       Momentum: "Momentum", LowVolatility: "Low Vol", Value: "Value", Quality: "Quality", Size: "Size",
                     };
@@ -1412,26 +1426,37 @@ export default function StrategyLabPage() {
                         <div className="flex items-center justify-between mb-1.5">
                           <span className="text-[11px] font-semibold text-[#0a0a0a] w-24">{factorLabels[e.factor] ?? e.factor}</span>
                           <div className="flex items-center gap-4 text-[10px] tabular-nums">
-                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{pct >= 0 ? "+" : ""}{pct.toFixed(2)}σ</span></span>
+                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "no data"}</span></span>
                             <span className="text-[#555]">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
-                            <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
-                              {aligned ? "aligned" : gap > 0 ? `+${gap.toFixed(2)} underweight` : `${gap.toFixed(2)} overweight`}
-                            </span>
+                            {!hasData ? (
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 border border-[#ddd] bg-[#f9f9f9] text-[#bbb]">no data</span>
+                            ) : (
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap! < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
+                                {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} underweight` : `${gap!.toFixed(2)} overweight`}
+                              </span>
+                            )}
                           </div>
                         </div>
                         <div className="relative h-5 bg-[#f5f2ed] overflow-hidden">
                           {/* Zero line */}
                           <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-[#ccc] z-10" />
-                          {/* Portfolio bar */}
-                          <div
-                            className="absolute top-1 bottom-1 transition-all"
-                            style={{
-                              background: "#0c1b38",
-                              opacity: 0.7,
-                              width: `${pctWidth / 2}%`,
-                              left: pct >= 0 ? "50%" : `${50 - pctWidth / 2}%`,
-                            }}
-                          />
+                          {/* Portfolio bar — only when data available */}
+                          {hasData && (
+                            <div
+                              className="absolute top-1 bottom-1 transition-all"
+                              style={{
+                                background: "#0c1b38",
+                                opacity: 0.7,
+                                width: `${pctWidth / 2}%`,
+                                left: pct! >= 0 ? "50%" : `${50 - pctWidth / 2}%`,
+                              }}
+                            />
+                          )}
+                          {!hasData && (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                              <span className="text-[9px] text-[#ccc]">requires FMP data</span>
+                            </div>
+                          )}
                           {/* Target marker */}
                           <div
                             className="absolute top-0.5 bottom-0.5 w-[2px] z-20"

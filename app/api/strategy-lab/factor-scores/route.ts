@@ -289,12 +289,12 @@ export async function POST(req: NextRequest) {
       const z = zArrays[fi][si];
       if (z != null) { sum += z * s.weight; wsum += s.weight; }
     });
-    const portfolioExposure = wsum > 0 ? sum / wsum : 0;
+    const portfolioExposure = wsum > 0 ? Math.round((sum / wsum) * 100) / 100 : null;
     return {
       factor,
-      portfolioExposure: Math.round(portfolioExposure * 100) / 100,
-      regimeTarget: 0,  // filled in client-side from regime engine
-      gap: 0,
+      portfolioExposure,
+      regimeTarget: 0,
+      gap: null,
     };
   });
 

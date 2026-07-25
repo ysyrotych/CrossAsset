@@ -165,51 +165,54 @@ export async function fetchQuote(sym: string): Promise<Quote | null> {
 // Adjusted-close daily bars — returns split/dividend-adjusted prices for factor computation
 export type AdjBar = { date: string; adjClose: number; close: number; volume: number };
 
+// v8/finance/chart works without crumb authentication — no session needed
 async function fetchAdjustedHistoryOne(
   sym: string,
   range: string,
-  session: { crumb: string; cookie: string },
 ): Promise<AdjBar[]> {
-  try {
-    const r = await fetch(
-      `https://query2.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}` +
-      `?interval=1d&range=${range}&events=splits,dividends&crumb=${encodeURIComponent(session.crumb)}`,
-      {
-        headers: { "User-Agent": UA, Cookie: session.cookie, Accept: "application/json", Referer: "https://finance.yahoo.com/" },
-        cache: "no-store",
-      }
-    );
-    if (!r.ok) return [];
-    const d = (await r.json())?.chart?.result?.[0];
-    if (!d) return [];
-    const ts: number[]            = d.timestamp ?? [];
-    const closes: (number|null)[] = d.indicators?.quote?.[0]?.close ?? [];
-    const adjCl: (number|null)[]  = d.indicators?.adjclose?.[0]?.adjclose ?? closes; // fallback to close
-    const vols: (number|null)[]   = d.indicators?.quote?.[0]?.volume ?? [];
-    return ts
-      .map((t, i) => ({
-        date:     new Date(t * 1000).toISOString().split("T")[0],
-        adjClose: adjCl[i] ?? closes[i] ?? 0,
-        close:    closes[i] ?? 0,
-        volume:   vols[i]  ?? 0,
-      }))
-      .filter(p => p.adjClose > 0);
-  } catch {
-    return [];
+  // Try query1 first, fall back to query2
+  for (const host of ["query1", "query2"]) {
+    try {
+      const r = await fetch(
+        `https://${host}.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(sym)}` +
+        `?interval=1d&range=${range}&events=splits,dividends`,
+        {
+          headers: { "User-Agent": UA, Accept: "application/json", Referer: "https://finance.yahoo.com/" },
+          cache: "no-store",
+        }
+      );
+      if (!r.ok) continue;
+      const d = (await r.json())?.chart?.result?.[0];
+      if (!d) continue;
+      const ts: number[]            = d.timestamp ?? [];
+      const closes: (number|null)[] = d.indicators?.quote?.[0]?.close ?? [];
+      const adjCl: (number|null)[]  = d.indicators?.adjclose?.[0]?.adjclose ?? closes;
+      const vols: (number|null)[]   = d.indicators?.quote?.[0]?.volume ?? [];
+      const bars = ts
+        .map((t, i) => ({
+          date:     new Date(t * 1000).toISOString().split("T")[0],
+          adjClose: adjCl[i] ?? closes[i] ?? 0,
+          close:    closes[i] ?? 0,
+          volume:   vols[i]  ?? 0,
+        }))
+        .filter(p => p.adjClose > 0);
+      if (bars.length > 0) return bars;
+    } catch {
+      continue;
+    }
   }
+  return [];
 }
 
-// Batch-fetch adjusted history for multiple symbols — all in parallel
+// Batch-fetch adjusted history for multiple symbols — all in parallel, no auth needed
 export async function fetchAdjustedHistoryBatch(
   symbols: string[],
   range = "2y",
 ): Promise<Map<string, AdjBar[]>> {
   const result = new Map<string, AdjBar[]>();
   if (!symbols.length) return result;
-  const session = await getSession();
-  if (!session) return result;
   const rows = await Promise.all(
-    symbols.map(async sym => ({ sym, bars: await fetchAdjustedHistoryOne(sym, range, session) }))
+    symbols.map(async sym => ({ sym, bars: await fetchAdjustedHistoryOne(sym, range) }))
   );
   for (const { sym, bars } of rows) result.set(sym, bars);
   return result;
