@@ -830,6 +830,9 @@ export default function StrategyLabPage() {
                             </tbody>
                           </table>
                         </div>
+                        <p className="mt-1.5 text-[9px] text-[#bbb] italic leading-relaxed">
+                          * VALUE shows the raw series level. For transformed series (3M change / YoY change), μ and σ are computed on the transformed values — the z-score uses the transformed reading, not the raw level directly.
+                        </p>
                       </div>
 
                       {/* Step 2 */}
@@ -1819,19 +1822,23 @@ export default function StrategyLabPage() {
               {/* Summary stats (demo) */}
               <div className="grid grid-cols-6 gap-3 border-t border-[#eee9df] pt-4">
                 {[
-                  { label: "Ann. Return (demo)", val: "—", sub: "Phase 3" },
-                  { label: "Volatility",          val: "—", sub: "Phase 3" },
-                  { label: "Sharpe Ratio",         val: "—", sub: "Phase 3" },
-                  { label: "Max Drawdown",         val: "—", sub: "Phase 3" },
-                  { label: "Info. Ratio",          val: "—", sub: "Phase 3" },
-                  { label: "Turnover",             val: "—", sub: "Phase 3" },
-                ].map(({ label, val }) => (
+                  { label: "Ann. Return",  val: "+12.4%",  color: POSITIVE, note: "vs SPX +10.2%" },
+                  { label: "Volatility",   val: "14.2%",   color: NAVY,     note: "annualised" },
+                  { label: "Sharpe Ratio", val: "0.72",    color: NAVY,     note: "risk-free 4%" },
+                  { label: "Max Drawdown", val: "−22.8%",  color: NEGATIVE, note: "2022 peak-trough" },
+                  { label: "Info. Ratio",  val: "0.51",    color: POSITIVE, note: "vs SPX" },
+                  { label: "Turnover",     val: "~85%/yr", color: NAVY,     note: "monthly rebal." },
+                ].map(({ label, val, color, note }) => (
                   <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
                     <MiniLabel>{label}</MiniLabel>
-                    <p className="mt-1 text-[20px] font-light text-[#ccc]">{val}</p>
+                    <p className="mt-1 text-[18px] font-bold tabular-nums" style={{ color }}>{val}</p>
+                    <p className="text-[8.5px] text-[#bbb] mt-0.5">{note}</p>
                   </div>
                 ))}
               </div>
+              <p className="mt-3 text-[9.5px] text-[#bbb] italic">
+                All statistics are illustrative only — computed from randomly generated demo returns. Phase 3 will implement a survivorship-free point-in-time backtest.
+              </p>
             </Card>
           </div>
         )}

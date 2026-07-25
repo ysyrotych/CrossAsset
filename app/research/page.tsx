@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import AppShell from "@/components/layout/AppShell";
 
 const NAVY    = "#0c1b38";
@@ -52,8 +52,18 @@ const DEMO_ITEMS: ResearchItem[] = [
 const FILTER_LABELS = ["All", "Working Paper", "Published", "Archived"] as const;
 type FilterLabel = typeof FILTER_LABELS[number];
 
+const STORAGE_KEY = "crossasset_research_items";
+
 export default function ResearchPage() {
-  const [items, setItems] = useState<ResearchItem[]>(DEMO_ITEMS);
+  const [items, setItems] = useState<ResearchItem[]>(() => {
+    if (typeof window === "undefined") return DEMO_ITEMS;
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? (JSON.parse(saved) as ResearchItem[]) : DEMO_ITEMS;
+    } catch {
+      return DEMO_ITEMS;
+    }
+  });
   const [filter, setFilter] = useState<FilterLabel>("All");
   const [showForm, setShowForm] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -63,6 +73,10 @@ export default function ResearchPage() {
   const [formAbstract, setFormAbstract] = useState("");
   const [formTags,     setFormTags]     = useState("");
   const [formStatus,   setFormStatus]   = useState<ResearchStatus>("Working Paper");
+
+  useEffect(() => {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(items)); } catch {}
+  }, [items]);
 
   const filtered = filter === "All" ? items : items.filter(i => i.status === filter);
 
@@ -329,8 +343,8 @@ export default function ResearchPage() {
         {/* Footer note */}
         <div className="mt-8 border border-[#eee9df] bg-[#fbfaf7] px-5 py-3">
           <p className="text-[10px] text-[#bbb] leading-relaxed">
-            Research Hub is a local workspace — all items are stored in browser state and reset on refresh.
-            Persistent storage and sharing features are planned for Phase 2.
+            Research Hub is a local workspace — all items are persisted in your browser&apos;s localStorage and survive page refreshes.
+            Cloud sync and public sharing are planned for Phase 2.
           </p>
         </div>
 

@@ -121,6 +121,69 @@ function demoRegimeData(): RegimeData {
     demoHistory.push({ date, growth: Math.round(growth * 100) / 100, riskAppetite: Math.round(riskAppetite * 100) / 100, regime });
   }
 
+  const asOf = new Date().toISOString().slice(0, 7);
+  // Illustrative Contraction scenario: G = Σ(z × d × w) ≈ -0.34σ
+  // For transformed series (mom3/yoy): VALUE shows raw level; μ and σ are of the transformed change.
+  // The z-score formula uses the transformed value, not the raw level directly.
+  const demoIndicators: IndicatorReading[] = [
+    {
+      id: "icsa",       name: "Initial Claims (inv.)",
+      latestValue: 233000,  previousValue: 227400, change: 5600, latestDate: asOf,
+      mean: -2500,    stdDev: 18000,
+      zscore: 0.45,   contribution: -0.07,   // z×d×w = 0.45×(−1)×0.15
+      direction: -1,  weight: 0.15,  enabled: true,
+    },
+    {
+      id: "permit",     name: "Building Permits",
+      latestValue: 1374,    previousValue: 1448,   change: -74,   latestDate: asOf,
+      mean: 28,       stdDev: 185,
+      zscore: -0.55,  contribution: -0.07,   // (−0.55)×(+1)×0.12
+      direction: 1,   weight: 0.12,  enabled: true,
+    },
+    {
+      id: "unrate",     name: "Unemployment Rate (inv.)",
+      latestValue: 4.10,    previousValue: 4.00,   change: 0.10,  latestDate: asOf,
+      mean: 5.82,     stdDev: 2.15,
+      zscore: -0.80,  contribution: 0.08,    // (−0.80)×(−1)×0.10
+      direction: -1,  weight: 0.10,  enabled: true,
+    },
+    {
+      id: "indpro",     name: "Industrial Production",
+      latestValue: 102.8,   previousValue: 102.8,  change: 0.00,  latestDate: asOf,
+      mean: 0.42,     stdDev: 1.40,
+      zscore: -0.30,  contribution: -0.04,   // (−0.30)×(+1)×0.12
+      direction: 1,   weight: 0.12,  enabled: true,
+    },
+    {
+      id: "t10y2y",     name: "Yield Curve (2s10s)",
+      latestValue: -0.25,   previousValue: -0.18,  change: -0.07, latestDate: asOf,
+      mean: 0.82,     stdDev: 1.07,
+      zscore: -1.00,  contribution: -0.18,   // (−1.00)×(+1)×0.18
+      direction: 1,   weight: 0.18,  enabled: true,
+    },
+    {
+      id: "umcsent",    name: "Consumer Sentiment",
+      latestValue: 67.2,    previousValue: 71.8,   change: -4.6,  latestDate: asOf,
+      mean: 84.8,     stdDev: 29.3,
+      zscore: -0.60,  contribution: -0.07,   // (−0.60)×(+1)×0.12
+      direction: 1,   weight: 0.12,  enabled: true,
+    },
+    {
+      id: "hysprd",     name: "HY Spreads (inv.)",
+      latestValue: 5.42,    previousValue: 5.15,   change: 0.27,  latestDate: asOf,
+      mean: 4.38,     stdDev: 2.97,
+      zscore: 0.35,   contribution: -0.04,   // 0.35×(−1)×0.12
+      direction: -1,  weight: 0.12,  enabled: true,
+    },
+    {
+      id: "payems_chg", name: "Payroll Growth",
+      latestValue: 157234,  previousValue: 156744, change: 490,   latestDate: asOf,
+      mean: 245,      stdDev: 490,
+      zscore: 0.50,   contribution: 0.05,    // 0.50×(+1)×0.09
+      direction: 1,   weight: 0.09,  enabled: true,
+    },
+  ];
+
   return {
     growthComposite:       -0.38,
     riskAppetiteComposite: -0.21,
@@ -132,16 +195,11 @@ function demoRegimeData(): RegimeData {
     probabilities:         { Recovery: 0.09, Expansion: 0.12, Slowdown: 0.32, Contraction: 0.47 },
     confidence:            64,
     explanation:           "DEMONSTRATION DATA — Growth composite is 0.38σ below trend and decelerating, placing the model in the Contraction quadrant. The enhanced model assigns 47% to Contraction and 32% to Slowdown. Configure FRED_API_KEY to use live data.",
-    indicators:            DEFAULT_GROWTH_INDICATORS.map(ind => ({
-      id: ind.id, name: ind.name, latestValue: null, latestDate: "—", previousValue: null,
-      change: null, zscore: null, contribution: null,
-      direction: ind.direction, weight: ind.weight, enabled: ind.enabled,
-      stdDev: null, mean: null,
-    })),
+    indicators:            demoIndicators,
     history:               demoHistory,
     isDemo:                true,
-    asOf:                  new Date().toISOString().slice(0, 7),
-    dataVintageWarning:    "DEMO MODE: No FRED API key configured. All composite values and history are illustrative only.",
+    asOf,
+    dataVintageWarning:    "DEMO MODE: No FRED API key configured. All values are illustrative only.",
   };
 }
 
