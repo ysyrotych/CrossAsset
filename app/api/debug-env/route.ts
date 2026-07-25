@@ -72,11 +72,24 @@ async function testBls() {
   }
 }
 
+async function testFmp() {
+  const key = process.env.FMP_API_KEY;
+  if (!key) return { hasKey: false, live: false };
+  try {
+    const r = await fetch(`https://financialmodelingprep.com/api/v3/profile/AAPL?apikey=${key}`, { cache: "no-store" });
+    if (!r.ok) return { hasKey: true, live: false };
+    const j = await r.json();
+    return { hasKey: true, live: Array.isArray(j) && j.length > 0, sample: j[0]?.symbol ?? null };
+  } catch {
+    return { hasKey: true, live: false };
+  }
+}
+
 export async function GET() {
   const anthKey = process.env.ANTHROPIC_API_KEY;
 
-  const [fred, newsapi, finnhub, bea, bls] = await Promise.all([
-    testFred(), testNewsApi(), testFinnhub(), testBea(), testBls(),
+  const [fred, newsapi, finnhub, bea, bls, fmp] = await Promise.all([
+    testFred(), testNewsApi(), testFinnhub(), testBea(), testBls(), testFmp(),
   ]);
 
   return NextResponse.json({
@@ -86,6 +99,7 @@ export async function GET() {
     finnhub,
     bea,
     bls,
+    fmp,
     nodeEnv: process.env.NODE_ENV,
   });
 }
