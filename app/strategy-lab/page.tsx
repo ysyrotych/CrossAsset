@@ -17,6 +17,10 @@ import {
   computeRegimeProbabilities, computeFactorTargets, buildExplanation,
   computeConfidence, classifyRegimeHard,
 } from "@/lib/strategy-lab/regime";
+import {
+  DEFAULT_PORTFOLIO,
+} from "@/lib/strategy-lab/portfolio";
+import type { PortfolioPosition, FactorScoreResult, PortfolioExposure } from "@/lib/strategy-lab/portfolio";
 
 // ── Design tokens (match CrossAsset conventions exactly) ─────────────────────
 const NAVY    = "#0c1b38";
@@ -434,6 +438,31 @@ export default function StrategyLabPage() {
     JSON.parse(JSON.stringify(PUBLISHED_BASELINE)) // deep clone
   );
 
+  // ── Portfolio state (localStorage-persisted) ──────────────────────────────
+  const [holdings,       setHoldings]       = useState<PortfolioPosition[]>(DEFAULT_PORTFOLIO);
+  const [factorScores,   setFactorScores]   = useState<FactorScoreResult[] | null>(null);
+  const [portExposures,  setPortExposures]  = useState<PortfolioExposure[] | null>(null);
+  const [computingScores,setComputingScores]= useState(false);
+  const [scoreError,     setScoreError]     = useState<string | null>(null);
+  const [scoreTimestamp, setScoreTimestamp] = useState<string | null>(null);
+  // Inline edit state for portfolio table
+  const [editingIdx,     setEditingIdx]     = useState<number | null>(null);
+  const [newTicker,      setNewTicker]      = useState("");
+  const [newWeight,      setNewWeight]      = useState("");
+
+  // Load portfolio from localStorage on mount
+  useEffect(() => {
+    try {
+      const saved = localStorage.getItem("sl_portfolio");
+      if (saved) setHoldings(JSON.parse(saved));
+    } catch { /* ignore */ }
+  }, []);
+
+  // Persist portfolio to localStorage whenever it changes
+  useEffect(() => {
+    try { localStorage.setItem("sl_portfolio", JSON.stringify(holdings)); } catch { /* ignore */ }
+  }, [holdings]);
+
   const fetchRegimeData = useCallback(async () => {
     setLoading(true);
     setError(null);
@@ -490,6 +519,61 @@ export default function StrategyLabPage() {
   const resetAllocation = useCallback(() => {
     setAllocation(JSON.parse(JSON.stringify(PUBLISHED_BASELINE)));
   }, []);
+
+  // ── Portfolio analysis ────────────────────────────────────────────────────
+  const analyzePortfolio = useCallback(async () => {
+    setComputingScores(true);
+    setScoreError(null);
+    try {
+      const r = await fetch("/api/strategy-lab/factor-scores", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ holdings }),
+      });
+      if (!r.ok) throw new Error(`API ${r.status}`);
+      const data = await r.json();
+      setFactorScores(data.scores);
+      // Merge regime targets into exposures
+      const targets = computeFactorTargets(
+        regimeData?.probabilities ?? null,
+        regimeData?.regime ?? null,
+        mode,
+      );
+      const exposures: PortfolioExposure[] = (data.portfolioExposures as PortfolioExposure[]).map(e => {
+        const t = targets.find(ft => ft.factor === e.factor || (ft.factor === "LowVolatility" && e.factor === "LowVolatility"));
+        const regimeTarget = t ? (mode === "enhanced" ? t.enhancedActive : t.baselineActive) : 0;
+        return { ...e, regimeTarget, gap: regimeTarget - e.portfolioExposure };
+      });
+      setPortExposures(exposures);
+      setScoreTimestamp(new Date().toLocaleTimeString());
+    } catch (e) {
+      setScoreError(e instanceof Error ? e.message : "Failed to compute scores");
+    } finally {
+      setComputingScores(false);
+    }
+  }, [holdings, regimeData, mode]);
+
+  // Portfolio editing helpers
+  const updateHoldingWeight = useCallback((idx: number, w: number) => {
+    setHoldings(prev => prev.map((h, i) => i === idx ? { ...h, weight: w } : h));
+  }, []);
+  const removeHolding = useCallback((idx: number) => {
+    setHoldings(prev => prev.filter((_, i) => i !== idx));
+    setFactorScores(null); setPortExposures(null);
+  }, []);
+  const addHolding = useCallback(() => {
+    const t = newTicker.trim().toUpperCase();
+    const w = parseFloat(newWeight) / 100;
+    if (!t || isNaN(w) || w <= 0) return;
+    setHoldings(prev => [...prev, { ticker: t, weight: w, name: t }]);
+    setNewTicker(""); setNewWeight("");
+    setFactorScores(null); setPortExposures(null);
+  }, [newTicker, newWeight]);
+  const resetPortfolio = useCallback(() => {
+    setHoldings(DEFAULT_PORTFOLIO);
+    setFactorScores(null); setPortExposures(null);
+  }, []);
+  const totalWeight = holdings.reduce((s, h) => s + h.weight, 0);
 
   const regimeColors = currentRegime ? REGIME_COLORS[currentRegime] : null;
   const prevRegime   = history.length >= 2 ? history[history.length - 2].regime : null;
@@ -1105,105 +1189,288 @@ export default function StrategyLabPage() {
         )}
 
         {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* TAB: PORTFOLIO BUILDER  (Phase 2 stub)                               */}
-        {/* ─────────────────────────────────────────────────────────────────── */}
+        {/* TAB: PORTFOLIO BUILDER ─────────────────────────────────────────── */}
         {activeTab === "Portfolio Builder" && (
           <div className="space-y-5">
+
+            {/* ── Holdings editor ──────────────────────────────────────────── */}
             <Card className="p-6">
-              <div className="flex items-center gap-3 mb-4">
-                <SectionLabel>Portfolio Construction</SectionLabel>
-                <PhaseBadge phase={2} />
-              </div>
-              <div className="border border-amber-200 bg-amber-50 px-5 py-4 mb-5">
-                <p className="text-[11.5px] text-amber-800 font-semibold mb-1">Phase 2 Requirement: Security-Level Data</p>
-                <p className="text-[11px] text-amber-700 leading-relaxed">
-                  Portfolio construction requires a security universe with fundamental data (earnings yield, ROIC, price momentum, volatility)
-                  for each stock. Planned sources: FactSet / Bloomberg API, or user CSV upload. The mathematical
-                  framework is defined below — implementation begins when the data adapter is connected.
-                </p>
+              <div className="flex items-center justify-between mb-5">
+                <div className="flex items-center gap-3">
+                  <SectionLabel>Holdings</SectionLabel>
+                  <span className={`text-[10px] font-bold px-2 py-0.5 border ${Math.abs(totalWeight - 1) < 0.005 ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]"}`}>
+                    {(totalWeight * 100).toFixed(1)}% allocated
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={resetPortfolio}
+                    className="text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                  >
+                    Reset to Default
+                  </button>
+                  <button
+                    onClick={analyzePortfolio}
+                    disabled={computingScores || Math.abs(totalWeight - 1) > 0.02}
+                    className="text-[11px] font-semibold bg-[#0c1b38] text-white px-5 py-1.5 hover:bg-[#162d5c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {computingScores ? "Computing…" : "Analyze Portfolio"}
+                  </button>
+                </div>
               </div>
 
-              {/* Architecture description */}
-              <div className="grid grid-cols-2 gap-5 mb-5">
-                <div>
-                  <MiniLabel>Stock scoring methodology</MiniLabel>
-                  <div className="mt-2 border border-[#eee9df] bg-[#fbfaf7] px-4 py-4 font-mono text-[11px] text-[#333] leading-loose">
-                    <p><span className="text-[#0c1b38] font-bold">1.</span> Compute factor z-scores per security</p>
-                    <p><span className="text-[#0c1b38] font-bold">2.</span> Sector-neutralise where specified</p>
-                    <p><span className="text-[#0c1b38] font-bold">3.</span> Weight by factor target:</p>
-                    <p className="pl-4 text-[#555]">score_i = Σ (factor_target_f × z_i,f)</p>
-                    <p><span className="text-[#0c1b38] font-bold">4.</span> Tilt from benchmark weight:</p>
-                    <p className="pl-4 text-[#555]">w_raw_i = w_bmark_i × exp(κ × score_i)</p>
-                    <p><span className="text-[#0c1b38] font-bold">5.</span> Normalise Σ w_i = 1</p>
-                    <p><span className="text-[#0c1b38] font-bold">6.</span> Apply constraints (optimizer)</p>
-                  </div>
+              {scoreError && (
+                <div className="border border-[#f5c6c0] bg-[#fff5f4] px-4 py-3 mb-4 text-[11px] text-[#b42318]">
+                  {scoreError}
                 </div>
-                <div>
-                  <MiniLabel>Portfolio constraints (configured)</MiniLabel>
-                  <div className="mt-2 space-y-2">
-                    {[
-                      ["Universe", "S&P 500 constituents (Phase 2 data)"],
-                      ["Benchmark", "S&P 500 (market-cap weights)"],
-                      ["Long-only", "No short positions"],
-                      ["Max stock weight", "5.0% (configurable)"],
-                      ["Max active weight", "±3.0% per stock"],
-                      ["Sector active limit", "±8.0% vs benchmark"],
-                      ["Turnover limit", "≤20% per rebalance"],
-                      ["Min stocks", "50"],
-                      ["Tilt intensity (κ)", "0.5 (configurable)"],
-                      ["Rebalance", "Monthly, or on regime change"],
-                    ].map(([label, val]) => (
-                      <div key={label as string} className="flex items-start justify-between border-b border-[#f1eee8] pb-1.5">
-                        <span className="text-[10.5px] text-[#555]">{label}</span>
-                        <span className="text-[10.5px] text-[#0a0a0a] font-semibold text-right ml-4">{val}</span>
-                      </div>
+              )}
+
+              <div className="border border-[#eee9df] overflow-hidden">
+                <table className="w-full text-left">
+                  <thead>
+                    <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                      {["Ticker", "Name", "Weight %", ""].map(h => (
+                        <th key={h} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">{h}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {holdings.map((h, idx) => (
+                      <tr key={`${h.ticker}-${idx}`} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                        <td className="px-3 py-2 text-[12px] font-bold text-[#0c1b38] w-20">{h.ticker}</td>
+                        <td className="px-3 py-2 text-[11px] text-[#555]">{h.name ?? h.ticker}</td>
+                        <td className="px-3 py-2 w-32">
+                          {editingIdx === idx ? (
+                            <input
+                              autoFocus
+                              type="number"
+                              step="0.1"
+                              min="0.1"
+                              max="100"
+                              defaultValue={(h.weight * 100).toFixed(1)}
+                              className="w-20 border border-[#0c1b38] px-2 py-0.5 text-[11px] tabular-nums outline-none"
+                              onBlur={e => {
+                                const v = parseFloat(e.target.value);
+                                if (!isNaN(v) && v > 0) updateHoldingWeight(idx, v / 100);
+                                setEditingIdx(null);
+                              }}
+                              onKeyDown={e => {
+                                if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+                                if (e.key === "Escape") setEditingIdx(null);
+                              }}
+                            />
+                          ) : (
+                            <button
+                              onClick={() => setEditingIdx(idx)}
+                              className="text-[11.5px] tabular-nums text-[#0a0a0a] font-semibold hover:underline decoration-dashed"
+                            >
+                              {(h.weight * 100).toFixed(1)}%
+                            </button>
+                          )}
+                        </td>
+                        <td className="px-3 py-2 w-10 text-right">
+                          <button
+                            onClick={() => removeHolding(idx)}
+                            className="text-[10px] text-[#bbb] hover:text-[#b42318] transition-colors font-bold"
+                          >
+                            ×
+                          </button>
+                        </td>
+                      </tr>
                     ))}
-                  </div>
-                </div>
+                  </tbody>
+                </table>
               </div>
 
-              {/* Demo portfolio table */}
-              <div>
-                <div className="flex items-center gap-3 mb-3">
-                  <MiniLabel>Illustrative portfolio output format</MiniLabel>
-                  <DemoBadge />
+              {/* Add holding form */}
+              <div className="mt-3 flex items-center gap-2">
+                <input
+                  type="text"
+                  placeholder="Ticker"
+                  value={newTicker}
+                  onChange={e => setNewTicker(e.target.value.toUpperCase())}
+                  onKeyDown={e => e.key === "Enter" && addHolding()}
+                  className="border border-[#ddd] px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] uppercase placeholder:normal-case placeholder:text-[#ccc]"
+                />
+                <input
+                  type="number"
+                  placeholder="Weight %"
+                  value={newWeight}
+                  onChange={e => setNewWeight(e.target.value)}
+                  onKeyDown={e => e.key === "Enter" && addHolding()}
+                  min="0.1" max="100" step="0.1"
+                  className="border border-[#ddd] px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] tabular-nums placeholder:text-[#ccc]"
+                />
+                <button
+                  onClick={addHolding}
+                  disabled={!newTicker.trim() || !newWeight}
+                  className="text-[10.5px] font-semibold text-white bg-[#0c1b38] px-4 py-1.5 hover:bg-[#162d5c] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                >
+                  + Add
+                </button>
+              </div>
+
+              {scoreTimestamp && (
+                <p className="mt-3 text-[9.5px] text-[#bbb]">Last analyzed at {scoreTimestamp} · {factorScores?.length ?? 0} stocks scored</p>
+              )}
+            </Card>
+
+            {/* ── Factor score heatmap ─────────────────────────────────────── */}
+            {factorScores && factorScores.length > 0 && (
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-4">
+                  <SectionLabel>Factor Scores</SectionLabel>
+                  <span className="text-[9.5px] text-[#bbb]">cross-sectional z-scores within portfolio universe · clamped ±3σ</span>
                 </div>
-                <div className="border border-[#eee9df] overflow-hidden">
-                  <table className="w-full text-left">
+                <div className="border border-[#eee9df] overflow-x-auto">
+                  <table className="w-full text-left min-w-[720px]">
                     <thead>
                       <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
-                        {["Ticker","Name","Sector","Benchmark W%","Active W%","Factor Score","Main Factor","Est. Trading Cost"].map(h => (
-                          <th key={h} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">{h}</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16">Ticker</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Name</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-14 text-right">Weight</th>
+                        {(["Momentum","Low Vol","Value","Quality","Size"] as const).map(f => (
+                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-20 text-center">{f}</th>
                         ))}
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] w-20 text-center">Score</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16 text-center">Data</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {[
-                        ["LLY", "Eli Lilly", "Healthcare", "1.2%", "+1.8%", "+0.87", "Quality", "3.2bps"],
-                        ["BRK.B", "Berkshire Hathaway", "Financials", "1.6%", "+1.4%", "+0.74", "Value", "1.8bps"],
-                        ["MSFT", "Microsoft", "Technology", "6.8%", "+0.8%", "+0.61", "Quality", "0.9bps"],
-                        ["JNJ", "Johnson & Johnson", "Healthcare", "0.9%", "+1.2%", "+0.58", "Low Vol.", "2.1bps"],
-                        ["PG", "Procter & Gamble", "Staples", "0.8%", "+0.9%", "+0.52", "Low Vol.", "1.7bps"],
-                      ].map(([ticker, name, sector, bW, aW, score, factor, cost]) => (
-                        <tr key={ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
-                          <td className="px-3 py-2 text-[12px] font-bold text-[#0c1b38]">{ticker}</td>
-                          <td className="px-3 py-2 text-[11.5px] text-[#0a0a0a]">{name}</td>
-                          <td className="px-3 py-2 text-[11px] text-[#777]">{sector}</td>
-                          <td className="px-3 py-2 text-[11px] tabular-nums text-[#555]">{bW}</td>
-                          <td className="px-3 py-2 text-[11.5px] font-bold tabular-nums text-[#147a4f]">{aW}</td>
-                          <td className="px-3 py-2 text-[11.5px] font-bold tabular-nums text-[#0c1b38]">{score}</td>
-                          <td className="px-3 py-2 text-[10.5px] text-[#999]">{factor}</td>
-                          <td className="px-3 py-2 text-[10.5px] tabular-nums text-[#bbb]">{cost}</td>
-                        </tr>
-                      ))}
+                      {[...factorScores]
+                        .sort((a, b) => b.compositeScore - a.compositeScore)
+                        .map(s => {
+                          const zScoreCell = (z: number | null) => {
+                            if (z == null) return <td className="px-3 py-2 text-center"><span className="text-[10px] text-[#ccc]">—</span></td>;
+                            const abs = Math.abs(z);
+                            const alpha = Math.min(abs / 2, 1);
+                            const bg = z > 0
+                              ? `rgba(20,122,79,${alpha * 0.18})`
+                              : `rgba(180,35,24,${alpha * 0.18})`;
+                            const color = z > 0 ? "#147a4f" : "#b42318";
+                            return (
+                              <td className="px-3 py-2 text-center" style={{ background: bg }}>
+                                <span className="text-[11px] font-semibold tabular-nums" style={{ color }}>
+                                  {z >= 0 ? "+" : ""}{z.toFixed(2)}
+                                </span>
+                              </td>
+                            );
+                          };
+                          return (
+                            <tr key={s.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                              <td className="px-3 py-2 text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</td>
+                              <td className="px-3 py-2 text-[11px] text-[#555]">{s.name || s.ticker}</td>
+                              <td className="px-3 py-2 text-[11px] tabular-nums text-[#777] text-right">{(s.weight * 100).toFixed(1)}%</td>
+                              {zScoreCell(s.zMomentum)}
+                              {zScoreCell(s.zLowVol)}
+                              {zScoreCell(s.zValue)}
+                              {zScoreCell(s.zQuality)}
+                              {zScoreCell(s.zSize)}
+                              <td className="px-3 py-2 text-center">
+                                <span className={`text-[12px] font-bold tabular-nums ${s.compositeScore >= 0 ? "text-[#0c1b38]" : "text-[#b42318]"}`}>
+                                  {s.compositeScore >= 0 ? "+" : ""}{s.compositeScore.toFixed(2)}
+                                </span>
+                              </td>
+                              <td className="px-3 py-2 text-center">
+                                <span className="text-[8.5px] font-bold" style={{ color: s.priceDataOk && s.fundDataOk ? "#147a4f" : s.priceDataOk ? "#b7791f" : "#b42318" }}>
+                                  {s.priceDataOk && s.fundDataOk ? "FULL" : s.priceDataOk ? "PRICE" : "NONE"}
+                                </span>
+                              </td>
+                            </tr>
+                          );
+                        })}
                     </tbody>
                   </table>
                 </div>
                 <p className="mt-2 text-[9.5px] text-[#bbb]">
-                  Table is illustrative only — placeholder weights and scores. Phase 2 will populate from live security data.
+                  Momentum = 0.6×12-1M + 0.4×6-1M · Low Vol = 0.5×(−σ) + 0.5×(−β) · Value = 0.35×EY + 0.35×FCF + 0.30×(−EV/EBITDA) · Quality = 0.40×ROIC + 0.35×GM + 0.25×(−leverage)
+                </p>
+              </Card>
+            )}
+
+            {/* ── Portfolio factor exposures vs regime target ───────────────── */}
+            {portExposures && portExposures.length > 0 && (
+              <Card className="p-6">
+                <div className="flex items-center gap-3 mb-5">
+                  <SectionLabel>Portfolio Factor Exposures</SectionLabel>
+                  <span className="text-[9.5px] text-[#bbb]">weight-averaged z-score vs {mode === "enhanced" ? "enhanced" : "baseline"} regime target</span>
+                </div>
+                <div className="space-y-4">
+                  {portExposures.map(e => {
+                    const pct = e.portfolioExposure;
+                    const tgt = e.regimeTarget;
+                    const gap = e.gap;
+                    const barMax = 1.5;
+                    const pctWidth = Math.min(Math.abs(pct) / barMax * 100, 100);
+                    const tgtWidth = Math.min(Math.abs(tgt) / barMax * 100, 100);
+                    const aligned = Math.abs(gap) < 0.3;
+                    const factorLabels: Record<string, string> = {
+                      Momentum: "Momentum", LowVolatility: "Low Vol", Value: "Value", Quality: "Quality", Size: "Size",
+                    };
+                    return (
+                      <div key={e.factor}>
+                        <div className="flex items-center justify-between mb-1.5">
+                          <span className="text-[11px] font-semibold text-[#0a0a0a] w-24">{factorLabels[e.factor] ?? e.factor}</span>
+                          <div className="flex items-center gap-4 text-[10px] tabular-nums">
+                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{pct >= 0 ? "+" : ""}{pct.toFixed(2)}σ</span></span>
+                            <span className="text-[#555]">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
+                              {aligned ? "aligned" : gap > 0 ? `+${gap.toFixed(2)} underweight` : `${gap.toFixed(2)} overweight`}
+                            </span>
+                          </div>
+                        </div>
+                        <div className="relative h-5 bg-[#f5f2ed] overflow-hidden">
+                          {/* Zero line */}
+                          <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-[#ccc] z-10" />
+                          {/* Portfolio bar */}
+                          <div
+                            className="absolute top-1 bottom-1 transition-all"
+                            style={{
+                              background: "#0c1b38",
+                              opacity: 0.7,
+                              width: `${pctWidth / 2}%`,
+                              left: pct >= 0 ? "50%" : `${50 - pctWidth / 2}%`,
+                            }}
+                          />
+                          {/* Target marker */}
+                          <div
+                            className="absolute top-0.5 bottom-0.5 w-[2px] z-20"
+                            style={{
+                              background: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#bbb",
+                              left: `${50 + (tgt / barMax) * 50}%`,
+                            }}
+                          />
+                        </div>
+                        <div className="flex justify-between text-[8.5px] text-[#bbb] mt-0.5">
+                          <span>−1.5σ</span><span>0</span><span>+1.5σ</span>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+                <div className="mt-4 pt-3 border-t border-[#f1eee8] flex items-center gap-5 text-[9.5px] text-[#999]">
+                  <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-[#0c1b38] opacity-70 inline-block" /> Portfolio exposure</span>
+                  <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#147a4f] inline-block" /> Regime target (overweight)</span>
+                  <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#b42318] inline-block" /> Regime target (underweight)</span>
+                </div>
+              </Card>
+            )}
+
+            {/* ── Empty state when no scores yet ───────────────────────────── */}
+            {!factorScores && !computingScores && (
+              <div className="border border-[#eee9df] bg-[#fbfaf7] px-6 py-8 text-center">
+                <p className="text-[12px] font-semibold text-[#0c1b38] mb-1">Ready to analyze</p>
+                <p className="text-[11px] text-[#999]">
+                  Edit your holdings above, then click "Analyze Portfolio" to compute live factor scores from Yahoo Finance + FMP data.
                 </p>
               </div>
-            </Card>
+            )}
+            {computingScores && (
+              <div className="border border-[#eee9df] bg-[#fbfaf7] px-6 py-8 text-center">
+                <p className="text-[12px] font-semibold text-[#0c1b38] mb-1">Computing factor scores…</p>
+                <p className="text-[11px] text-[#999]">Fetching 2Y adjusted price history + fundamentals for {holdings.length} stocks. This takes ~15–30 seconds.</p>
+              </div>
+            )}
           </div>
         )}
 
