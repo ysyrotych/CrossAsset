@@ -13,6 +13,7 @@ const NAV = [
   { label: "Calendar",         href: "/calendar" },
   { label: "10K / 10Q",        href: "/10k" },
   { label: "Backtesting",      href: "/backtesting" },
+  { label: "Strategy Lab",     href: "/strategy-lab" },
   { label: "Archive",          href: "/archive" },
   { label: "Settings",         href: "/settings" },
 ];
