@@ -450,6 +450,12 @@ export default function StrategyLabPage() {
   const [newTicker,      setNewTicker]      = useState("");
   const [newWeight,      setNewWeight]      = useState("");
 
+  // ── Backtest state ─────────────────────────────────────────────────────────
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const [backtestData,   setBacktestData]   = useState<any | null>(null);
+  const [backtestLoading,setBacktestLoading]= useState(false);
+  const [backtestError,  setBacktestError]  = useState<string | null>(null);
+
   // Load portfolio from localStorage on mount
   useEffect(() => {
     try {
@@ -479,6 +485,26 @@ export default function StrategyLabPage() {
   }, []);
 
   useEffect(() => { fetchRegimeData(); }, [fetchRegimeData]);
+
+  const fetchBacktest = useCallback(async () => {
+    setBacktestLoading(true);
+    setBacktestError(null);
+    try {
+      const r = await fetch("/api/strategy-lab/backtest");
+      if (!r.ok) throw new Error(`API ${r.status}`);
+      setBacktestData(await r.json());
+    } catch (e) {
+      setBacktestError(e instanceof Error ? e.message : "Failed to load backtest");
+    } finally {
+      setBacktestLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab === "Backtest" && !backtestData && !backtestLoading) {
+      fetchBacktest();
+    }
+  }, [activeTab, backtestData, backtestLoading, fetchBacktest]);
 
   // Derived values — recomputed when user edits indicator weights
   const factorTargets = useMemo<FactorTarget[]>(() => {
@@ -1739,107 +1765,282 @@ export default function StrategyLabPage() {
         )}
 
         {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* TAB: BACKTEST  (Phase 3 stub with demo chart)                         */}
+        {/* TAB: BACKTEST — Real regime-rotation backtest using factor ETFs        */}
         {/* ─────────────────────────────────────────────────────────────────── */}
         {activeTab === "Backtest" && (
           <div className="space-y-5">
-            <Card className="p-5">
-              <div className="flex items-center gap-3 mb-3">
-                <SectionLabel>Backtest Engine</SectionLabel>
-                <PhaseBadge phase={3} />
-              </div>
+            {/* Loading / error states */}
+            {backtestLoading && (
+              <Card className="p-8 text-center">
+                <div className="text-[11px] text-[#999] mb-2">Fetching ETF price history from Yahoo Finance…</div>
+                <div className="text-[10px] text-[#bbb]">MTUM · USMV · VLUE · QUAL · IJR · SPY</div>
+              </Card>
+            )}
+            {backtestError && (
+              <Card className="p-5">
+                <p className="text-[11px] text-[#b42318]">Failed to load backtest: {backtestError}</p>
+                <button onClick={fetchBacktest} className="mt-3 text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] border border-[#0c1b38] px-4 py-2 hover:bg-[#0c1b38] hover:text-white transition-colors">
+                  Retry
+                </button>
+              </Card>
+            )}
 
-              <div className="border border-[#b42318] bg-[#fff5f4] px-5 py-4 mb-5">
-                <p className="text-[11.5px] text-[#b42318] font-bold mb-1">⚠ Research Integrity — Read Before Proceeding</p>
-                <div className="text-[11px] text-[#b42318] space-y-1 leading-relaxed">
-                  <p>• Z-scores are currently computed over a 36-month window with full-sample normalization. <strong>This is NOT point-in-time valid.</strong></p>
-                  <p>• The universe currently contains only current S&P 500 constituents. <strong>Survivorship bias will inflate results by 1–3% per annum.</strong></p>
-                  <p>• Fundamental data lags are not yet enforced (e.g., earnings reported 45 days after quarter end).</p>
-                  <p>• No vintage macro data: z-scores use currently revised FRED values, not originally reported values.</p>
-                  <p>All outputs labeled "Exploratory" must not be used for investment decisions until Phase 3 validation passes.</p>
-                </div>
-              </div>
+            {backtestData && (() => {
+              const bt = backtestData;
+              const s  = bt.stats;
+              const months = bt.monthlyData ?? [];
+              const REGIME_COLORS_MAP: Record<string, string> = {
+                Expansion: "#147a4f", Recovery: "#b7791f", Slowdown: "#d97706", Contraction: "#b42318",
+              };
 
-              {/* Configuration */}
-              <div className="grid grid-cols-4 gap-4 mb-5">
-                {[
-                  { label: "Universe", val: "S&P 500 (current constituents)" },
-                  { label: "Benchmark", val: "S&P 500 (cap-weighted)" },
-                  { label: "Start Date", val: "2010-01-01 (demo)" },
-                  { label: "End Date", val: "2024-12-31 (demo)" },
-                  { label: "Rebalance", val: "Monthly" },
-                  { label: "Transaction Cost", val: "10bps round trip" },
-                  { label: "Fundamental Lag", val: "45 days (Phase 3)" },
-                  { label: "Macro Release Lag", val: "Per FRED vintage (Phase 3)" },
-                ].map(({ label, val }) => (
-                  <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
-                    <MiniLabel>{label}</MiniLabel>
-                    <p className="mt-1 text-[11.5px] text-[#0a0a0a] font-semibold">{val}</p>
-                  </div>
-                ))}
-              </div>
-
-              {/* Demo equity curve */}
-              <div className="mb-4">
-                <div className="flex items-center justify-between mb-3">
-                  <MiniLabel>Exploratory cumulative performance (illustrative)</MiniLabel>
-                  <DemoBadge />
-                </div>
-                {(() => {
-                  const pts = Array.from({ length: 60 }, (_, i) => {
-                    const date = `20${String(Math.floor(i / 12) + 20).slice(-2)}-${String((i % 12) + 1).padStart(2,"0")}`;
-                    const trend = i / 60;
-                    const cycle = Math.sin(i * 0.4) * 0.08;
-                    return {
-                      date,
-                      strategy:  parseFloat((100 * Math.exp(trend * 1.1 + cycle + Math.random() * 0.01 - 0.005)).toFixed(2)),
-                      benchmark: parseFloat((100 * Math.exp(trend * 0.9 + cycle * 0.8 + Math.random() * 0.008 - 0.004)).toFixed(2)),
-                    };
-                  });
-                  return (
-                    <div className="h-[220px]">
-                      <ResponsiveContainer width="100%" height="100%">
-                        <LineChart data={pts} margin={{ top: 8, right: 8, bottom: 0, left: -5 }}>
-                          <CartesianGrid stroke="#eee9df" vertical={false} />
-                          <XAxis dataKey="date" axisLine={false} tickLine={false}
-                            tick={{ fontSize: 10, fill: "#999" }} interval="preserveStartEnd" />
-                          <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 10, fill: "#999" }}
-                            tickFormatter={v => `${v.toFixed(0)}`} domain={["auto","auto"]} />
-                          <Tooltip contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 11 }} />
-                          <Line type="monotone" dataKey="strategy" name="Strategy (exploratory)" stroke={NAVY} strokeWidth={2} dot={false} />
-                          <Line type="monotone" dataKey="benchmark" name="S&P 500" stroke={POSITIVE} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
-                        </LineChart>
-                      </ResponsiveContainer>
+              return (
+                <>
+                  {/* ── Strategy overview ── */}
+                  <Card className="p-5">
+                    <div className="flex items-center justify-between mb-4">
+                      <div>
+                        <SectionLabel>Regime-Rotation Backtest</SectionLabel>
+                        <p className="mt-1 text-[10.5px] text-[#777]">
+                          Holds iShares factor ETFs weighted by macro regime · monthly rebalance · {months.length} months of real data
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        {bt.isDemo && <DemoBadge />}
+                        <button onClick={fetchBacktest} disabled={backtestLoading}
+                          className="flex items-center gap-1.5 border border-[#e8e3da] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
+                          <span className={backtestLoading ? "inline-block animate-spin" : ""}>↻</span>
+                          Refresh
+                        </button>
+                      </div>
                     </div>
-                  );
-                })()}
-                <p className="mt-2 text-[10px] text-[#bbb]">
-                  DEMONSTRATION DATA ONLY. This chart uses randomly generated returns, not any historical backtest.
-                  Phase 3 will implement a proper point-in-time backtest engine.
-                </p>
-              </div>
 
-              {/* Summary stats (demo) */}
-              <div className="grid grid-cols-6 gap-3 border-t border-[#eee9df] pt-4">
-                {[
-                  { label: "Ann. Return",  val: "+12.4%",  color: POSITIVE, note: "vs SPX +10.2%" },
-                  { label: "Volatility",   val: "14.2%",   color: NAVY,     note: "annualised" },
-                  { label: "Sharpe Ratio", val: "0.72",    color: NAVY,     note: "risk-free 4%" },
-                  { label: "Max Drawdown", val: "−22.8%",  color: NEGATIVE, note: "2022 peak-trough" },
-                  { label: "Info. Ratio",  val: "0.51",    color: POSITIVE, note: "vs SPX" },
-                  { label: "Turnover",     val: "~85%/yr", color: NAVY,     note: "monthly rebal." },
-                ].map(({ label, val, color, note }) => (
-                  <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
-                    <MiniLabel>{label}</MiniLabel>
-                    <p className="mt-1 text-[18px] font-bold tabular-nums" style={{ color }}>{val}</p>
-                    <p className="text-[8.5px] text-[#bbb] mt-0.5">{note}</p>
-                  </div>
-                ))}
-              </div>
-              <p className="mt-3 text-[9.5px] text-[#bbb] italic">
-                All statistics are illustrative only — computed from randomly generated demo returns. Phase 3 will implement a survivorship-free point-in-time backtest.
-              </p>
-            </Card>
+                    {/* Strategy vs benchmark summary stats */}
+                    {s && (
+                      <div className="grid grid-cols-6 gap-3 mb-5">
+                        {[
+                          {
+                            label: "Ann. Return",
+                            val: `${s.annStrat >= 0 ? "+" : ""}${(s.annStrat * 100).toFixed(1)}%`,
+                            sub: `SPX ${s.annBench >= 0 ? "+" : ""}${(s.annBench * 100).toFixed(1)}%`,
+                            color: s.annStrat > s.annBench ? POSITIVE : NEGATIVE,
+                          },
+                          {
+                            label: "Volatility",
+                            val: `${(s.vol * 100).toFixed(1)}%`,
+                            sub: "annualised",
+                            color: NAVY,
+                          },
+                          {
+                            label: "Sharpe Ratio",
+                            val: s.sharpe.toFixed(2),
+                            sub: "rf = 4%",
+                            color: s.sharpe >= 0.5 ? POSITIVE : s.sharpe >= 0 ? NAVY : NEGATIVE,
+                          },
+                          {
+                            label: "Max Drawdown",
+                            val: `${(s.maxDD * 100).toFixed(1)}%`,
+                            sub: "peak-to-trough",
+                            color: NEGATIVE,
+                          },
+                          {
+                            label: "Info. Ratio",
+                            val: s.ir.toFixed(2),
+                            sub: "vs SPX",
+                            color: s.ir > 0 ? POSITIVE : NEGATIVE,
+                          },
+                          {
+                            label: "Regime Shifts",
+                            val: String(s.regimeChanges),
+                            sub: `${months.length} months`,
+                            color: NAVY,
+                          },
+                        ].map(({ label, val, sub, color }) => (
+                          <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                            <MiniLabel>{label}</MiniLabel>
+                            <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
+                            <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {/* Equity curve */}
+                    <div className="mb-1">
+                      <div className="flex items-center justify-between mb-2">
+                        <MiniLabel>Cumulative performance — NAV starting at 100</MiniLabel>
+                        <div className="flex items-center gap-4 text-[9.5px] text-[#999]">
+                          <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-[#0c1b38] inline-block" /> Regime Strategy</span>
+                          <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-[#147a4f] inline-block" style={{ borderTop: "2px dashed #147a4f" }} /> S&P 500 (SPY)</span>
+                        </div>
+                      </div>
+                      <div className="h-[240px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={months} margin={{ top: 4, right: 8, bottom: 0, left: -5 }}>
+                            <CartesianGrid stroke="#eee9df" vertical={false} />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false}
+                              tick={{ fontSize: 9, fill: "#bbb" }} interval="preserveStartEnd" />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }}
+                              tickFormatter={v => v.toFixed(0)} domain={["auto", "auto"]} />
+                            <Tooltip
+                              contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }}
+                              formatter={(v: unknown) => [`${typeof v === "number" ? v.toFixed(1) : v}`]}
+                            />
+                            <Line type="monotone" dataKey="stratNav" name="Strategy" stroke={NAVY} strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="benchNav" name="S&P 500" stroke={POSITIVE} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </div>
+                    <p className="text-[9.5px] text-[#bbb] mt-1">
+                      {bt.dataNote} · Factor ETF prices: Yahoo Finance (split/dividend-adjusted). Transaction costs not deducted.
+                    </p>
+                  </Card>
+
+                  {/* ── Regime performance attribution ── */}
+                  <Card className="p-5">
+                    <SectionLabel>Regime Performance Attribution</SectionLabel>
+                    <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Average monthly return by regime — strategy vs S&P 500</p>
+                    <div className="grid grid-cols-4 gap-3 mb-5">
+                      {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(regime => {
+                        const perf = bt.regimePerf?.[regime];
+                        const count = bt.regimeCounts?.[regime] ?? 0;
+                        const color = REGIME_COLORS_MAP[regime];
+                        const weights = bt.regimeWeights?.[regime] ?? {};
+                        const activeETFs = Object.entries(weights as Record<string,number>)
+                          .filter(([,w]) => w > 0)
+                          .sort(([,a],[,b]) => b - a)
+                          .map(([etf, w]) => `${etf} ${Math.round(w*100)}%`)
+                          .join(" · ");
+                        return (
+                          <div key={regime} className="border border-[#eee9df] p-4">
+                            <div className="flex items-center gap-2 mb-3">
+                              <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
+                              <p className="text-[11px] font-bold" style={{ color }}>{regime}</p>
+                              <span className="ml-auto text-[9px] text-[#bbb]">{count}mo</span>
+                            </div>
+                            {perf ? (
+                              <>
+                                <div className="space-y-1.5 mb-3">
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9.5px] text-[#777]">Strategy avg/mo</span>
+                                    <span className="text-[12px] font-bold tabular-nums" style={{ color: perf.stratAvg >= 0 ? POSITIVE : NEGATIVE }}>
+                                      {perf.stratAvg >= 0 ? "+" : ""}{(perf.stratAvg * 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center">
+                                    <span className="text-[9.5px] text-[#777]">SPY avg/mo</span>
+                                    <span className="text-[12px] font-bold tabular-nums text-[#555]">
+                                      {perf.benchAvg >= 0 ? "+" : ""}{(perf.benchAvg * 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                  <div className="flex justify-between items-center border-t border-[#eee9df] pt-1.5">
+                                    <span className="text-[9.5px] text-[#777]">Edge vs SPY</span>
+                                    <span className="text-[11px] font-bold tabular-nums" style={{ color: perf.stratAvg > perf.benchAvg ? POSITIVE : NEGATIVE }}>
+                                      {(perf.stratAvg - perf.benchAvg) >= 0 ? "+" : ""}{((perf.stratAvg - perf.benchAvg) * 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                </div>
+                              </>
+                            ) : (
+                              <p className="text-[10px] text-[#bbb]">No months in sample</p>
+                            )}
+                            <div className="border-t border-[#eee9df] pt-2">
+                              <p className="text-[8.5px] text-[#bbb] leading-relaxed">{activeETFs || "—"}</p>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </Card>
+
+                  {/* ── Monthly returns table ── */}
+                  <Card className="p-5">
+                    <SectionLabel>Monthly Returns</SectionLabel>
+                    <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Regime assigned from prior month · {months.length} months total</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left min-w-[560px]">
+                        <thead>
+                          <tr className="border-b border-[#eee9df] bg-[#fbfaf7]">
+                            {["Month","Regime","Strategy","S&P 500","Edge","NAV"].map(h => (
+                              <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb] whitespace-nowrap">{h}</th>
+                            ))}
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {[...months].reverse().slice(0, 24).map((m: {
+                            date: string; regime: RegimeLabel;
+                            stratReturn: number; benchReturn: number;
+                            stratNav: number;
+                          }) => {
+                            const edge = m.stratReturn - m.benchReturn;
+                            const rColor = REGIME_COLORS_MAP[m.regime] ?? "#999";
+                            return (
+                              <tr key={m.date} className="border-b border-[#f5f2ed] last:border-0 hover:bg-[#fbfaf7]">
+                                <td className="px-3 py-2 text-[10px] font-mono text-[#555]">{m.date}</td>
+                                <td className="px-3 py-2">
+                                  <span className="text-[9px] font-bold" style={{ color: rColor }}>{m.regime}</span>
+                                </td>
+                                <td className="px-3 py-2 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: m.stratReturn >= 0 ? POSITIVE : NEGATIVE }}>
+                                  {m.stratReturn >= 0 ? "+" : ""}{(m.stratReturn * 100).toFixed(2)}%
+                                </td>
+                                <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono text-[#555]">
+                                  {m.benchReturn >= 0 ? "+" : ""}{(m.benchReturn * 100).toFixed(2)}%
+                                </td>
+                                <td className="px-3 py-2 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: edge >= 0 ? POSITIVE : NEGATIVE }}>
+                                  {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(2)}%
+                                </td>
+                                <td className="px-3 py-2 text-[10px] tabular-nums text-[#555]">{m.stratNav.toFixed(1)}</td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                      {months.length > 24 && (
+                        <p className="mt-2 text-[9.5px] text-[#bbb]">Showing most recent 24 of {months.length} months.</p>
+                      )}
+                    </div>
+                  </Card>
+
+                  {/* ── Strategy logic ── */}
+                  <Card className="p-5">
+                    <SectionLabel>How the Strategy Works</SectionLabel>
+                    <div className="mt-3 grid grid-cols-2 gap-5">
+                      <div className="space-y-2">
+                        <p className="text-[10.5px] text-[#555] leading-relaxed">
+                          Each month, the strategy holds the iShares factor ETF portfolio prescribed by the macro regime from the <strong>prior month</strong> (1-month implementation lag). The regime is determined by the FRED growth composite.
+                        </p>
+                        <p className="text-[10.5px] text-[#555] leading-relaxed">
+                          Using ETF proxies eliminates survivorship bias and look-ahead bias in factor construction — MTUM, USMV, VLUE, QUAL, and IJR have published daily prices from inception.
+                        </p>
+                      </div>
+                      <div className="border border-[#eee9df] bg-[#fbfaf7] p-4">
+                        <MiniLabel>ETF portfolio by regime</MiniLabel>
+                        <div className="mt-2 space-y-2">
+                          {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(regime => {
+                            const weights = bt.regimeWeights?.[regime] ?? {};
+                            const color = REGIME_COLORS_MAP[regime];
+                            const parts = Object.entries(weights as Record<string,number>)
+                              .filter(([,w]) => w > 0)
+                              .sort(([,a],[,b]) => b - a)
+                              .map(([etf, w]) => `${Math.round(w*100)}% ${etf}`)
+                              .join(" + ");
+                            return (
+                              <div key={regime} className="flex items-start gap-2">
+                                <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: color }} />
+                                <div>
+                                  <span className="text-[9.5px] font-bold" style={{ color }}>{regime}:</span>
+                                  <span className="text-[9.5px] text-[#555] ml-1.5 font-mono">{parts}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                </>
+              );
+            })()}
           </div>
         )}
 
