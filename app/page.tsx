@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from "react";
 import AppShell from "@/components/layout/AppShell";
 import CrossAssetLogo from "@/components/layout/CrossAssetLogo";
+import { Newspaper, TrendingUp, TrendingDown, Minus } from "lucide-react";
 import {
   Bar, BarChart, Brush, CartesianGrid, Cell, Line, LineChart,
   ResponsiveContainer, Tooltip, XAxis, YAxis,
@@ -53,6 +54,27 @@ type ChartData = {
   historyDow:    { date: string; value: number }[];
 };
 
+// Morning data — Yahoo-sourced symbol quotes powering the personal/actionable layer
+// (regime badge, US futures, Portfolio Pulse, AI Morning Brief)
+type Quote = {
+  symbol: string; name: string; price: number; change: number;
+  changePct: number; prev: number; high52w: number; low52w: number;
+};
+type MorningNews = {
+  id: number; headline: string; source: string;
+  summary: string; datetime: number; related: string; url: string;
+};
+type MorningEarnings = { symbol: string; date: string; epsEstimate: number | null; hour: string };
+type MorningCalEvent = { date: string; label: string; category: string; impact: string; previous?: string };
+type Morning = {
+  ts: string;
+  quotes: Record<string, Quote>;
+  spChart: { t: number; v: number }[];
+  news: MorningNews[];
+  earnings: MorningEarnings[];
+  upcomingEvents: MorningCalEvent[];
+};
+
 // ── Constants ──────────────────────────────────────────────────────────────
 
 const NAVY     = "#0c1b38";
@@ -61,6 +83,49 @@ const POSITIVE = "#147a4f";
 const WARNING  = "#b7791f";
 const TF_LABELS = ["1M", "3M", "6M", "1Y", "FOMC"] as const;
 type TF = typeof TF_LABELS[number];
+
+// Personal portfolio + AI-brief context symbols
+const PORTFOLIO  = ["META","UBER","DUOL","VOO","AMZN","PYPL","APLD","AAPL","CMG","ONT","HOOD","NVDA","VUG"];
+const AI_NAMES   = new Set(["NVDA","APLD","META","AMZN","AAPL","DUOL"]);
+const RATE_NAMES = new Set(["PYPL","HOOD","APLD"]);
+const FUTURES = [
+  { sym: "ES=F",  label: "S&P 500" },
+  { sym: "NQ=F",  label: "Nasdaq 100" },
+  { sym: "RTY=F", label: "Russell 2000" },
+  { sym: "YM=F",  label: "Dow Jones" },
+];
+const AI_SECTORS = [
+  { sym: "XLK",  label: "Technology" }, { sym: "XLC",  label: "Comms" },
+  { sym: "XLY",  label: "Cons Disc" },  { sym: "XLF",  label: "Financials" },
+  { sym: "XLV",  label: "Healthcare" }, { sym: "XLI",  label: "Industrials" },
+  { sym: "XLE",  label: "Energy" },     { sym: "XLB",  label: "Materials" },
+  { sym: "XLRE", label: "Real Estate" },{ sym: "XLU",  label: "Utilities" },
+  { sym: "XLP",  label: "Staples" },
+];
+
+// Morning helpers
+const gc = (p: number) => (p > 0 ? POSITIVE : p < 0 ? NEGATIVE : "#999");
+const gb = (p: number) => (p > 0 ? "#f0faf4" : p < 0 ? "#fff5f5" : "#fafafa");
+const pp = (n: number) => `${n >= 0 ? "+" : ""}${n.toFixed(2)}%`;
+const fp = (n: number) => n >= 1000 ? n.toLocaleString("en-US", { maximumFractionDigits: 2 }) : n.toFixed(2);
+
+function regime(q: Record<string, Quote>) {
+  const sp  = q["ES=F"]?.changePct     ?? 0;
+  const vix = q["^VIX"]?.changePct     ?? 0;
+  const t10 = q["^TNX"]?.change        ?? 0;
+  const gld = q["GC=F"]?.changePct     ?? 0;
+  const dxy = q["DX-Y.NYB"]?.changePct ?? 0;
+  const oil = q["CL=F"]?.changePct     ?? 0;
+  if (sp < -1    && t10 > 0.03) return { label: "Rates-Led Selloff",  c: NEGATIVE,  bg: "#fff5f5" };
+  if (sp > 1.2   && vix < -5)   return { label: "Risk-On Melt-Up",    c: POSITIVE,  bg: "#f0faf4" };
+  if (sp < -0.5  && gld > 0.8)  return { label: "Defensive Flight",   c: "#92400e", bg: "#fef9f0" };
+  if (oil > 2.5)                 return { label: "Commodity Shock",    c: "#92400e", bg: "#fef9f0" };
+  if (dxy > 0.5  && sp < 0)     return { label: "Dollar Squeeze",     c: NEGATIVE,  bg: "#fff5f5" };
+  if (sp > 0.5   && vix < -3)   return { label: "Risk-On Grind",      c: POSITIVE,  bg: "#f0faf4" };
+  if (Math.abs(sp) < 0.25)      return { label: "Consolidation",      c: "#888",    bg: "#fafafa" };
+  if (sp > 0)                    return { label: "Cautiously Bullish", c: POSITIVE,  bg: "#f0faf4" };
+  return                                { label: "Cautiously Bearish", c: NEGATIVE,  bg: "#fff5f5" };
+}
 
 // ── Primitive components ───────────────────────────────────────────────────
 
@@ -133,6 +198,81 @@ function SourceDot({ ok, label }: { ok: boolean; label: string }) {
   );
 }
 
+// Compact quote tile — US futures + portfolio
+function Tile({ q, label, pStr }: { q: Quote | undefined; label: string; pStr?: string }) {
+  if (!q) return (
+    <div className="border border-[#eee9df] rounded-lg px-3 py-3 flex flex-col gap-1 bg-[#fbfaf7]">
+      <p className="text-[9.5px] font-semibold text-[#ccc] uppercase tracking-wider truncate">{label}</p>
+      <p className="text-[18px] font-light text-[#ddd]">—</p>
+    </div>
+  );
+  const col = gc(q.changePct);
+  return (
+    <div className="border border-[#eee9df] rounded-lg px-3 py-3 flex flex-col gap-1 transition-colors"
+         style={{ backgroundColor: gb(q.changePct) }}>
+      <p className="text-[9.5px] font-semibold text-[#999] uppercase tracking-wider truncate">{label}</p>
+      <p className="text-[18px] font-semibold text-[#0a0a0a] tabular-nums leading-tight">{pStr ?? fp(q.price)}</p>
+      <div className="flex items-center gap-1.5">
+        {q.changePct > 0 ? <TrendingUp size={10} color={col} />
+          : q.changePct < 0 ? <TrendingDown size={10} color={col} />
+          : <Minus size={10} color="#bbb" />}
+        <span className="text-[11px] font-bold tabular-nums" style={{ color: col }}>{pp(q.changePct)}</span>
+        <span className="text-[10px] text-[#c0c0c0] tabular-nums">
+          ({q.change >= 0 ? "+" : ""}{Math.abs(q.change) < 10 ? q.change.toFixed(3) : q.change.toFixed(2)})
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// AI brief body — lightweight markdown renderer
+function BriefBody({ text }: { text: string }) {
+  const lines = text.split("\n");
+  const nodes: React.ReactNode[] = [];
+  const renderInline = (s: string, key: number): React.ReactNode => {
+    const parts = s.split(/(\*\*[^*]+\*\*)/g);
+    return (
+      <span key={key}>
+        {parts.map((p, i) =>
+          p.startsWith("**") && p.endsWith("**")
+            ? <strong key={i} className="font-semibold text-[#0a0a0a]">{p.slice(2, -2)}</strong>
+            : p
+        )}
+      </span>
+    );
+  };
+  lines.forEach((line, i) => {
+    const trimmed = line.trim();
+    if (!trimmed) {
+      nodes.push(<div key={i} className="h-3" />);
+    } else if (trimmed.startsWith("**") && trimmed.endsWith("**") && !trimmed.slice(2, -2).includes("**")) {
+      nodes.push(<p key={i} className="text-[10px] font-bold tracking-[0.16em] uppercase text-[#0c1b38] mt-5 mb-2 first:mt-0">{trimmed.slice(2, -2)}</p>);
+    } else if (trimmed.startsWith("Subject:")) {
+      nodes.push(<p key={i} className="text-[12px] font-semibold text-[#0c1b38] mb-3 bg-[#eef1f8] border border-[#c8d0e8] px-3 py-2 rounded-md">{trimmed}</p>);
+    } else if (trimmed.startsWith("• ") || trimmed.startsWith("- ")) {
+      nodes.push(
+        <div key={i} className="flex items-start gap-2 py-0.5">
+          <span className="w-1 h-1 rounded-full bg-[#0c1b38] mt-[7px] shrink-0" />
+          <p className="text-[12.5px] text-[#333] leading-[1.7]">{renderInline(trimmed.slice(2), i)}</p>
+        </div>
+      );
+    } else if (/^\d+\.\s/.test(trimmed)) {
+      const num = trimmed.match(/^(\d+)\./)?.[1] ?? "";
+      nodes.push(
+        <div key={i} className="flex items-start gap-2.5 py-0.5">
+          <span className="text-[10px] font-bold text-[#0c1b38] mt-[3px] w-4 shrink-0">{num}.</span>
+          <p className="text-[12.5px] text-[#333] leading-[1.7]">{renderInline(trimmed.replace(/^\d+\.\s*/, ""), i)}</p>
+        </div>
+      );
+    } else if (trimmed.startsWith("---")) {
+      nodes.push(<hr key={i} className="border-[#ebebeb] my-3" />);
+    } else {
+      nodes.push(<p key={i} className="text-[12.5px] text-[#1a1a1a] leading-[1.8]">{renderInline(trimmed, i)}</p>);
+    }
+  });
+  return <div className="space-y-[2px]">{nodes}</div>;
+}
+
 // ── Main page ──────────────────────────────────────────────────────────────
 
 type ExpandedSeries = "sp500" | "nasdaq" | "dow" | "vix" | "gold" | "oil" | null;
@@ -156,6 +296,11 @@ export default function DashboardPage() {
   const [equityChart,  setEquityChart]  = useState<ChartData | null>(null);
   const [ratesLoading, setRatesLoading] = useState(true);
   const [equityLoading,setEquityLoading]= useState(true);
+  // Morning data (Yahoo) — powers regime badge, futures, portfolio, AI brief
+  const [morning,      setMorning]      = useState<Morning | null>(null);
+  const [brief,        setBrief]        = useState("");
+  const [briefType,    setBriefType]    = useState<"exec" | "full" | "email" | null>(null);
+  const [generating,   setGenerating]   = useState(false);
 
   // Fetch quotes + analytics + news — runs once on mount only
   const fetchData = useCallback(async () => {
@@ -193,7 +338,17 @@ export default function DashboardPage() {
     } catch { /* silent */ } finally { setEquityLoading(false); }
   }, []);
 
+  // Morning data (Yahoo symbol quotes) — independent of dashboard-data
+  const fetchMorning = useCallback(async () => {
+    try {
+      const r = await fetch("/api/morning-data", { cache: "no-store" });
+      if (!r.ok) return;
+      setMorning(await r.json() as Morning);
+    } catch { /* silent */ }
+  }, []);
+
   useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => { fetchMorning(); }, [fetchMorning]);
   useEffect(() => { fetchRatesHistory(ratesTf); }, [ratesTf, fetchRatesHistory]);
   useEffect(() => { fetchEquityHistory(equityTf); }, [equityTf, fetchEquityHistory]);
 
@@ -201,11 +356,149 @@ export default function DashboardPage() {
   useEffect(() => {
     const id = setInterval(() => {
       fetchData();
+      fetchMorning();
       fetchRatesHistory(ratesTf);
       fetchEquityHistory(equityTf);
     }, 60 * 60 * 1000);
     return () => clearInterval(id);
-  }, [fetchData, fetchRatesHistory, fetchEquityHistory, ratesTf, equityTf]);
+  }, [fetchData, fetchMorning, fetchRatesHistory, fetchEquityHistory, ratesTf, equityTf]);
+
+  // ── AI Morning Brief ───────────────────────────────────────────────────────
+  const generateBrief = useCallback(async (type: "exec" | "full" | "email") => {
+    if (!morning || generating) return;
+    setGenerating(true);
+    setBriefType(type);
+    setBrief("");
+
+    const q   = morning.quotes;
+    const rg  = regime(q);
+    const now = new Date();
+
+    const qline = (sym: string, label: string, unit = "") => {
+      const d = q[sym];
+      if (!d) return `${label}: N/A`;
+      const chgSign = d.changePct >= 0 ? "+" : "";
+      const absChg  = Math.abs(d.change) < 10 ? d.change.toFixed(3) : d.change.toFixed(2);
+      return `${label}: ${d.price.toFixed(2)}${unit}  [daily change: ${chgSign}${absChg}${unit}, ${chgSign}${d.changePct.toFixed(2)} percent]`;
+    };
+    const spread = q["^TNX"] && q["^IRX"] ? (q["^TNX"].price - q["^IRX"].price).toFixed(2) : "N/A";
+    const sectorCtx = AI_SECTORS.filter(s => q[s.sym]).map(s => `${s.label}: ${q[s.sym].changePct >= 0 ? "+" : ""}${q[s.sym].changePct.toFixed(2)} percent`).join(", ");
+    const portfolioCtx = PORTFOLIO.filter(s => q[s]).map(s => {
+      const d = q[s]; const sign = d.changePct >= 0 ? "+" : "";
+      return `${s} $${d.price.toFixed(2)} (${sign}${d.changePct.toFixed(2)} percent today, prev close $${d.prev.toFixed(2)})`;
+    }).join("\n  ");
+    const newsCtx = morning.news.length > 0
+      ? morning.news.slice(0, 12).map((n, i) => `${i + 1}. [${n.source}]${n.related ? ` [${n.related}]` : ""} ${n.headline}`).join("\n  ")
+      : "No live news (Finnhub key not configured)";
+    const earningsCtx = morning.earnings.length > 0
+      ? morning.earnings.slice(0, 8).map(e => `${e.symbol} (${e.date}, ${e.hour === "amc" ? "after close" : e.hour === "bmo" ? "before open" : "TBD"}${e.epsEstimate != null ? `, EPS est $${e.epsEstimate.toFixed(2)}` : ""})`).join(", ")
+      : "None in next 7 days";
+    const calCtx = morning.upcomingEvents.slice(0, 5).map(e => `${e.date} — ${e.label} [${e.impact} impact]`).join("\n  ");
+
+    const ctx = `
+=== MARKET DATA SNAPSHOT ===
+Date/Time: ${now.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric" })} ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZoneName: "short" })}
+Detected Regime: ${rg.label}
+
+IMPORTANT NOTE: All "percent" values are percentage points (e.g. "+1.27 percent" means +1.27%). Do NOT convert to basis points.
+
+--- US EQUITY FUTURES ---
+${qline("ES=F",  "S&P 500 Futures")}
+${qline("NQ=F",  "Nasdaq 100 Futures")}
+${qline("RTY=F", "Russell 2000 Futures")}
+${qline("YM=F",  "Dow Jones Futures")}
+
+--- RATES & CREDIT ---
+${qline("^TNX",  "10Y Treasury Yield", "%")}
+${qline("^TYX",  "30Y Treasury Yield", "%")}
+${qline("^FVX",  "5Y Treasury Yield",  "%")}
+${qline("^IRX",  "3M T-Bill Yield",    "%")}
+3M–10Y Spread: ${spread}% ${parseFloat(spread) < 0 ? "(INVERTED)" : "(normal)"}
+${qline("^VIX",  "VIX (Fear Index)")}
+
+--- FX ---
+${qline("DX-Y.NYB", "DXY (Dollar Index)")}
+${qline("EURUSD=X", "EUR/USD")}
+${qline("GBPUSD=X", "GBP/USD")}
+${qline("JPY=X",    "USD/JPY")}
+${qline("CNHUSD=X", "CNH/USD")}
+
+--- COMMODITIES & CRYPTO ---
+${qline("CL=F",    "WTI Crude Oil $/bbl")}
+${qline("GC=F",    "Gold $/oz")}
+${qline("SI=F",    "Silver $/oz")}
+${qline("HG=F",    "Copper $/lb")}
+${qline("NG=F",    "Natural Gas")}
+${qline("BTC-USD", "Bitcoin USD")}
+${qline("ETH-USD", "Ethereum USD")}
+
+--- GLOBAL EQUITIES ---
+Europe: FTSE ${q["^FTSE"] ? (q["^FTSE"].changePct >= 0 ? "+" : "") + q["^FTSE"].changePct.toFixed(2) + "%" : "N/A"} | DAX ${q["^GDAXI"] ? (q["^GDAXI"].changePct >= 0 ? "+" : "") + q["^GDAXI"].changePct.toFixed(2) + "%" : "N/A"} | CAC ${q["^FCHI"] ? (q["^FCHI"].changePct >= 0 ? "+" : "") + q["^FCHI"].changePct.toFixed(2) + "%" : "N/A"}
+Asia: Nikkei ${q["^N225"] ? (q["^N225"].changePct >= 0 ? "+" : "") + q["^N225"].changePct.toFixed(2) + "%" : "N/A"} | HSI ${q["^HSI"] ? (q["^HSI"].changePct >= 0 ? "+" : "") + q["^HSI"].changePct.toFixed(2) + "%" : "N/A"} | Shanghai ${q["000001.SS"] ? (q["000001.SS"].changePct >= 0 ? "+" : "") + q["000001.SS"].changePct.toFixed(2) + "%" : "N/A"}
+
+--- US SECTOR ROTATION ---
+${sectorCtx}
+
+--- PORTFOLIO HOLDINGS (personal portfolio) ---
+  ${portfolioCtx}
+
+--- MACRO CALENDAR ---
+  ${calCtx || "No major events this week"}
+
+--- EARNINGS THIS WEEK ---
+${earningsCtx}
+
+--- LIVE NEWS HEADLINES (last 48h) ---
+  ${newsCtx}
+`.trim();
+
+    const todayDate = now.toLocaleDateString("en-US", { month: "long", day: "numeric", year: "numeric" });
+    const todayShort = now.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+    const systemRole = `You are a senior macro strategist at a top-tier asset manager with 20 years of experience. You write institutional-grade morning briefs read by portfolio managers and senior traders. Your analysis is precise, data-driven, and actionable. You cite exact prices and percentage moves from the data provided. You identify cross-asset relationships, regime dynamics, and specific risk/opportunity setups. You never make up numbers — you only use the exact figures from the data snapshot.`;
+
+    const prompts: Record<string, string> = {
+      exec: `${systemRole}\n\n${ctx}\n\nWrite exactly 3 sentences (no more, no less) for the morning executive summary. Requirements:\n- Sentence 1: The single most important market dynamic right now, with exact numbers\n- Sentence 2: The cross-asset signal that confirms or complicates the picture\n- Sentence 3: The key risk or watch level for today\nBe specific. Use exact prices and exact percentage moves from the data. No vague language.`,
+      full: `${systemRole}\n\n${ctx}\n\nWrite a comprehensive institutional morning brief for ${todayDate}. Structure exactly as follows:\n\n**MARKET REGIME & OPENING TONE**\n[2-3 paragraphs] Characterize today's market environment precisely. What is the dominant theme? Is this risk-on/risk-off, rotation, squeeze, macro-driven or micro-driven? Cite exact futures levels and moves. Discuss what the VIX level and its move imply about investor positioning. Comment on breadth. What does the overnight tape in Asia/Europe tell us about global sentiment?\n\n**RATES, FX & MACRO**\n[2 paragraphs] Analyze the rates complex in depth. Where is the 10Y vs 30Y vs 3M, what does the curve shape signal? What does DXY strength/weakness mean for risk assets and EM? Any commodity signals (oil, gold, copper) worth flagging?\n\n**CROSS-ASSET SIGNALS**\n[1 paragraph] Identify 2-3 key cross-asset relationships playing out today. What is the market pricing for the next 30-60 days based on current positioning?\n\n**PORTFOLIO IMPLICATIONS**\n[2 paragraphs] Go through each portfolio holding with a notable move or setup. Specifically analyze: META, AMZN, NVDA, AAPL, PYPL, HOOD, APLD, UBER, DUOL. Use EXACT prices and moves from the data.\n\n**SECTOR ROTATION MAP**\n[1 paragraph] Which sectors are leading/lagging and what does the rotation tell us? What are the 2-3 sectors to be positioned in today and why?\n\n**KEY RISKS & CATALYST WATCH**\n[bulleted list] 5 specific things to monitor today, each with an exact level.\n\n**NEWS HIGHLIGHTS**\n[bulleted list] Pull out the 4-5 most market-moving news items and explain their implication in 1 sentence each.\n\nWrite with institutional authority. Use exact numbers. No hedging. Total length: 600-800 words.`,
+      email: `${systemRole}\n\n${ctx}\n\nWrite a professional morning market email from a senior strategist to the trading desk. ${todayDate}.\n\nSubject: Morning Brief — ${todayShort} | ${rg.label}\n\nGood morning,\n\n[Write a 2-sentence opening capturing the most important thing happening right now, with exact numbers]\n\n**OVERNIGHT SNAPSHOT**\n[6-8 bullet points, each with exact prices/moves — futures, rates, key FX, commodities, crypto. Format: • Asset: Level (Daily Change)]\n\n**THE DOMINANT THEME**\n[3-4 sentences explaining the main story driving markets today. Cross-asset perspective.]\n\n**RATES & MACRO SIGNAL**\n[2-3 sentences on the rates/FX complex and macro implications]\n\n**PORTFOLIO WATCH**\n[Go through portfolio names with notable moves. Format: • TICKER $price (+X.XX%) — one sentence on driver and implication]\n\n**SECTOR ROTATION**\n[2 sentences on which sectors are leading/lagging]\n\n**NEWS DRIVING FLOW**\n[3-4 bullet points on most important headlines and their implications]\n\n**CALENDAR RISK**\n[Any important data/events coming up this week]\n\n**WATCH LIST — TODAY**\n• [Specific level 1]\n• [Specific level 2]\n• [Specific level 3]\n\nHave a great trading day.\n\n[Your name]\nCrossAsset | Macro Intelligence\n\n---\nAll data as of ${now.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" })}. For informational purposes only.`,
+    };
+
+    try {
+      const r = await fetch("/api/ai-brief", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ prompt: prompts[type] }),
+      });
+      if (!r.ok || !r.body) { setBrief("Failed — check ANTHROPIC_API_KEY in .env.local"); setGenerating(false); return; }
+      const reader = r.body.getReader();
+      const dec    = new TextDecoder();
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        const chunk = dec.decode(value, { stream: true });
+        for (const line of chunk.split("\n")) {
+          const raw = line.startsWith("data: ") ? line.slice(6).trim() : null;
+          if (!raw || raw === "[DONE]") continue;
+          try {
+            const j = JSON.parse(raw);
+            if (j.error) { setBrief(`Error: ${j.error}`); break; }
+            if (j.text)  setBrief(prev => prev + j.text);
+          } catch { /* skip */ }
+        }
+      }
+    } catch (e) {
+      setBrief(`Error: ${e instanceof Error ? e.message : "Unknown error"}`);
+    } finally {
+      setGenerating(false);
+    }
+  }, [morning, generating]);
+
+  // Derived morning values
+  const mq = morning?.quotes ?? {};
+  const mRegime = regime(mq);
+  const hasMorning = Object.keys(mq).length > 0;
+  const aiSyms = PORTFOLIO.filter(s => AI_NAMES.has(s) && mq[s]);
+  const aiAvg  = aiSyms.length ? aiSyms.reduce((a, s) => a + mq[s].changePct, 0) / aiSyms.length : 0;
+  const ratesRising = (mq["^TNX"]?.change ?? 0) > 0.04;
 
   const updatedTime = data?.updatedAt
     ? new Date(data.updatedAt).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", hour12: true })
@@ -231,6 +524,14 @@ export default function DashboardPage() {
               </div>
               <div className="h-6 w-px bg-white/15" />
               <p className="text-[11px] font-medium text-white/50">{today}</p>
+              {hasMorning && (
+                <span
+                  className="border px-2.5 py-1 text-[9.5px] font-bold uppercase tracking-[0.12em]"
+                  style={{ color: "#fff", borderColor: mRegime.c, backgroundColor: mRegime.c + "44" }}
+                >
+                  {mRegime.label}
+                </span>
+              )}
               {updatedTime && !loading && (
                 <span className="text-[10px] font-semibold tracking-[0.08em] text-white/35">· Updated {updatedTime}</span>
               )}
@@ -252,7 +553,7 @@ export default function DashboardPage() {
                 </div>
               )}
               <button
-                onClick={() => { fetchData(); fetchRatesHistory(ratesTf); fetchEquityHistory(equityTf); }}
+                onClick={() => { fetchData(); fetchMorning(); fetchRatesHistory(ratesTf); fetchEquityHistory(equityTf); }}
                 disabled={loading}
                 className="flex items-center gap-2 border border-white/20 bg-white/[0.08] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75 transition-all hover:bg-white/15 disabled:opacity-40"
               >
@@ -317,6 +618,60 @@ export default function DashboardPage() {
               </div>
             );
           })()}
+        </div>
+
+        {/* ── AI Morning Brief ──────────────────────────────────────────── */}
+        <div className="mb-5">
+          <Card className="overflow-hidden">
+            <div className="bg-[#0c1b38] px-6 py-4 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/50 mb-1">AI Morning Brief</p>
+                <p className="text-[13px] font-medium text-white">Powered by Claude · synthesizes all live market data below</p>
+              </div>
+              <Newspaper size={18} className="text-white/30" />
+            </div>
+            <div className="p-6">
+              <div className="flex items-center gap-3 mb-5 flex-wrap">
+                <button onClick={() => generateBrief("exec")} disabled={generating || !hasMorning}
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] hover:bg-[#dde4f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  {generating && briefType === "exec" ? "Generating…" : "2-Sentence Summary"}
+                </button>
+                <button onClick={() => generateBrief("full")} disabled={generating || !hasMorning}
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md bg-[#0c1b38] text-white hover:bg-[#1a3361] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  {generating && briefType === "full" ? "Generating…" : "Full Morning Brief"}
+                </button>
+                <button onClick={() => generateBrief("email")} disabled={generating || !hasMorning}
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] hover:bg-[#dde4f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  {generating && briefType === "email" ? "Generating…" : "Draft Trader Email"}
+                </button>
+                {generating && (
+                  <span className="flex items-center gap-1.5 text-[10.5px] text-[#999]">
+                    <span className="w-2 h-2 rounded-full bg-[#0c1b38] animate-pulse" /> Streaming…
+                  </span>
+                )}
+              </div>
+              {!hasMorning && <p className="text-[11px] text-[#ccc]">Buttons will activate once market data loads.</p>}
+              {brief ? (
+                <div className="bg-[#fbfaf7] border border-[#eee9df] rounded-lg p-6">
+                  <div className="flex items-center justify-between mb-4">
+                    <p className="text-[9.5px] font-bold uppercase tracking-widest text-[#bbb]">
+                      {briefType === "exec" ? "Executive Summary" : briefType === "full" ? "Morning Brief" : "Trader Email Draft"}
+                    </p>
+                    <button onClick={() => { navigator.clipboard.writeText(brief); }}
+                      className="text-[10.5px] font-semibold text-[#999] hover:text-[#0c1b38] border border-[#e8e8e8] hover:border-[#0c1b38] px-2.5 py-1 rounded-md transition-colors">
+                      Copy
+                    </button>
+                  </div>
+                  <BriefBody text={brief} />
+                </div>
+              ) : !generating && (
+                <p className="text-[11px] text-[#ccc]">
+                  Click a button to generate a strategist-grade brief from the live data below. Requires{" "}
+                  <code className="bg-[#f5f5f5] px-1 rounded text-[10.5px]">ANTHROPIC_API_KEY</code>.
+                </p>
+              )}
+            </div>
+          </Card>
         </div>
 
         {/* ── Layer 1: Macro Snapshot · Rates · Market Intelligence ──────── */}
@@ -685,6 +1040,62 @@ export default function DashboardPage() {
             )}
           </Card>
         </div>
+
+        {/* ── US Futures + Portfolio Pulse ─────────────────────────────── */}
+        {hasMorning && (
+          <div className="mb-5 grid grid-cols-[0.8fr_2.2fr] gap-5">
+
+            {/* US Futures */}
+            <Card className="p-6">
+              <div className="mb-4 flex items-center justify-between">
+                <SectionLabel>US Futures</SectionLabel>
+                <p className="text-[9.5px] text-[#999]">Live · Yahoo</p>
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                {FUTURES.map(f => <Tile key={f.sym} q={mq[f.sym]} label={f.label} />)}
+              </div>
+            </Card>
+
+            {/* Portfolio Pulse */}
+            <Card className="p-6">
+              <div className="mb-5 flex items-center justify-between">
+                <SectionLabel>Portfolio Pulse</SectionLabel>
+                <div className="flex items-center gap-5 text-[10.5px] text-[#999]">
+                  <span>AI/Tech avg: <span className="font-semibold" style={{ color: gc(aiAvg) }}>{pp(aiAvg)}</span></span>
+                  {ratesRising && (
+                    <span className="font-semibold text-amber-600">⚠ Rates rising — {[...RATE_NAMES].join(" · ")} under pressure</span>
+                  )}
+                </div>
+              </div>
+              <div className="grid grid-cols-7 gap-2.5">
+                {PORTFOLIO.map(sym => {
+                  const qp = mq[sym];
+                  const inRange = qp && qp.high52w > qp.low52w;
+                  const rangePct = inRange ? Math.max(0, Math.min(100, ((qp.price - qp.low52w) / (qp.high52w - qp.low52w)) * 100)) : 0;
+                  return (
+                    <div key={sym} className="border border-[#eee9df] rounded-lg p-3 flex flex-col gap-1 transition-colors"
+                         style={{ backgroundColor: qp ? gb(qp.changePct) : "#fbfaf7" }}>
+                      <div className="flex items-start justify-between gap-1">
+                        <span className={`text-[11px] font-bold ${AI_NAMES.has(sym) ? "text-[#0c1b38]" : "text-[#333]"}`}>{sym}</span>
+                        {AI_NAMES.has(sym) && <span className="text-[8px] text-[#0c1b38] bg-[#eef1f8] px-1 rounded font-semibold">AI</span>}
+                      </div>
+                      <p className="text-[14px] font-semibold text-[#0a0a0a] tabular-nums leading-none">
+                        {qp ? `$${fp(qp.price)}` : <span className="text-[#ddd]">—</span>}
+                      </p>
+                      {qp && <p className="text-[10.5px] font-bold tabular-nums" style={{ color: gc(qp.changePct) }}>{pp(qp.changePct)}</p>}
+                      {inRange && (
+                        <div className="mt-1 h-[2px] bg-[#eaeaea] rounded-full overflow-hidden">
+                          <div className="h-full rounded-full bg-[#0c1b38]" style={{ width: `${rangePct}%` }} />
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+              <p className="text-[9.5px] text-[#ccc] mt-2.5">Bar = position in 52-week range · AI badge = AI/compute exposure</p>
+            </Card>
+          </div>
+        )}
 
         {/* ── Sector Performance ───────────────────────────────────────── */}
         {(data?.sectors?.length ?? 0) > 0 && (
