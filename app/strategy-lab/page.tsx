@@ -521,19 +521,8 @@ export default function StrategyLabPage() {
   }, []);
 
   // ── Portfolio analysis ────────────────────────────────────────────────────
-  const [resultsReady, setResultsReady] = useState(false);
-
-  useEffect(() => {
-    if (!resultsReady) return;
-    const id = setTimeout(() => {
-      document.querySelector("[data-factor-scores-anchor]")?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 120);
-    return () => clearTimeout(id);
-  }, [resultsReady]);
-
   const analyzePortfolio = useCallback(async () => {
     setComputingScores(true);
-    setResultsReady(false);
     setScoreError(null);
     try {
       const r = await fetch("/api/strategy-lab/factor-scores", {
@@ -557,7 +546,13 @@ export default function StrategyLabPage() {
       });
       setPortExposures(exposures);
       setScoreTimestamp(new Date().toLocaleTimeString());
-      setResultsReady(true);
+      // Scroll to results after DOM commits
+      setTimeout(() => {
+        const el = document.querySelector("[data-factor-scores-anchor]");
+        if (el) {
+          window.scrollTo({ top: el.getBoundingClientRect().top + window.scrollY - 80, behavior: "instant" });
+        }
+      }, 300);
     } catch (e) {
       setScoreError(e instanceof Error ? e.message : "Failed to compute scores");
     } finally {
@@ -1423,16 +1418,16 @@ export default function StrategyLabPage() {
                     };
                     return (
                       <div key={e.factor}>
-                        <div className="flex items-center justify-between mb-1.5">
-                          <span className="text-[11px] font-semibold text-[#0a0a0a] w-24">{factorLabels[e.factor] ?? e.factor}</span>
-                          <div className="flex items-center gap-4 text-[10px] tabular-nums">
-                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "no data"}</span></span>
-                            <span className="text-[#555]">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
+                        <div className="flex items-center justify-between mb-1.5 min-w-0">
+                          <span className="text-[11px] font-semibold text-[#0a0a0a] w-24 shrink-0">{factorLabels[e.factor] ?? e.factor}</span>
+                          <div className="flex items-center gap-3 text-[10px] tabular-nums flex-wrap justify-end">
+                            <span className="text-[#555]">Ptf: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "—"}</span></span>
+                            <span className="text-[#555]">Tgt: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
                             {!hasData ? (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 border border-[#ddd] bg-[#f9f9f9] text-[#bbb]">no data</span>
                             ) : (
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap! < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
-                                {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} underweight` : `${gap!.toFixed(2)} overweight`}
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border whitespace-nowrap ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap! < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
+                                {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} under` : `${gap!.toFixed(2)} over`}
                               </span>
                             )}
                           </div>
