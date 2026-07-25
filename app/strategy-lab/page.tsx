@@ -2019,14 +2019,14 @@ export default function StrategyLabPage() {
             {/* ── Portfolio Optimizer ───────────────────────────────────────── */}
             {factorScores && factorScores.length > 0 && currentRegime && (
               <Card className="p-6">
-                <div className="flex items-center justify-between mb-4">
-                  <div>
+                <div className="flex items-center justify-between gap-4 mb-4">
+                  <div className="min-w-0">
                     <SectionLabel>Portfolio Optimizer</SectionLabel>
-                    <p className="mt-1 text-[10.5px] text-[#bbb]">
+                    <p className="mt-1 text-[10.5px] text-[#bbb] truncate">
                       {currentRegime} regime · regime-weighted factor scores → softmax (T=0.5) → 15% max weight
                     </p>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 flex-shrink-0">
                     {suggestedWeights && (
                       <button onClick={applyOptimizedWeights}
                         className="bg-[#147a4f] text-white px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#0f5e3a] transition-colors">
