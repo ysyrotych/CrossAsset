@@ -12,8 +12,8 @@ import { UNIVERSE } from "@/lib/strategy-lab/universe";
 export const dynamic  = "force-dynamic";
 export const maxDuration = 60;
 
-const FMP_KEY  = process.env.FMP_API_KEY ?? "";
-const FMP_BASE = "https://financialmodelingprep.com/stable";
+const FMP_KEY = process.env.FMP_API_KEY ?? "";
+const FMP_V3  = "https://financialmodelingprep.com/api/v3";
 
 type FmpMetrics = {
   symbol:                       string;
@@ -21,7 +21,7 @@ type FmpMetrics = {
   earningsYieldTTM:             number;
   freeCashFlowYieldTTM:         number;
   enterpriseValueOverEBITDATTM: number;
-  returnOnInvestedCapitalTTM:   number;
+  roicTTM:                      number;
   grossProfitMarginTTM:         number;
   netDebtToEBITDATTM:           number;
   marketCapTTM:                 number;
@@ -35,18 +35,24 @@ type FmpProfile = {
   mktCap:      number;
 };
 
-async function fetchFmpBatch<T>(endpoint: string, tickers: string[]): Promise<T[]> {
+async function fetchFmpProfiles(tickers: string[]): Promise<FmpProfile[]> {
   if (!FMP_KEY || !tickers.length) return [];
   try {
-    const r = await fetch(`${FMP_BASE}/${endpoint}?symbol=${tickers.join(",")}&apikey=${FMP_KEY}`, {
-      cache: "no-store",
-    });
+    const r = await fetch(`${FMP_V3}/profile/${tickers.join(",")}?apikey=${FMP_KEY}`, { cache: "no-store" });
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
+}
+
+async function fetchFmpKeyMetricsOne(ticker: string): Promise<FmpMetrics | null> {
+  if (!FMP_KEY) return null;
+  try {
+    const r = await fetch(`${FMP_V3}/key-metrics-ttm/${ticker}?apikey=${FMP_KEY}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return Array.isArray(data) && data.length > 0 ? { ...data[0], symbol: ticker } : null;
+  } catch { return null; }
 }
 
 function computePriceFactors(
@@ -107,10 +113,10 @@ function computePriceFactors(
 export async function GET() {
   const tickers = UNIVERSE.map(u => u.ticker);
 
-  const [priceMap, fmpMetricsRaw, fmpProfileRaw] = await Promise.all([
+  const [priceMap, fmpProfileRaw, fmpMetricsRaw] = await Promise.all([
     fetchAdjustedHistoryBatch([...tickers, "SPY"], "2y"),
-    fetchFmpBatch<FmpMetrics>("key-metrics-ttm", tickers),
-    fetchFmpBatch<FmpProfile>("profile", tickers),
+    fetchFmpProfiles(tickers),
+    Promise.all(tickers.map(t => fetchFmpKeyMetricsOne(t))).then(r => r.filter(Boolean) as FmpMetrics[]),
   ]);
 
   const spyBars    = priceMap.get("SPY") ?? [];
@@ -140,7 +146,7 @@ export async function GET() {
     const earningsYield = m?.earningsYieldTTM ?? (m?.peRatioTTM && m.peRatioTTM > 0 ? 1 / m.peRatioTTM : null);
     const fcfYield      = m?.freeCashFlowYieldTTM        ?? null;
     const evEbitda      = m?.enterpriseValueOverEBITDATTM ?? null;
-    const roic          = m?.returnOnInvestedCapitalTTM   ?? null;
+    const roic          = m?.roicTTM                       ?? null;
     const grossMargin   = m?.grossProfitMarginTTM         ?? null;
     const netLeverage   = m?.netDebtToEBITDATTM           ?? null;
     const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? 0;

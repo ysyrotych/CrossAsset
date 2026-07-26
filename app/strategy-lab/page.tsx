@@ -452,9 +452,10 @@ export default function StrategyLabPage() {
 
   // ── Backtest state ─────────────────────────────────────────────────────────
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const [backtestData,   setBacktestData]   = useState<any | null>(null);
-  const [backtestLoading,setBacktestLoading]= useState(false);
-  const [backtestError,  setBacktestError]  = useState<string | null>(null);
+  const [backtestData,      setBacktestData]      = useState<any | null>(null);
+  const [backtestLoading,   setBacktestLoading]   = useState(false);
+  const [backtestError,     setBacktestError]      = useState<string | null>(null);
+  const [lastBacktestAlloc, setLastBacktestAlloc] = useState<string | null>(null);
 
   // ── Universe screener + optimizer state ────────────────────────────────────
   const [universeScores,       setUniverseScores]       = useState<FactorScoreResult[] | null>(null);
@@ -493,25 +494,31 @@ export default function StrategyLabPage() {
 
   useEffect(() => { fetchRegimeData(); }, [fetchRegimeData]);
 
-  const fetchBacktest = useCallback(async () => {
+  const fetchBacktest = useCallback(async (alloc?: typeof allocation) => {
+    const currentAlloc = alloc ?? allocation;
     setBacktestLoading(true);
     setBacktestError(null);
     try {
-      const r = await fetch("/api/strategy-lab/backtest");
+      const r = await fetch("/api/strategy-lab/backtest", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ allocation: currentAlloc }),
+      });
       if (!r.ok) throw new Error(`API ${r.status}`);
       setBacktestData(await r.json());
+      setLastBacktestAlloc(JSON.stringify(currentAlloc));
     } catch (e) {
       setBacktestError(e instanceof Error ? e.message : "Failed to load backtest");
     } finally {
       setBacktestLoading(false);
     }
-  }, []);
+  }, [allocation]);
 
   useEffect(() => {
     if (activeTab === "Backtest" && !backtestData && !backtestLoading) {
-      fetchBacktest();
+      fetchBacktest(allocation);
     }
-  }, [activeTab, backtestData, backtestLoading, fetchBacktest]);
+  }, [activeTab, backtestData, backtestLoading, fetchBacktest, allocation]);
 
   const fetchUniverseScores = useCallback(async () => {
     setUniverseLoading(true);
@@ -2136,10 +2143,23 @@ export default function StrategyLabPage() {
             {backtestError && (
               <Card className="p-5">
                 <p className="text-[11px] text-[#b42318]">Failed to load backtest: {backtestError}</p>
-                <button onClick={fetchBacktest} className="mt-3 text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] border border-[#0c1b38] px-4 py-2 hover:bg-[#0c1b38] hover:text-white transition-colors">
+                <button onClick={() => fetchBacktest()} className="mt-3 text-[10.5px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] border border-[#0c1b38] px-4 py-2 hover:bg-[#0c1b38] hover:text-white transition-colors">
                   Retry
                 </button>
               </Card>
+            )}
+
+            {/* Allocation-changed banner */}
+            {backtestData && !backtestLoading && lastBacktestAlloc && lastBacktestAlloc !== JSON.stringify(allocation) && (
+              <div className="flex items-center justify-between border border-[#f0a429] bg-[#fffbf0] px-4 py-3">
+                <p className="text-[10.5px] text-[#a06800]">Factor allocations changed — backtest results are outdated.</p>
+                <button
+                  onClick={() => fetchBacktest(allocation)}
+                  className="ml-4 text-[10px] font-bold uppercase tracking-[0.12em] text-[#a06800] border border-[#f0a429] px-3 py-1.5 hover:bg-[#f0a429] hover:text-white transition-colors"
+                >
+                  Recalculate
+                </button>
+              </div>
             )}
 
             {backtestData && (() => {
@@ -2163,7 +2183,7 @@ export default function StrategyLabPage() {
                       </div>
                       <div className="flex items-center gap-3">
                         {bt.isDemo && <DemoBadge />}
-                        <button onClick={fetchBacktest} disabled={backtestLoading}
+                        <button onClick={() => fetchBacktest()} disabled={backtestLoading}
                           className="flex items-center gap-1.5 border border-[#e8e3da] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
                           <span className={backtestLoading ? "inline-block animate-spin" : ""}>↻</span>
                           Refresh
@@ -2357,6 +2377,124 @@ export default function StrategyLabPage() {
                       )}
                     </div>
                   </Card>
+
+                  {/* ── Walk-Forward Validation (Phase 3) ── */}
+                  {bt.walkForward && (() => {
+                    const wf = bt.walkForward;
+                    const ins = wf.inSample;
+                    const oos = wf.outSample;
+                    const fmtPct = (v: number | null | undefined) =>
+                      v != null ? `${v >= 0 ? "+" : ""}${(v * 100).toFixed(1)}%` : "—";
+                    const fmtNum = (v: number | null | undefined, d = 2) =>
+                      v != null ? v.toFixed(d) : "—";
+
+                    const rows = [
+                      { label: "Ann. Return",  is: fmtPct(ins?.annReturn),  oos: fmtPct(oos?.annReturn) },
+                      { label: "Volatility",   is: fmtPct(ins?.vol),        oos: fmtPct(oos?.vol) },
+                      { label: "Sharpe",       is: fmtNum(ins?.sharpe),     oos: fmtNum(oos?.sharpe) },
+                      { label: "Max Drawdown", is: fmtPct(ins?.maxDD),      oos: fmtPct(oos?.maxDD) },
+                      { label: "Info. Ratio",  is: fmtNum(ins?.ir),         oos: fmtNum(oos?.ir) },
+                    ];
+
+                    return (
+                      <Card className="p-5">
+                        <SectionLabel>Walk-Forward Validation</SectionLabel>
+                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                          Dataset split at {wf.splitDate ?? "midpoint"} — in-sample used to frame the strategy, out-of-sample is blind performance
+                        </p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left">
+                            <thead>
+                              <tr className="border-b border-[#eee9df] bg-[#fbfaf7]">
+                                {["Metric", "In-Sample", "Out-of-Sample"].map(h => (
+                                  <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb]">{h}</th>
+                                ))}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map(row => (
+                                <tr key={row.label} className="border-b border-[#f5f2ed] last:border-0 hover:bg-[#fbfaf7]">
+                                  <td className="px-3 py-2 text-[10px] font-bold text-[#555]">{row.label}</td>
+                                  <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono text-[#0c1b38]">{row.is}</td>
+                                  <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono font-bold" style={{
+                                    color: row.oos === "—" ? "#bbb" : NAVY
+                                  }}>{row.oos}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                        <p className="mt-2 text-[9.5px] text-[#bbb]">
+                          {wf.startDate} → {wf.splitDate} in-sample &nbsp;·&nbsp; {wf.splitDate} → {wf.endDate} out-of-sample
+                        </p>
+                      </Card>
+                    );
+                  })()}
+
+                  {/* ── Factor Attribution (Phase 3) ── */}
+                  {bt.factorAttribution && bt.factorAttribution.length > 0 && (() => {
+                    const fa: Array<{ factor: string; etf: string; avgWeight: number; etfTotalRet: number | null; contribution: number | null }> = bt.factorAttribution;
+                    const maxContrib = Math.max(...fa.map(f => Math.abs(f.contribution ?? 0)), 0.001);
+
+                    return (
+                      <Card className="p-5">
+                        <SectionLabel>Factor Attribution</SectionLabel>
+                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                          Each factor ETF's contribution to strategy outperformance vs SPY — avgWeight × (ETF return − SPY return)
+                        </p>
+                        <div className="space-y-3">
+                          {[...fa].sort((a, b) => (b.contribution ?? 0) - (a.contribution ?? 0)).map(f => {
+                            const contrib = f.contribution ?? 0;
+                            const barWidth = Math.abs(contrib) / maxContrib * 100;
+                            const isPos = contrib >= 0;
+                            return (
+                              <div key={f.factor}>
+                                <div className="flex items-center justify-between mb-1">
+                                  <div className="flex items-center gap-2">
+                                    <span className="text-[10.5px] font-bold text-[#333] w-28">{f.factor}</span>
+                                    <span className="text-[9px] text-[#bbb] font-mono">{f.etf}</span>
+                                    <span className="text-[9px] text-[#bbb]">avg {(f.avgWeight * 100).toFixed(0)}% weight</span>
+                                  </div>
+                                  <div className="flex items-center gap-3 text-right">
+                                    <span className="text-[9.5px] text-[#777]">
+                                      ETF ret: {f.etfTotalRet != null ? `${f.etfTotalRet >= 0 ? "+" : ""}${(f.etfTotalRet * 100).toFixed(1)}%` : "—"}
+                                    </span>
+                                    <span className="text-[11px] font-bold tabular-nums w-16 text-right font-mono" style={{ color: isPos ? POSITIVE : NEGATIVE }}>
+                                      {contrib >= 0 ? "+" : ""}{(contrib * 100).toFixed(2)}%
+                                    </span>
+                                  </div>
+                                </div>
+                                <div className="flex items-center gap-1 h-4">
+                                  {isPos ? (
+                                    <>
+                                      <div className="w-1/2 flex justify-end">
+                                        <div className="h-3 bg-[#f5f2ed]" style={{ width: "100%" }} />
+                                      </div>
+                                      <div className="w-1/2">
+                                        <div className="h-3 rounded-sm" style={{ width: `${barWidth}%`, backgroundColor: POSITIVE }} />
+                                      </div>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <div className="w-1/2 flex justify-end">
+                                        <div className="h-3 rounded-sm" style={{ width: `${barWidth}%`, backgroundColor: NEGATIVE }} />
+                                      </div>
+                                      <div className="w-1/2">
+                                        <div className="h-3 bg-[#f5f2ed]" style={{ width: "100%" }} />
+                                      </div>
+                                    </>
+                                  )}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <p className="mt-3 text-[9.5px] text-[#bbb]">
+                          Positive bar = factor ETF outperformed SPY at that average weight · full backtest period
+                        </p>
+                      </Card>
+                    );
+                  })()}
 
                   {/* ── Strategy logic ── */}
                   <Card className="p-5">

@@ -12,8 +12,8 @@ import type { FactorScoreResult, PortfolioExposure, PortfolioPosition } from "@/
 export const dynamic  = "force-dynamic";
 export const maxDuration = 60;
 
-const FMP_KEY  = process.env.FMP_API_KEY ?? "";
-const FMP_BASE = "https://financialmodelingprep.com/stable";
+const FMP_KEY = process.env.FMP_API_KEY ?? "";
+const FMP_V3  = "https://financialmodelingprep.com/api/v3";
 
 // ── FMP helpers ───────────────────────────────────────────────────────────────
 
@@ -21,37 +21,42 @@ type FmpMetrics = {
   symbol:                       string;
   marketCapTTM:                 number;
   peRatioTTM:                   number;
-  earningsYieldTTM:             number;  // E/P ratio
-  freeCashFlowYieldTTM:         number;  // FCF / Market Cap
-  enterpriseValueOverEBITDATTM: number;  // EV/EBITDA
-  returnOnInvestedCapitalTTM:   number;  // ROIC
-  grossProfitMarginTTM:         number;  // Gross margin (quality proxy)
-  netDebtToEBITDATTM:           number;  // Net leverage
-  priceToBookRatioTTM:          number;
+  earningsYieldTTM:             number;
+  freeCashFlowYieldTTM:         number;
+  enterpriseValueOverEBITDATTM: number;
+  roicTTM:                      number;
+  grossProfitMarginTTM:         number;
+  netDebtToEBITDATTM:           number;
+  pbRatioTTM:                   number;
   roeTTM:                       number;
 };
 
 type FmpProfile = {
-  symbol:   string;
+  symbol:      string;
   companyName: string;
-  sector:   string;
-  price:    number;
-  mktCap:   number;
+  sector:      string;
+  price:       number;
+  mktCap:      number;
 };
 
-async function fetchFmpBatch<T>(endpoint: string, tickers: string[]): Promise<T[]> {
+async function fetchFmpProfiles(tickers: string[]): Promise<FmpProfile[]> {
   if (!FMP_KEY || !tickers.length) return [];
   try {
-    const sym = tickers.join(",");
-    const r   = await fetch(`${FMP_BASE}/${endpoint}?symbol=${sym}&apikey=${FMP_KEY}`, {
-      cache: "no-store",
-    });
+    const r = await fetch(`${FMP_V3}/profile/${tickers.join(",")}?apikey=${FMP_KEY}`, { cache: "no-store" });
     if (!r.ok) return [];
     const data = await r.json();
     return Array.isArray(data) ? data : [];
-  } catch {
-    return [];
-  }
+  } catch { return []; }
+}
+
+async function fetchFmpKeyMetricsOne(ticker: string): Promise<FmpMetrics | null> {
+  if (!FMP_KEY) return null;
+  try {
+    const r = await fetch(`${FMP_V3}/key-metrics-ttm/${ticker}?apikey=${FMP_KEY}`, { cache: "no-store" });
+    if (!r.ok) return null;
+    const data = await r.json();
+    return Array.isArray(data) && data.length > 0 ? { ...data[0], symbol: ticker } : null;
+  } catch { return null; }
 }
 
 // ── Price-based factor computations ──────────────────────────────────────────
@@ -133,10 +138,10 @@ export async function POST(req: NextRequest) {
   const tickers = holdings.map(h => h.ticker).filter(t => t !== "USD" && !t.includes("Crncy") && !t.includes("Cash"));
 
   // ── Fetch price data + FMP data in parallel ───────────────────────────────
-  const [priceMap, fmpMetricsRaw, fmpProfileRaw] = await Promise.all([
+  const [priceMap, fmpProfileRaw, fmpMetricsRaw] = await Promise.all([
     fetchAdjustedHistoryBatch([...tickers, "SPY"], "2y"),
-    fetchFmpBatch<FmpMetrics>("key-metrics-ttm", tickers),
-    fetchFmpBatch<FmpProfile>("profile", tickers),
+    fetchFmpProfiles(tickers),
+    Promise.all(tickers.map(t => fetchFmpKeyMetricsOne(t))).then(r => r.filter(Boolean) as FmpMetrics[]),
   ]);
 
   const spyBars  = priceMap.get("SPY") ?? [];
@@ -168,7 +173,7 @@ export async function POST(req: NextRequest) {
     const earningsYield = m?.earningsYieldTTM            ?? (m?.peRatioTTM && m.peRatioTTM > 0 ? 1 / m.peRatioTTM : null);
     const fcfYield      = m?.freeCashFlowYieldTTM        ?? null;
     const evEbitda      = m?.enterpriseValueOverEBITDATTM ?? null;  // raw EV/EBITDA (lower = better value)
-    const roic          = m?.returnOnInvestedCapitalTTM   ?? null;
+    const roic          = m?.roicTTM                       ?? null;
     const grossMargin   = m?.grossProfitMarginTTM         ?? null;
     const netLeverage   = m?.netDebtToEBITDATTM           ?? null;  // lower = better quality
     const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? 0;

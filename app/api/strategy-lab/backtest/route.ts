@@ -15,7 +15,7 @@
 //   IJR   iShares Core S&P Small-Cap ETF (Size proxy)
 //   SPY   S&P 500 benchmark
 
-import { NextResponse } from "next/server";
+import { NextRequest, NextResponse } from "next/server";
 import {
   DEFAULT_GROWTH_INDICATORS, DEFAULT_RISK_INDICATORS,
   mean, stdDev, zscore, winsorize,
@@ -217,7 +217,80 @@ function computeStats(
   };
 }
 
-export async function GET() {
+// Map factor names to their ETF proxy
+const FACTOR_ETF: Record<string, string> = {
+  Momentum: "MTUM", LowVolatility: "USMV", Value: "VLUE", Quality: "QUAL", Size: "IJR",
+};
+
+// Derive ETF weights from user's 0/1/2 allocation per regime
+function allocationToWeights(
+  allocation: Record<string, Record<string, number>>,
+): Record<RegimeLabel, Record<string, number>> {
+  const derived: Record<string, Record<string, number>> = {};
+  for (const regime of ["Recovery", "Expansion", "Slowdown", "Contraction"] as RegimeLabel[]) {
+    const row: Record<string, number> = {};
+    const alloc = allocation[regime] ?? {};
+    for (const [factor, etf] of Object.entries(FACTOR_ETF)) {
+      const v = alloc[factor] ?? 1;
+      row[etf] = v === 0 ? 0 : v === 1 ? 10 : 30;
+    }
+    const total = Object.values(row).reduce((s, v) => s + v, 0);
+    for (const etf of Object.keys(row)) {
+      row[etf] = total > 0 ? row[etf] / total : 0.2;
+    }
+    derived[regime] = row;
+  }
+  return derived as Record<RegimeLabel, Record<string, number>>;
+}
+
+// Walk-forward: compute stats for a slice of monthlyData
+function periodStats(months: { stratReturn: number; benchReturn: number }[]) {
+  if (months.length < 3) return null;
+  const strat = months.map(m => m.stratReturn);
+  const bench = months.map(m => m.benchReturn);
+  const n = strat.length;
+  const annFactor = 12 / n;
+  const totalStrat = strat.reduce((a, r) => a * (1 + r), 1) - 1;
+  const totalBench = bench.reduce((a, r) => a * (1 + r), 1) - 1;
+  const annReturn = Math.pow(1 + totalStrat, annFactor) - 1;
+  const annBench  = Math.pow(1 + totalBench, annFactor) - 1;
+  const avgR = strat.reduce((a, r) => a + r, 0) / n;
+  const varR = strat.reduce((a, r) => a + (r - avgR) ** 2, 0) / (n - 1);
+  const vol = Math.sqrt(varR * 12);
+  const sharpe = vol > 0 ? (annReturn - 0.04) / vol : 0;
+  let peak = 1, maxDD = 0, nav = 1;
+  for (const r of strat) {
+    nav *= (1 + r);
+    if (nav > peak) peak = nav;
+    const dd = (nav - peak) / peak;
+    if (dd < maxDD) maxDD = dd;
+  }
+  const excess = strat.map((r, i) => r - (bench[i] ?? 0));
+  const avgEx = excess.reduce((a, r) => a + r, 0) / n;
+  const trackErr = Math.sqrt(excess.reduce((a, r) => a + (r - avgEx) ** 2, 0) / (n - 1) * 12);
+  const ir = trackErr > 0 ? (annReturn - annBench) / trackErr : 0;
+  return {
+    annReturn: Math.round(annReturn * 1000) / 1000,
+    annBench:  Math.round(annBench  * 1000) / 1000,
+    vol:       Math.round(vol       * 1000) / 1000,
+    sharpe:    Math.round(sharpe    * 100)  / 100,
+    maxDD:     Math.round(maxDD     * 1000) / 1000,
+    ir:        Math.round(ir        * 100)  / 100,
+    nMonths:   n,
+  };
+}
+
+export async function GET(req: NextRequest) { return handler(req); }
+export async function POST(req: NextRequest) { return handler(req); }
+
+async function handler(req: NextRequest) {
+  // Accept optional custom allocation from POST body
+  let customAllocation: Record<string, Record<string, number>> | null = null;
+  try {
+    const body = await req.json().catch(() => null);
+    customAllocation = body?.allocation ?? null;
+  } catch { /* GET has no body */ }
+
   // 1 — Fetch monthly ETF prices (parallel)
   const barSets = await Promise.all(
     ETF_TICKERS.map(t => fetchMonthlyBars(t, 38).then(bars => [t, bars] as const))
@@ -268,6 +341,11 @@ export async function GET() {
     regimeSequence = demoRegimeSequence();
   }
 
+  // Determine which weights to use
+  const activeWeights = customAllocation
+    ? allocationToWeights(customAllocation)
+    : REGIME_WEIGHTS;
+
   // 3 — Build monthly backtest data
   // Strategy uses regime from prior month (implementation lag = 1 month)
   const monthlyData: {
@@ -289,7 +367,7 @@ export async function GET() {
     const { date, regime } = regimeSequence[i];
     // Use prior month's regime for implementation (lag 1 month)
     const activeRegime: RegimeLabel = i === 0 ? regime : regimeSequence[i - 1].regime;
-    const weights = REGIME_WEIGHTS[activeRegime];
+    const weights = activeWeights[activeRegime];
 
     // Compute weighted strategy return
     let stratR = 0;
@@ -349,13 +427,47 @@ export async function GET() {
     r.benchAvg = Math.round(r.benchAvg / r.count * 10000) / 10000;
   }
 
+  // 7 — Walk-forward validation (split at midpoint)
+  const mid = Math.floor(monthlyData.length / 2);
+  const walkForward = {
+    inSample:  periodStats(monthlyData.slice(0, mid)),
+    outSample: periodStats(monthlyData.slice(mid)),
+    splitDate: monthlyData[mid]?.date ?? null,
+    startDate: monthlyData[0]?.date ?? null,
+    endDate:   monthlyData[monthlyData.length - 1]?.date ?? null,
+  };
+
+  // 8 — Factor attribution (avg ETF weight × ETF total return vs SPY)
+  const spyBars  = prices["SPY"] ?? [];
+  const spyFirst = spyBars[0]?.close;
+  const spyLast  = spyBars[spyBars.length - 1]?.close;
+  const spyTotalRet = spyFirst && spyLast ? (spyLast / spyFirst - 1) : 0;
+  const factorAttribution = Object.entries(FACTOR_ETF).map(([factor, etf]) => {
+    const bars  = prices[etf] ?? [];
+    const first = bars[0]?.close;
+    const last  = bars[bars.length - 1]?.close;
+    const etfTotalRet = first && last ? (last / first - 1) : null;
+    const avgWeight = monthlyData.reduce((s, m) => s + (m.weights[etf] ?? 0), 0) / (monthlyData.length || 1);
+    const contribution = etfTotalRet != null ? avgWeight * (etfTotalRet - spyTotalRet) : null;
+    return {
+      factor,
+      etf,
+      avgWeight:    Math.round(avgWeight * 1000) / 1000,
+      etfTotalRet:  etfTotalRet != null ? Math.round(etfTotalRet * 1000) / 1000 : null,
+      contribution: contribution != null ? Math.round(contribution * 10000) / 10000 : null,
+    };
+  });
+
   return NextResponse.json({
     isDemo,
+    customAllocation: !!customAllocation,
     monthlyData,
     stats: stats ? { ...stats, regimeChanges } : null,
     regimeCounts,
     regimePerf,
-    regimeWeights: REGIME_WEIGHTS,
+    regimeWeights: activeWeights,
+    walkForward,
+    factorAttribution,
     etfLabels: {
       MTUM: "iShares Momentum (MTUM)",
       USMV: "iShares Min Vol (USMV)",
