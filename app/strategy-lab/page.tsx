@@ -2193,52 +2193,36 @@ export default function StrategyLabPage() {
 
                     {/* Strategy vs benchmark summary stats */}
                     {s && (
-                      <div className="grid grid-cols-6 gap-3 mb-5">
-                        {[
-                          {
-                            label: "Ann. Return",
-                            val: `${s.annStrat >= 0 ? "+" : ""}${(s.annStrat * 100).toFixed(1)}%`,
-                            sub: `SPX ${s.annBench >= 0 ? "+" : ""}${(s.annBench * 100).toFixed(1)}%`,
-                            color: s.annStrat > s.annBench ? POSITIVE : NEGATIVE,
-                          },
-                          {
-                            label: "Volatility",
-                            val: `${(s.vol * 100).toFixed(1)}%`,
-                            sub: "annualised",
-                            color: NAVY,
-                          },
-                          {
-                            label: "Sharpe Ratio",
-                            val: s.sharpe.toFixed(2),
-                            sub: "rf = 4%",
-                            color: s.sharpe >= 0.5 ? POSITIVE : s.sharpe >= 0 ? NAVY : NEGATIVE,
-                          },
-                          {
-                            label: "Max Drawdown",
-                            val: `${(s.maxDD * 100).toFixed(1)}%`,
-                            sub: "peak-to-trough",
-                            color: NEGATIVE,
-                          },
-                          {
-                            label: "Info. Ratio",
-                            val: s.ir.toFixed(2),
-                            sub: "vs SPX",
-                            color: s.ir > 0 ? POSITIVE : NEGATIVE,
-                          },
-                          {
-                            label: "Regime Shifts",
-                            val: String(s.regimeChanges),
-                            sub: `${months.length} months`,
-                            color: NAVY,
-                          },
-                        ].map(({ label, val, sub, color }) => (
-                          <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
-                            <MiniLabel>{label}</MiniLabel>
-                            <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
-                            <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
-                          </div>
-                        ))}
-                      </div>
+                      <>
+                        <div className="grid grid-cols-4 gap-3 mb-3">
+                          {[
+                            { label: "Ann. Return",  val: `${s.annStrat >= 0 ? "+" : ""}${(s.annStrat * 100).toFixed(1)}%`, sub: `SPX ${s.annBench >= 0 ? "+" : ""}${(s.annBench * 100).toFixed(1)}%`, color: s.annStrat > s.annBench ? POSITIVE : NEGATIVE },
+                            { label: "Volatility",   val: `${(s.vol * 100).toFixed(1)}%`, sub: "annualised", color: NAVY },
+                            { label: "Sharpe Ratio", val: s.sharpe.toFixed(2), sub: "rf = 4%", color: s.sharpe >= 0.5 ? POSITIVE : s.sharpe >= 0 ? NAVY : NEGATIVE },
+                            { label: "Sortino Ratio", val: s.sortino != null ? s.sortino.toFixed(2) : "—", sub: "downside dev", color: (s.sortino ?? 0) >= 0.7 ? POSITIVE : (s.sortino ?? 0) >= 0 ? NAVY : NEGATIVE },
+                          ].map(({ label, val, sub, color }) => (
+                            <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                              <MiniLabel>{label}</MiniLabel>
+                              <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
+                              <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="grid grid-cols-4 gap-3 mb-5">
+                          {[
+                            { label: "Max Drawdown", val: `${(s.maxDD * 100).toFixed(1)}%`, sub: "peak-to-trough", color: NEGATIVE },
+                            { label: "Calmar Ratio",  val: s.calmar != null ? s.calmar.toFixed(2) : "—", sub: "ret / |maxDD|", color: (s.calmar ?? 0) >= 0.5 ? POSITIVE : (s.calmar ?? 0) >= 0 ? NAVY : NEGATIVE },
+                            { label: "Info. Ratio",   val: s.ir.toFixed(2), sub: `t=${s.irTStat != null ? s.irTStat.toFixed(1) : "—"} vs SPX`, color: s.ir > 0 ? POSITIVE : NEGATIVE },
+                            { label: "Up/Down Cap.",  val: s.upCapture != null ? `${(s.upCapture * 100).toFixed(0)}/${(s.downCapture * 100).toFixed(0)}` : "—", sub: "up% / down%", color: (s.upCapture ?? 1) > 1 || (s.downCapture ?? 1) < 1 ? POSITIVE : NAVY },
+                          ].map(({ label, val, sub, color }) => (
+                            <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                              <MiniLabel>{label}</MiniLabel>
+                              <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
+                              <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                            </div>
+                          ))}
+                        </div>
+                      </>
                     )}
 
                     {/* Equity curve */}
@@ -2269,9 +2253,49 @@ export default function StrategyLabPage() {
                       </div>
                     </div>
                     <p className="text-[9.5px] text-[#bbb] mt-1">
-                      {bt.dataNote} · Factor ETF prices: Yahoo Finance (split/dividend-adjusted). Transaction costs not deducted.
+                      {bt.dataNote} · Factor ETF prices: Yahoo Finance (split/dividend-adjusted). 10bps transaction cost deducted on regime switches.
                     </p>
                   </Card>
+
+                  {/* ── Drawdown chart ── */}
+                  {bt.drawdownSeries && bt.drawdownSeries.length > 0 && (
+                    <Card className="p-5">
+                      <SectionLabel>Drawdown Profile</SectionLabel>
+                      <p className="mt-1 mb-3 text-[10.5px] text-[#bbb]">Peak-to-trough underwater curve — strategy NAV vs rolling maximum</p>
+                      <div className="h-[140px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <AreaChart data={bt.drawdownSeries} margin={{ top: 4, right: 8, bottom: 0, left: -5 }}>
+                            <CartesianGrid stroke="#eee9df" vertical={false} />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} interval="preserveStartEnd" />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} domain={["auto", 0]} />
+                            <Tooltip contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }} formatter={(v: unknown) => [`${typeof v === "number" ? (v * 100).toFixed(2) : v}%`, "Drawdown"]} />
+                            <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke={NEGATIVE} fill={NEGATIVE} fillOpacity={0.15} strokeWidth={1.5} dot={false} />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Card>
+                  )}
+
+                  {/* ── Rolling 12M returns ── */}
+                  {bt.rolling12M && bt.rolling12M.length > 0 && (
+                    <Card className="p-5">
+                      <SectionLabel>Rolling 12-Month Returns</SectionLabel>
+                      <p className="mt-1 mb-3 text-[10.5px] text-[#bbb]">Trailing 1-year return each month — strategy vs S&P 500</p>
+                      <div className="h-[140px]">
+                        <ResponsiveContainer width="100%" height="100%">
+                          <LineChart data={bt.rolling12M} margin={{ top: 4, right: 8, bottom: 0, left: -5 }}>
+                            <CartesianGrid stroke="#eee9df" vertical={false} />
+                            <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} interval="preserveStartEnd" />
+                            <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} />
+                            <Tooltip contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }} formatter={(v: unknown) => [`${typeof v === "number" ? (v * 100).toFixed(1) : v}%`]} />
+                            <ReferenceLine y={0} stroke="#ccc" strokeDasharray="3 3" />
+                            <Line type="monotone" dataKey="stratRoll" name="Strategy" stroke={NAVY} strokeWidth={2} dot={false} />
+                            <Line type="monotone" dataKey="benchRoll" name="S&P 500" stroke={POSITIVE} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
+                          </LineChart>
+                        </ResponsiveContainer>
+                      </div>
+                    </Card>
+                  )}
 
                   {/* ── Regime performance attribution ── */}
                   <Card className="p-5">
@@ -2329,6 +2353,55 @@ export default function StrategyLabPage() {
                       })}
                     </div>
                   </Card>
+
+                  {/* ── Regime transition matrix ── */}
+                  {bt.transitionMatrix && (
+                    <Card className="p-5">
+                      <SectionLabel>Regime Transition Matrix</SectionLabel>
+                      <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                        Empirical probability of transitioning from one regime to another the following month
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="text-center text-[10px]">
+                          <thead>
+                            <tr className="border-b border-[#eee9df]">
+                              <th className="px-3 py-2 text-left text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb] w-28">From ↓ / To →</th>
+                              {(["Recovery","Expansion","Slowdown","Contraction"] as const).map(r => (
+                                <th key={r} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em]" style={{ color: { Recovery:"#b7791f", Expansion:"#147a4f", Slowdown:"#d97706", Contraction:"#b42318" }[r] }}>{r}</th>
+                              ))}
+                              <th className="px-3 py-2 text-[8.5px] text-[#bbb]">Avg dur.</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {(["Recovery","Expansion","Slowdown","Contraction"] as const).map(fromR => {
+                              const row = (bt.transitionMatrix as Record<string, Record<string, number>>)?.[fromR] ?? {};
+                              const COLOR: Record<string, string> = { Recovery:"#b7791f", Expansion:"#147a4f", Slowdown:"#d97706", Contraction:"#b42318" };
+                              const allVals = (["Recovery","Expansion","Slowdown","Contraction"] as const).map(r2 => row[r2] ?? 0);
+                              const maxVal = Math.max(...allVals);
+                              return (
+                                <tr key={fromR} className="border-b border-[#f5f2ed] last:border-0">
+                                  <td className="px-3 py-2 text-left font-bold text-[9.5px]" style={{ color: COLOR[fromR] }}>{fromR}</td>
+                                  {(["Recovery","Expansion","Slowdown","Contraction"] as const).map(toR => {
+                                    const p = row[toR] ?? 0;
+                                    const isHighest = p === maxVal && p > 0;
+                                    return (
+                                      <td key={toR} className="px-3 py-2 tabular-nums font-mono" style={{ fontWeight: isHighest ? 700 : 400, color: fromR === toR ? "#555" : "#999" }}>
+                                        {p > 0 ? `${Math.round(p * 100)}%` : "—"}
+                                      </td>
+                                    );
+                                  })}
+                                  <td className="px-3 py-2 text-[9px] text-[#bbb]">
+                                    {(bt.avgDurationByRegime as Record<string, number>)?.[fromR] != null ? `${(bt.avgDurationByRegime as Record<string, number>)[fromR]}mo` : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                      <p className="mt-2 text-[9.5px] text-[#bbb]">Bold = most likely next state · Diagonal = regime persistence probability</p>
+                    </Card>
+                  )}
 
                   {/* ── Monthly returns table ── */}
                   <Card className="p-5">
@@ -2552,21 +2625,21 @@ export default function StrategyLabPage() {
               </p>
               <div className="space-y-2">
                 {[
-                  { cat: "Macro Data",    item: "Point-in-time vintage macro data",           status: "blocked",  note: "Currently using FRED revised history. Phase 3: ALFRED or FRED vintage API." },
-                  { cat: "Macro Data",    item: "Expanding-window z-score normalisation",     status: "blocked",  note: "Currently using 36-month in-sample window. Phase 3: anchored start from 1990." },
-                  { cat: "Macro Data",    item: "Publication lag enforcement",                status: "partial",  note: "Lags documented per indicator. Not yet enforced in composite computation." },
-                  { cat: "Universe",      item: "Survivorship bias — delisted securities",    status: "blocked",  note: "Current universe: S&P 500 live constituents only. Phase 3: CRSP/Compustat historical." },
-                  { cat: "Universe",      item: "Benchmark constituent history",              status: "blocked",  note: "S&P 500 membership changes over time. Currently not tracked." },
-                  { cat: "Fundamentals",  item: "As-reported vs revised fundamental data",    status: "blocked",  note: "Phase 3: Compustat point-in-time fundamental data." },
-                  { cat: "Fundamentals",  item: "Earnings report lag (45-day rule)",          status: "partial",  note: "Rule defined; not yet enforced in scoring." },
-                  { cat: "Construction",  item: "Corporate actions (splits, mergers, spin-offs)", status: "blocked", note: "Requires adjusted price history from Compustat/CRSP." },
-                  { cat: "Backtest",      item: "Transaction cost modelling",                 status: "partial",  note: "10bps round-trip hardcoded. Phase 3: bid-ask spread + market impact." },
-                  { cat: "Backtest",      item: "Walk-forward out-of-sample testing",         status: "blocked",  note: "Phase 3 deliverable." },
-                  { cat: "Backtest",      item: "Multiple-testing risk adjustment",           status: "pending",  note: "Phase 3: Bonferroni / FDR correction across parameter sweep." },
-                  { cat: "Backtest",      item: "Parameter sensitivity analysis",             status: "pending",  note: "Phase 3: grid search over tilt intensity, window lengths, thresholds." },
-                  { cat: "Factor",        item: "Factor correlation monitoring",              status: "partial",  note: "Factor definitions reviewed for overlap; real-time correlation not computed." },
-                  { cat: "Factor",        item: "Factor crowding / crash risk",               status: "pending",  note: "Phase 2: AQR-style crowding score from pairwise factor beta." },
-                  { cat: "Regime",        item: "Regime circularity (risk appetite composite)",status: "complete", note: "Documented and warned in Regime Engine tab. Risk appetite used as modifier only." },
+                  { cat: "Macro Data",    item: "Point-in-time vintage macro data",           status: "partial",  note: "Publication lags now enforced per indicator (0–1 month). FRED revised series still used — ALFRED vintage API would eliminate revision look-ahead. Meaningful but incomplete fix." },
+                  { cat: "Macro Data",    item: "Expanding-window z-score normalisation",     status: "complete", note: "Implemented: z-scores anchored from first available observation per indicator, expanded forward with each new month. No future normalization data leakage." },
+                  { cat: "Macro Data",    item: "Publication lag enforcement",                status: "complete", note: "Implemented: each FRED indicator is shifted back by lagMonths before use in historical regime classification. INDPRO (1mo lag) uses T-1 data when classifying month T." },
+                  { cat: "Universe",      item: "Survivorship bias — delisted securities",    status: "blocked",  note: "Current universe: S&P 500 live constituents only. Requires CRSP/Compustat historical membership data. Institutional data dependency." },
+                  { cat: "Universe",      item: "Benchmark constituent history",              status: "blocked",  note: "S&P 500 membership changes over time not tracked. Requires historical index composition data from S&P or CRSP." },
+                  { cat: "Fundamentals",  item: "As-reported vs revised fundamental data",    status: "blocked",  note: "FMP TTM data reflects latest reported figures. Point-in-time as-reported data requires Compustat. Institutional data dependency." },
+                  { cat: "Fundamentals",  item: "Earnings report lag (45-day rule)",          status: "partial",  note: "Rule defined in methodology. Factor scoring uses TTM FMP data which inherently reflects filings, but exact 45-day delay not enforced per ticker." },
+                  { cat: "Construction",  item: "Corporate actions (splits, mergers, spin-offs)", status: "partial", note: "Price history uses Yahoo Finance adjusted closes (split/dividend-adjusted). Merger survivorship not handled — positions in acquired companies persist post-deal." },
+                  { cat: "Backtest",      item: "Transaction cost modelling",                 status: "complete", note: "10bps round-trip deducted on every full portfolio rotation (regime switch). Net-of-cost returns shown in all performance charts and statistics." },
+                  { cat: "Backtest",      item: "Walk-forward out-of-sample testing",         status: "complete", note: "Dataset split at midpoint. Separate in-sample and out-of-sample stats shown in Walk-Forward Validation card. OOS IR and Sharpe quantify true predictive validity." },
+                  { cat: "Backtest",      item: "Multiple-testing risk adjustment",           status: "partial",  note: "IR t-statistic shown (IR × √(N/12)). Indicates statistical significance of alpha. Full Bonferroni/FDR across parameter sweep: Phase 4." },
+                  { cat: "Backtest",      item: "Parameter sensitivity analysis",             status: "pending",  note: "Phase 4: grid search over tilt intensity (0/1/2 mapping), window lengths, and composite thresholds to characterise overfitting risk." },
+                  { cat: "Factor",        item: "Factor correlation monitoring",              status: "partial",  note: "Factor z-scores computed independently from separate datasets (price vs FMP fundamentals). Cross-sectional pairwise correlation matrix: Phase 4." },
+                  { cat: "Factor",        item: "Factor crowding / crash risk",               status: "pending",  note: "Phase 4: AQR-style crowding score from pairwise factor beta across universe stock positions." },
+                  { cat: "Regime",        item: "Regime circularity (risk appetite composite)",status: "complete", note: "Documented and warned in Regime Engine tab. Risk appetite composite uses VIX, HY spreads, and equity momentum — all inputs to regime classifier, not outputs." },
                 ].map(({ cat, item, status, note }) => (
                   <div key={item} className={`flex items-start gap-3 border border-[#eee9df] px-4 py-3 ${status === "blocked" ? "bg-[#fff9f9]" : status === "complete" ? "bg-[#f9fdf9]" : "bg-[#fbfaf7]"}`}>
                     <StatusDot status={status as ReadinessGate["status"]} />

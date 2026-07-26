@@ -38,6 +38,13 @@ const REGIME_WEIGHTS: Record<RegimeLabel, Record<string, number>> = {
 
 const ETF_TICKERS = ["SPY", "MTUM", "USMV", "VLUE", "QUAL", "IJR"] as const;
 
+// ── Date helper ───────────────────────────────────────────────────────────────
+function subtractMonths(dateStr: string, n: number): string {
+  const [y, m] = dateStr.split("-").map(Number);
+  const d = new Date(y, m - 1 - n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // ── Fetch monthly OHLCV bars from Yahoo Finance v8 (no auth required) ────────
 async function fetchMonthlyBars(
   ticker: string,
@@ -88,7 +95,7 @@ function toMonthlyReturns(bars: { date: string; close: number }[]): Map<string, 
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const KEY = process.env.FRED_API_KEY;
 
-async function fredMonthly(id: string, limit = 38): Promise<{ date: string; value: number }[]> {
+async function fredMonthly(id: string, limit = 60): Promise<{ date: string; value: number }[]> {
   if (!KEY) return [];
   try {
     const url =
@@ -107,45 +114,6 @@ async function fredMonthly(id: string, limit = 38): Promise<{ date: string; valu
   } catch {
     return [];
   }
-}
-
-function buildReading(
-  indicator: (typeof DEFAULT_GROWTH_INDICATORS)[0],
-  series: { date: string; value: number }[],
-): IndicatorReading {
-  if (series.length < 2) {
-    return {
-      id: indicator.id, name: indicator.name,
-      latestValue: null, latestDate: "—", previousValue: null, change: null,
-      zscore: null, contribution: null,
-      direction: indicator.direction, weight: indicator.weight, enabled: indicator.enabled,
-      stdDev: null, mean: null,
-    };
-  }
-  let values: number[];
-  if (indicator.transform === "mom3" && series.length >= 4)
-    values = series.slice(3).map((p, i) => p.value - series[i].value);
-  else if (indicator.transform === "yoy" && series.length >= 13)
-    values = series.slice(12).map((p, i) => p.value - series[i].value);
-  else
-    values = series.map(p => p.value);
-
-  const w = winsorize(values, 0.02);
-  const mu = mean(w);
-  const sig = stdDev(w, mu);
-  const latest = values[values.length - 1];
-  const z = zscore(latest, mu, sig);
-  return {
-    id: indicator.id, name: indicator.name,
-    latestValue: Math.round(series[series.length - 1].value * 100) / 100,
-    latestDate: series[series.length - 1].date,
-    previousValue: series[series.length - 2].value,
-    change: Math.round((series[series.length - 1].value - series[series.length - 2].value) * 1000) / 1000,
-    zscore: Math.round(z * 100) / 100,
-    contribution: Math.round(z * indicator.direction * indicator.weight * 100) / 100,
-    direction: indicator.direction, weight: indicator.weight, enabled: indicator.enabled,
-    stdDev: Math.round(sig * 1000) / 1000, mean: Math.round(mu * 1000) / 1000,
-  };
 }
 
 // ── Demo regime sequence (24 months ending today) ────────────────────────────
@@ -187,6 +155,11 @@ function computeStats(
   const vol   = Math.sqrt(varR * 12);
   const sharpe = vol > 0 ? (annStrat - 0.04) / vol : 0;
 
+  // Sortino: downside deviation using only negative excess returns
+  const downsideVars = stratReturns.map(r => Math.pow(Math.min(r - rfMonthly, 0), 2));
+  const downsideDev  = Math.sqrt(downsideVars.reduce((s, v) => s + v, 0) / n * 12);
+  const sortino      = downsideDev > 0 ? (annStrat - 0.04) / downsideDev : 0;
+
   // Max drawdown
   let peak = 1, maxDD = 0, nav = 1;
   for (const r of stratReturns) {
@@ -196,24 +169,42 @@ function computeStats(
     if (dd < maxDD) maxDD = dd;
   }
 
+  // Calmar ratio
+  const calmar = maxDD !== 0 ? annStrat / Math.abs(maxDD) : 0;
+
   // Information ratio
   const excess   = stratReturns.map((r, i) => r - (benchReturns[i] ?? 0));
   const avgEx    = excess.reduce((a, r) => a + r, 0) / n;
   const trackErr = Math.sqrt(excess.reduce((a, r) => a + (r - avgEx) ** 2, 0) / (n - 1) * 12);
   const ir       = trackErr > 0 ? (annStrat - annBench) / trackErr : 0;
 
-  // Turnover (regime changes = full portfolio switch)
-  const regimeChanges = 0; // computed separately
+  // T-stat for IR (IR × √(N/12)) — tests if alpha is significantly non-zero
+  const irTStat = ir * Math.sqrt(n / 12);
+
+  // Up/down capture ratios
+  const upMonths   = benchReturns.map((b, i) => b > 0 ? [stratReturns[i], b] as [number, number] : null).filter(Boolean) as [number, number][];
+  const downMonths = benchReturns.map((b, i) => b < 0 ? [stratReturns[i], b] as [number, number] : null).filter(Boolean) as [number, number][];
+  const upCapture   = upMonths.length   ? (upMonths.reduce((s, [sr]) => s + sr, 0)   / upMonths.length)   / (upMonths.reduce((s, [, br]) => s + br, 0)   / upMonths.length)   : 1;
+  const downCapture = downMonths.length ? (downMonths.reduce((s, [sr]) => s + sr, 0) / downMonths.length) / (downMonths.reduce((s, [, br]) => s + br, 0) / downMonths.length) : 1;
+
+  // % of months strategy beat benchmark
+  const pctPositive = stratReturns.filter(r => r > 0).length / n;
 
   return {
-    annStrat:   Math.round(annStrat * 1000) / 1000,
-    annBench:   Math.round(annBench * 1000) / 1000,
-    vol:        Math.round(vol * 1000) / 1000,
-    sharpe:     Math.round(sharpe * 100) / 100,
-    maxDD:      Math.round(maxDD * 1000) / 1000,
-    ir:         Math.round(ir * 100) / 100,
-    nMonths:    n,
-    regimeChanges,
+    annStrat:     Math.round(annStrat    * 1000) / 1000,
+    annBench:     Math.round(annBench    * 1000) / 1000,
+    vol:          Math.round(vol         * 1000) / 1000,
+    sharpe:       Math.round(sharpe      * 100)  / 100,
+    sortino:      Math.round(sortino     * 100)  / 100,
+    calmar:       Math.round(calmar      * 100)  / 100,
+    maxDD:        Math.round(maxDD       * 1000) / 1000,
+    ir:           Math.round(ir          * 100)  / 100,
+    irTStat:      Math.round(irTStat     * 100)  / 100,
+    upCapture:    Math.round(upCapture   * 100)  / 100,
+    downCapture:  Math.round(downCapture * 100)  / 100,
+    pctPositive:  Math.round(pctPositive * 100)  / 100,
+    nMonths:      n,
+    regimeChanges: 0, // computed separately
   };
 }
 
@@ -314,28 +305,56 @@ async function handler(req: NextRequest) {
       ...DEFAULT_RISK_INDICATORS.map(i => i.fredSeries),
     ])];
     const fetched = await Promise.all(
-      allIds.map(id => fredMonthly(id, 38).then(data => [id, data] as const))
+      allIds.map(id => fredMonthly(id, 60).then(data => [id, data] as const))
     );
     const seriesMap = Object.fromEntries(fetched);
 
-    const monthLabels = seriesMap[DEFAULT_GROWTH_INDICATORS[0].fredSeries]?.map(p => p.date) ?? [];
-    regimeSequence = monthLabels.slice(-24).map(date => {
+    const refSeries = seriesMap[DEFAULT_GROWTH_INDICATORS[0].fredSeries] ?? [];
+    const allMonthLabels = refSeries.map(p => p.date);
+
+    // Compute composite for each month with publication lags + expanding-window z-score.
+    // This eliminates the two look-ahead biases: future normalization data and
+    // data that was not yet published at the time of the signal.
+    const compositeHistory: { date: string; composite: number }[] = [];
+    for (let t = 0; t < allMonthLabels.length; t++) {
+      const date = allMonthLabels[t];
       const readings: IndicatorReading[] = DEFAULT_GROWTH_INDICATORS.map(ind => {
         const series = seriesMap[ind.fredSeries] ?? [];
-        const point  = series.find(p => p.date === date);
-        const allVals = series.map(p => p.value);
-        const mu  = mean(allVals);
-        const sig = stdDev(allVals, mu);
-        const val = point?.value ?? null;
-        const z   = val != null ? zscore(val, mu, sig) : null;
-        return { id: ind.id, name: ind.name, latestValue: val, latestDate: date, previousValue: null,
-          change: null, zscore: z, contribution: null, direction: ind.direction,
-          weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
+        // Publication lag: data for month D is available only at D + lagMonths
+        const availThrough = subtractMonths(date, ind.lagMonths);
+        // Expanding window: only use observations available at signal time
+        const avail = series.filter(p => p.date <= availThrough);
+        if (avail.length < 3) {
+          return { id: ind.id, name: ind.name, latestValue: null, latestDate: date, previousValue: null, change: null, zscore: null, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: null, mean: null };
+        }
+        let transformed: number[];
+        if (ind.transform === "mom3" && avail.length >= 4)
+          transformed = avail.slice(3).map((p, i) => p.value - avail[i].value);
+        else if (ind.transform === "yoy" && avail.length >= 13)
+          transformed = avail.slice(12).map((p, i) => p.value - avail[i].value);
+        else
+          transformed = avail.map(p => p.value);
+        if (!transformed.length) {
+          return { id: ind.id, name: ind.name, latestValue: null, latestDate: date, previousValue: null, change: null, zscore: null, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: null, mean: null };
+        }
+        const w   = winsorize(transformed, 0.02);
+        const mu  = mean(w);
+        const sig = stdDev(w, mu);
+        const z   = zscore(transformed[transformed.length - 1], mu, sig);
+        return { id: ind.id, name: ind.name, latestValue: avail[avail.length - 1].value, latestDate: date, previousValue: null, change: null, zscore: z, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
       });
-      const g   = computeComposite(readings) ?? 0;
-      const lvl = g >= 0 ? "above" as const : "below" as const;
-      // Simplified direction for history — use 0 as decelerating default
-      return { date, regime: classifyRegimeHard(lvl, "decelerating") };
+      const composite = computeComposite(readings);
+      if (composite != null) compositeHistory.push({ date, composite });
+    }
+
+    // Build regime sequence with proper direction from 3-month momentum on composite.
+    // Critical fix: direction was previously hardcoded "decelerating", which caused
+    // Expansion and Recovery to never appear in the backtest.
+    regimeSequence = compositeHistory.slice(-26).map(({ date, composite }, i, arr) => {
+      const lvl = composite >= 0 ? "above" as const : "below" as const;
+      let dir: "accelerating" | "decelerating" = "decelerating";
+      if (i >= 3) dir = composite > arr[i - 3].composite ? "accelerating" : "decelerating";
+      return { date, regime: classifyRegimeHard(lvl, dir) };
     });
   } else {
     regimeSequence = demoRegimeSequence();
@@ -387,11 +406,14 @@ async function handler(req: NextRequest) {
     // Skip months with no data at all
     if (returns["SPY"]?.get(date) == null) continue;
 
+    if (prevRegime && prevRegime !== activeRegime) {
+      regimeChanges++;
+      stratR -= 0.001; // 10bps transaction cost on full portfolio rotation
+    }
+    prevRegime = activeRegime;
+
     stratNav = stratNav * (1 + stratR);
     benchNav = benchNav * (1 + benchR);
-
-    if (prevRegime && prevRegime !== activeRegime) regimeChanges++;
-    prevRegime = activeRegime;
 
     monthlyData.push({
       date, regime: activeRegime,
@@ -427,7 +449,71 @@ async function handler(req: NextRequest) {
     r.benchAvg = Math.round(r.benchAvg / r.count * 10000) / 10000;
   }
 
-  // 7 — Walk-forward validation (split at midpoint)
+  // 7 — Drawdown time series
+  let ddPeak = monthlyData[0]?.stratNav ?? 100;
+  const drawdownSeries = monthlyData.map(m => {
+    if (m.stratNav > ddPeak) ddPeak = m.stratNav;
+    const dd = (m.stratNav - ddPeak) / ddPeak;
+    return { date: m.date, drawdown: Math.round(dd * 10000) / 10000 };
+  });
+
+  // 8 — Rolling 12-month returns
+  const rolling12M = monthlyData.slice(12).map((m, i) => {
+    const prev = monthlyData[i]; // 12 months ago
+    const stratRoll = m.stratNav / prev.stratNav - 1;
+    const benchRoll = m.benchNav / prev.benchNav - 1;
+    return {
+      date: m.date,
+      stratRoll: Math.round(stratRoll * 1000) / 1000,
+      benchRoll: Math.round(benchRoll * 1000) / 1000,
+    };
+  });
+
+  // 9 — Regime duration analysis
+  const regimeDurations: { regime: RegimeLabel; start: string; end: string; months: number }[] = [];
+  let runStart = 0;
+  for (let i = 1; i <= monthlyData.length; i++) {
+    if (i === monthlyData.length || monthlyData[i].regime !== monthlyData[runStart].regime) {
+      regimeDurations.push({
+        regime: monthlyData[runStart].regime,
+        start:  monthlyData[runStart].date,
+        end:    monthlyData[i - 1].date,
+        months: i - runStart,
+      });
+      runStart = i;
+    }
+  }
+
+  // 10 — Regime transition matrix
+  const REGIMES: RegimeLabel[] = ["Recovery", "Expansion", "Slowdown", "Contraction"];
+  const transitionMatrix: Record<string, Record<string, number>> = {};
+  for (const r of REGIMES) {
+    transitionMatrix[r] = {};
+    for (const r2 of REGIMES) transitionMatrix[r][r2] = 0;
+  }
+  for (let i = 1; i < monthlyData.length; i++) {
+    const from = monthlyData[i - 1].regime;
+    const to   = monthlyData[i].regime;
+    transitionMatrix[from][to] = (transitionMatrix[from][to] ?? 0) + 1;
+  }
+  // Normalize rows to probabilities
+  for (const row of Object.values(transitionMatrix)) {
+    const total = Object.values(row).reduce((s, v) => s + v, 0);
+    if (total > 0) for (const k of Object.keys(row)) row[k] = Math.round(row[k] / total * 100) / 100;
+  }
+
+  // Average duration by regime
+  const avgDurationByRegime: Record<string, number> = {};
+  const regimeRuns: Record<string, number[]> = {};
+  for (const dur of regimeDurations) {
+    if (!regimeRuns[dur.regime]) regimeRuns[dur.regime] = [];
+    regimeRuns[dur.regime].push(dur.months);
+  }
+  for (const [regime, runs] of Object.entries(regimeRuns)) {
+    avgDurationByRegime[regime] = Math.round(runs.reduce((s, v) => s + v, 0) / runs.length * 10) / 10;
+  }
+
+  // 11 — Walk-forward validation (split at midpoint)
   const mid = Math.floor(monthlyData.length / 2);
   const walkForward = {
     inSample:  periodStats(monthlyData.slice(0, mid)),
@@ -437,7 +523,7 @@ async function handler(req: NextRequest) {
     endDate:   monthlyData[monthlyData.length - 1]?.date ?? null,
   };
 
-  // 8 — Factor attribution (avg ETF weight × ETF total return vs SPY)
+  // 12 — Factor attribution (avg ETF weight × ETF total return vs SPY)
   const spyBars  = prices["SPY"] ?? [];
   const spyFirst = spyBars[0]?.close;
   const spyLast  = spyBars[spyBars.length - 1]?.close;
@@ -466,6 +552,11 @@ async function handler(req: NextRequest) {
     regimeCounts,
     regimePerf,
     regimeWeights: activeWeights,
+    drawdownSeries,
+    rolling12M,
+    regimeDurations: regimeDurations.slice(-20),
+    transitionMatrix,
+    avgDurationByRegime,
     walkForward,
     factorAttribution,
     etfLabels: {
@@ -478,6 +569,6 @@ async function handler(req: NextRequest) {
     },
     dataNote: isDemo
       ? "Regime sequence is illustrative. ETF price history is real (Yahoo Finance)."
-      : "Regime sequence from live FRED data. ETF price history from Yahoo Finance.",
+      : "Regime sequence from live FRED data with publication lags enforced. ETF prices: Yahoo Finance.",
   });
 }
