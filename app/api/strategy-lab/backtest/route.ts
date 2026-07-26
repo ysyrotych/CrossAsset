@@ -284,7 +284,7 @@ async function handler(req: NextRequest) {
 
   // 1 — Fetch monthly ETF prices (parallel)
   const barSets = await Promise.all(
-    ETF_TICKERS.map(t => fetchMonthlyBars(t, 38).then(bars => [t, bars] as const))
+    ETF_TICKERS.map(t => fetchMonthlyBars(t, 72).then(bars => [t, bars] as const))
   );
   const prices = Object.fromEntries(barSets) as Record<string, { date: string; close: number }[]>;
 
@@ -305,7 +305,7 @@ async function handler(req: NextRequest) {
       ...DEFAULT_RISK_INDICATORS.map(i => i.fredSeries),
     ])];
     const fetched = await Promise.all(
-      allIds.map(id => fredMonthly(id, 60).then(data => [id, data] as const))
+      allIds.map(id => fredMonthly(id, 72).then(data => [id, data] as const))
     );
     const seriesMap = Object.fromEntries(fetched);
 
@@ -350,7 +350,7 @@ async function handler(req: NextRequest) {
     // Build regime sequence with proper direction from 3-month momentum on composite.
     // Critical fix: direction was previously hardcoded "decelerating", which caused
     // Expansion and Recovery to never appear in the backtest.
-    regimeSequence = compositeHistory.slice(-26).map(({ date, composite }, i, arr) => {
+    regimeSequence = compositeHistory.map(({ date, composite }, i, arr) => {
       const lvl = composite >= 0 ? "above" as const : "below" as const;
       let dir: "accelerating" | "decelerating" = "decelerating";
       if (i >= 3) dir = composite > arr[i - 3].composite ? "accelerating" : "decelerating";

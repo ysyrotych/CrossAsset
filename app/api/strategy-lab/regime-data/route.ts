@@ -216,7 +216,7 @@ export async function GET() {
   const uniqueIds = [...new Set(seriesIds)];
 
   const fetched = await Promise.all(
-    uniqueIds.map(id => fredMonthly(id, 36).then(data => [id, data] as const))
+    uniqueIds.map(id => fredMonthly(id, 60).then(data => [id, data] as const))
   );
   const seriesMap = Object.fromEntries(fetched);
 

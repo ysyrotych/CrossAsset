@@ -2246,10 +2246,33 @@ export default function StrategyLabPage() {
                               contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }}
                               formatter={(v: unknown) => [`${typeof v === "number" ? v.toFixed(1) : v}`]}
                             />
+                            {/* Regime background shading */}
+                            {(() => {
+                              const RFILL: Record<string, string> = { Recovery: "#dbeafe", Expansion: "#d1fae5", Slowdown: "#fef3c7", Contraction: "#fee2e2" };
+                              const periods: { x1: string; x2: string; regime: string }[] = [];
+                              let cur = months[0]?.regime; let st = months[0]?.date;
+                              for (let i = 1; i <= months.length; i++) {
+                                if (i === months.length || months[i].regime !== cur) {
+                                  if (cur && st) periods.push({ x1: st, x2: months[i - 1]?.date ?? st, regime: cur });
+                                  if (i < months.length) { cur = months[i].regime; st = months[i].date; }
+                                }
+                              }
+                              return periods.map((p, i) => (
+                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#f0f0f0"} fillOpacity={0.35} strokeOpacity={0} />
+                              ));
+                            })()}
                             <Line type="monotone" dataKey="stratNav" name="Strategy" stroke={NAVY} strokeWidth={2} dot={false} />
                             <Line type="monotone" dataKey="benchNav" name="S&P 500" stroke={POSITIVE} strokeWidth={1.5} dot={false} strokeDasharray="4 2" />
                           </LineChart>
                         </ResponsiveContainer>
+                      </div>
+                      <div className="flex items-center gap-4 mt-2 flex-wrap">
+                        {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(r => (
+                          <span key={r} className="flex items-center gap-1 text-[9px] text-[#999]">
+                            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: { Expansion:"#d1fae5", Recovery:"#dbeafe", Slowdown:"#fef3c7", Contraction:"#fee2e2" }[r] }} />
+                            {r}
+                          </span>
+                        ))}
                       </div>
                     </div>
                     <p className="text-[9.5px] text-[#bbb] mt-1">
