@@ -264,6 +264,23 @@
 /* 10K metrics strip border */
 .dark .border-\[#1e3560\] { border-color: var(--ca-border) !important; }
 
+/* Issue/create warm beige palette */
+.dark .text-\[#3d3528\]   { color: var(--ca-text) !important; }
+.dark .text-\[#5a4f3f\]   { color: var(--ca-text-2) !important; }
+.dark .text-\[#1a1208\]   { color: var(--ca-text) !important; }
+.dark .bg-\[#f5f3ef\]     { background-color: var(--ca-surface-2) !important; }
+.dark .hover\:bg-\[#f5f3ef\]:hover { background-color: var(--ca-surface-2) !important; }
+.dark .border-\[#c8bfad\] { border-color: var(--ca-border) !important; }
+.dark .border-\[#d6cfc4\] { border-color: var(--ca-border) !important; }
+.dark .hover\:border-\[#c8bfad\]:hover { border-color: var(--ca-border-2) !important; }
+
+/* Reaction-tracker add form */
+.dark .border-\[#d1d5db\]  { border-color: var(--ca-border) !important; }
+.dark .placeholder-\[#d1d5db\] { color: var(--ca-text-3) !important; }
+.dark .text-\[#374151\]    { color: var(--ca-text-2) !important; }
+.dark .text-\[#6b7280\]    { color: var(--ca-text-2) !important; }
+.dark .focus\:border-\[#0f2044\]:focus { border-color: var(--ca-accent) !important; }
+
 /* 10K chat gradient — override background-image with background-color */
 .dark .from-\[\#0c1b38\]  { --tw-gradient-from: var(--ca-sidebar-bg) !important; }
 .dark .to-\[\#1a3361\]    { --tw-gradient-to: var(--ca-surface-2) !important; }
