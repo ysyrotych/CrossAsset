@@ -21,6 +21,12 @@ export const dynamic = "force-dynamic";
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const KEY = process.env.FRED_API_KEY;
 
+function subtractMonths(dateStr: string, n: number): string {
+  const [y, m] = dateStr.split("-").map(Number);
+  const d = new Date(y, m - 1 - n, 1);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+}
+
 // Fetch N monthly-frequency observations (FRED aggregates daily/weekly → monthly)
 async function fredMonthly(
   id: string,
@@ -280,49 +286,46 @@ export async function GET() {
     growthReadings.length,
   );
 
-  // Build 24-month composite history
-  const history: CompositePoint[] = monthLabels.slice(-24).map(date => {
-    const tempG: IndicatorReading[] = DEFAULT_GROWTH_INDICATORS.map(ind => {
+  // Build 24-month composite history with expanding-window z-scores + publication lags.
+  // For each historical month T, only use data available at T (expanding window anchored
+  // from the oldest observation). Publication lag enforced per indicator.
+  function buildCompositeAt(
+    date: string,
+    indicators: typeof DEFAULT_GROWTH_INDICATORS,
+  ): number {
+    const readings: IndicatorReading[] = indicators.map(ind => {
       const series = seriesMap[ind.fredSeries] ?? [];
-      const point  = series.find(p => p.date === date);
-      const allVals = series.map(p => p.value);
-      const mu  = mean(allVals);
-      const sig = stdDev(allVals, mu);
-      const val = point?.value ?? null;
-      const z   = val != null ? zscore(val, mu, sig) : null;
-      return { id: ind.id, name: ind.name, latestValue: val, latestDate: date, previousValue: null, change: null, zscore: z, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
+      const availThrough = subtractMonths(date, ind.lagMonths ?? 0);
+      const avail = series.filter(p => p.date <= availThrough);
+      if (avail.length < 3) {
+        return { id: ind.id, name: ind.name, latestValue: null, latestDate: date, previousValue: null, change: null, zscore: null, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: null, mean: null };
+      }
+      let transformed: number[];
+      if (ind.transform === "mom3" && avail.length >= 4)
+        transformed = avail.slice(3).map((p, i) => p.value - avail[i].value);
+      else if (ind.transform === "yoy" && avail.length >= 13)
+        transformed = avail.slice(12).map((p, i) => p.value - avail[i].value);
+      else
+        transformed = avail.map(p => p.value);
+      if (!transformed.length) return { id: ind.id, name: ind.name, latestValue: null, latestDate: date, previousValue: null, change: null, zscore: null, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: null, mean: null };
+      const w   = winsorize(transformed, 0.02);
+      const mu  = mean(w);
+      const sig = stdDev(w, mu);
+      const z   = zscore(transformed[transformed.length - 1], mu, sig);
+      return { id: ind.id, name: ind.name, latestValue: avail[avail.length - 1].value, latestDate: date, previousValue: null, change: null, zscore: z, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
     });
-    const g   = computeComposite(tempG) ?? 0;
+    return computeComposite(readings) ?? 0;
+  }
 
-    const tempR: IndicatorReading[] = DEFAULT_RISK_INDICATORS.map(ind => {
-      const series = seriesMap[ind.fredSeries] ?? [];
-      const point  = series.find(p => p.date === date);
-      const allVals = series.map(p => p.value);
-      const mu  = mean(allVals);
-      const sig = stdDev(allVals, mu);
-      const val = point?.value ?? null;
-      const z   = val != null ? zscore(val, mu, sig) : null;
-      return { id: ind.id, name: ind.name, latestValue: val, latestDate: date, previousValue: null, change: null, zscore: z, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
-    });
-    const ra  = computeComposite(tempR) ?? 0;
+  const history: CompositePoint[] = monthLabels.slice(-24).map((date, i, arr) => {
+    const g  = buildCompositeAt(date, DEFAULT_GROWTH_INDICATORS);
+    const ra = buildCompositeAt(date, DEFAULT_RISK_INDICATORS);
 
     const lvl = g >= 0 ? "above" : "below";
     let   dir: "accelerating" | "decelerating" = "decelerating";
-    const idx = monthLabels.indexOf(date);
-    if (idx >= 3) {
-      const prevDate = monthLabels[idx - 3];
-      const prevG: IndicatorReading[] = DEFAULT_GROWTH_INDICATORS.map(ind => {
-        const series = seriesMap[ind.fredSeries] ?? [];
-        const point  = series.find(p => p.date === prevDate);
-        const allVals = series.map(p => p.value);
-        const mu  = mean(allVals);
-        const sig = stdDev(allVals, mu);
-        const val = point?.value ?? null;
-        const z   = val != null ? zscore(val, mu, sig) : null;
-        return { id: ind.id, name: ind.name, latestValue: val, latestDate: prevDate, previousValue: null, change: null, zscore: z, contribution: null, direction: ind.direction, weight: ind.weight, enabled: ind.enabled, stdDev: sig, mean: mu };
-      });
-      const prevC = computeComposite(prevG) ?? 0;
-      dir = g > prevC ? "accelerating" : "decelerating";
+    if (i >= 3) {
+      const prevG = buildCompositeAt(arr[i - 3], DEFAULT_GROWTH_INDICATORS);
+      dir = g > prevG ? "accelerating" : "decelerating";
     }
 
     return {
@@ -350,6 +353,6 @@ export async function GET() {
     history,
     isDemo:      false,
     asOf:        new Date().toISOString().slice(0, 7),
-    dataVintageWarning: "EXPLORATORY: Z-scores normalised over the fetched 36-month window only. Full-sample normalisation is NOT point-in-time valid and will overstate backtest performance. A proper implementation requires expanding-window z-scores from 1990+ history.",
+    dataVintageWarning: "LIVE SIGNAL: Current z-scores use full 60-month sample for normalization. Historical composite chart uses expanding-window z-scores with publication lags — consistent with backtest methodology.",
   } satisfies RegimeData);
 }

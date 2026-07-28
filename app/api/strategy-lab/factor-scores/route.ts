@@ -49,6 +49,22 @@ async function fetchFmpProfiles(tickers: string[]): Promise<FmpProfile[]> {
   } catch { return []; }
 }
 
+const YF_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";
+async function fetchYahooMarketCaps(tickers: string[]): Promise<Map<string, number>> {
+  const out = new Map<string, number>();
+  if (!tickers.length) return out;
+  try {
+    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(",")}&fields=marketCap`;
+    const r = await fetch(url, { headers: { "User-Agent": YF_UA }, cache: "no-store" });
+    if (!r.ok) return out;
+    const result = (await r.json())?.quoteResponse?.result ?? [];
+    for (const q of result) {
+      if (q.symbol && q.marketCap > 0) out.set(q.symbol, q.marketCap);
+    }
+  } catch { /* best effort */ }
+  return out;
+}
+
 async function fetchFmpKeyMetricsOne(ticker: string): Promise<FmpMetrics | null> {
   if (!FMP_KEY) return null;
   try {
@@ -138,10 +154,11 @@ export async function POST(req: NextRequest) {
   const tickers = holdings.map(h => h.ticker).filter(t => t !== "USD" && !t.includes("Crncy") && !t.includes("Cash"));
 
   // ── Fetch price data + FMP data in parallel ───────────────────────────────
-  const [priceMap, fmpProfileRaw, fmpMetricsRaw] = await Promise.all([
+  const [priceMap, fmpProfileRaw, fmpMetricsRaw, yahooMktCaps] = await Promise.all([
     fetchAdjustedHistoryBatch([...tickers, "SPY"], "2y"),
     fetchFmpProfiles(tickers),
     Promise.all(tickers.map(t => fetchFmpKeyMetricsOne(t))).then(r => r.filter(Boolean) as FmpMetrics[]),
+    fetchYahooMarketCaps(tickers),
   ]);
 
   const spyBars  = priceMap.get("SPY") ?? [];
@@ -176,7 +193,7 @@ export async function POST(req: NextRequest) {
     const roic          = m?.roicTTM                       ?? null;
     const grossMargin   = m?.grossProfitMarginTTM         ?? null;
     const netLeverage   = m?.netDebtToEBITDATTM           ?? null;  // lower = better quality
-    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? 0;
+    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? 0;
     const logMktCap     = mktCap > 0 ? Math.log(mktCap) : null;
 
     return {

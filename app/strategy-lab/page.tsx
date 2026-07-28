@@ -2032,6 +2032,19 @@ export default function StrategyLabPage() {
                     <p className="mt-1 text-[10.5px] text-[#bbb] truncate">
                       {currentRegime} regime · regime-weighted factor scores → softmax (T=0.5) → 15% max weight
                     </p>
+                    {(() => {
+                      const sample = factorScores[0];
+                      const active   = ["Momentum","Low Vol"].filter((_, i) => [sample?.zMomentum, sample?.zLowVol][i] != null);
+                      const missing  = ["Value","Quality","Size"].filter((_, i) => [sample?.zValue, sample?.zQuality, sample?.zSize][i] == null);
+                      if (missing.length === 0) return null;
+                      return (
+                        <p className="mt-1 text-[10px]">
+                          <span className="text-[#147a4f] font-semibold">Using: {active.join(", ") || "—"}</span>
+                          <span className="text-[#bbb]"> · </span>
+                          <span className="text-amber-600">Missing: {missing.join(", ")} — add FMP_API_KEY to Vercel to unlock</span>
+                        </p>
+                      );
+                    })()}
                   </div>
                   <div className="flex items-center gap-2 flex-shrink-0">
                     {suggestedWeights && (
