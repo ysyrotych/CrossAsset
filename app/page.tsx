@@ -1096,8 +1096,8 @@ ${earningsCtx}
                       </p>
                       {qp && <p className="text-[10.5px] font-bold tabular-nums" style={{ color: gc(qp.changePct) }}>{pp(qp.changePct)}</p>}
                       {inRange && (
-                        <div className="mt-1 h-[2px] bg-[#eaeaea] rounded-full overflow-hidden">
-                          <div className="h-full rounded-full bg-[#0c1b38]" style={{ width: `${rangePct}%` }} />
+                        <div className="mt-1 h-[2px] rounded-full overflow-hidden" style={{ background: "var(--ca-border)" }}>
+                          <div className="h-full rounded-full" style={{ width: `${rangePct}%`, background: "var(--ca-accent)" }} />
                         </div>
                       )}
                     </div>

@@ -187,8 +187,8 @@ function CalendarGrid({ events, selectedDate, onSelect }: {
               onClick={() => onSelect(dateStr)}
               className={`group relative min-h-[52px] bg-white p-1.5 text-left transition-all hover:bg-[#f5f3ff] ${isSelected ? "ring-1 ring-inset ring-[#0c1b38]" : ""}`}
             >
-              <span className={`flex h-5 w-5 items-center justify-center text-[11px] font-bold
-                ${isToday ? "rounded-full bg-[#0c1b38] text-white" : "text-[#555]"}`}>
+              <span className={`flex h-5 w-5 items-center justify-center text-[11px] font-bold ${isToday ? "rounded-full text-white" : "text-[#555]"}`}
+                style={isToday ? { background: "var(--ca-accent)" } : {}}>
                 {day}
               </span>
               {evs.length > 0 && (
@@ -243,7 +243,7 @@ function EventCard({ event }: { event: CalEvent }) {
           <span className={`rounded px-1.5 py-0.5 text-[9px] font-bold uppercase tracking-wide ${IMPACT_COLORS[event.impact]}`}>
             {event.impact}
           </span>
-          {days === 0 && <span className="rounded bg-[#0c1b38] px-1.5 py-0.5 text-[9px] font-bold text-white">TODAY</span>}
+          {days === 0 && <span className="rounded px-1.5 py-0.5 text-[9px] font-bold text-white" style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}>TODAY</span>}
           {days > 0 && days <= 7 && <span className="text-[10px] font-semibold text-[#0c1b38]">in {days}d</span>}
         </div>
       </div>
@@ -512,7 +512,7 @@ export default function CalendarPage() {
                         <p className="text-[10.5px] font-bold text-[#0a0a0a]">
                           {parseDate(event.date).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" })}
                         </p>
-                        {days === 0 && <span className="rounded bg-[#0c1b38] px-1.5 py-0.5 text-[8px] font-bold uppercase text-white">Today</span>}
+                        {days === 0 && <span className="rounded px-1.5 py-0.5 text-[8px] font-bold uppercase" style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}>Today</span>}
                         {days === 1 && <span className="text-[10px] font-semibold text-[#0c1b38]">Tomorrow</span>}
                         {days > 1 && days <= 7 && <span className="text-[10px] text-[#888]">in {days} days</span>}
                       </div>
