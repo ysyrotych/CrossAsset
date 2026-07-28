@@ -1641,6 +1641,102 @@ export default function StrategyLabPage() {
               )}
             </Card>
 
+            {/* ── Factor Correlation Matrix ── */}
+            {universeScores && universeScores.length >= 5 && (() => {
+              type ZKey = "zMomentum" | "zLowVol" | "zValue" | "zQuality" | "zSize";
+              const FCOLS: { key: ZKey; label: string; color: string }[] = [
+                { key: "zMomentum", label: "Mom",  color: AMBER },
+                { key: "zLowVol",   label: "LVol", color: NAVY },
+                { key: "zValue",    label: "Val",  color: "#2563eb" },
+                { key: "zQuality",  label: "Qlty", color: POSITIVE },
+                { key: "zSize",     label: "Siz",  color: "#7c3aed" },
+              ];
+
+              function pearson(xs: (number | null)[], ys: (number | null)[]): number | null {
+                const pairs = xs.reduce<[number, number][]>((acc, x, i) => {
+                  const y = ys[i];
+                  if (x != null && y != null) acc.push([x, y]);
+                  return acc;
+                }, []);
+                if (pairs.length < 5) return null;
+                const mx = pairs.reduce((s, [a]) => s + a, 0) / pairs.length;
+                const my = pairs.reduce((s, [, b]) => s + b, 0) / pairs.length;
+                const num = pairs.reduce((s, [a, b]) => s + (a - mx) * (b - my), 0);
+                const dx  = Math.sqrt(pairs.reduce((s, [a]) => s + (a - mx) ** 2, 0));
+                const dy  = Math.sqrt(pairs.reduce((s, [, b]) => s + (b - my) ** 2, 0));
+                return dx * dy > 0 ? Math.round(num / (dx * dy) * 100) / 100 : null;
+              }
+
+              function corrBg(r: number | null): string {
+                if (r == null) return "#f4f1ec";
+                // positive: white → #16a34a (rgb 22,163,74)
+                // negative: white → #dc2626 (rgb 220,38,38)
+                if (r >= 0) return `rgb(${Math.round(255 - r * 233)},${Math.round(255 - r * 92)},${Math.round(255 - r * 181)})`;
+                return `rgb(255,${Math.round(255 + r * 217)},${Math.round(255 + r * 217)})`;
+              }
+
+              const matrix = FCOLS.map(f1 => FCOLS.map(f2 => {
+                if (f1.key === f2.key) return 1 as const;
+                return pearson(
+                  universeScores.map(s => s[f1.key] as number | null),
+                  universeScores.map(s => s[f2.key] as number | null),
+                );
+              }));
+
+              const coveredCount = universeScores.filter(s =>
+                s.zMomentum != null || s.zLowVol != null || s.zValue != null || s.zQuality != null || s.zSize != null
+              ).length;
+
+              return (
+                <Card className="p-5">
+                  <SectionLabel>Factor Correlation Matrix</SectionLabel>
+                  <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                    Pairwise Pearson correlations of cross-sectional z-scores across {coveredCount} scored stocks.
+                    Low inter-factor correlation improves composite diversification.
+                  </p>
+                  <div className="flex justify-center">
+                    <table className="text-[11px] border-collapse">
+                      <thead>
+                        <tr>
+                          <th className="w-12 pb-1" />
+                          {FCOLS.map(f => (
+                            <th key={f.key} className="w-14 pb-1 text-[9.5px] font-bold uppercase tracking-[0.1em] text-center" style={{ color: f.color }}>
+                              {f.label}
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {FCOLS.map((f1, i) => (
+                          <tr key={f1.key}>
+                            <td className="pr-3 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.1em] text-right whitespace-nowrap" style={{ color: f1.color }}>
+                              {f1.label}
+                            </td>
+                            {FCOLS.map((f2, j) => {
+                              const r = matrix[i][j];
+                              const isDiag = i === j;
+                              const bg = isDiag ? NAVY : corrBg(r === 1 ? 1 : r);
+                              const textColor = isDiag ? "white" : (r != null && Math.abs(r as number) > 0.35) ? "white" : "#333";
+                              return (
+                                <td key={f2.key}
+                                  className="w-14 h-11 text-center tabular-nums text-[11.5px] font-bold border border-[#e8e3da]"
+                                  style={{ backgroundColor: bg, color: textColor }}>
+                                  {isDiag ? "1.00" : r != null ? (r as number).toFixed(2) : "—"}
+                                </td>
+                              );
+                            })}
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <p className="mt-3 text-[9.5px] text-[#bbb] text-center">
+                    Green = positive · Red = negative · Navy = diagonal · — = &lt;5 stocks with both scores
+                  </p>
+                </Card>
+              );
+            })()}
+
             {/* Factor definitions */}
             {factorDefs.map(def => (
               <Card key={def.factor} className="p-5">
