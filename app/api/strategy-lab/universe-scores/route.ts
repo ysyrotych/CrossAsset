@@ -171,7 +171,7 @@ export async function GET() {
     const roic          = m?.roicTTM                       ?? null;
     const grossMargin   = m?.grossProfitMarginTTM         ?? null;
     const netLeverage   = m?.netDebtToEBITDATTM           ?? null;
-    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? 0;
+    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? u.mktCapB * 1e9;
 
     return {
       ticker, weight: 0,

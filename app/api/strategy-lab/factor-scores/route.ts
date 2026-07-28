@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { fetchAdjustedHistoryBatch } from "@/lib/sources/yahoo";
 import { crossSectionalZ } from "@/lib/strategy-lab/portfolio";
 import type { FactorScoreResult, PortfolioExposure, PortfolioPosition } from "@/lib/strategy-lab/portfolio";
+import { UNIVERSE } from "@/lib/strategy-lab/universe";
 
 export const dynamic  = "force-dynamic";
 export const maxDuration = 60;
@@ -183,6 +184,7 @@ export async function POST(req: NextRequest) {
     const bars    = priceMap.get(ticker) ?? [];
     const m       = metricsMap.get(ticker);
     const prof    = profileMap.get(ticker);
+    const uStock  = UNIVERSE.find(u => u.ticker === ticker);
 
     const pf = computePriceFactors(bars, spyBars);
 
@@ -193,7 +195,7 @@ export async function POST(req: NextRequest) {
     const roic          = m?.roicTTM                       ?? null;
     const grossMargin   = m?.grossProfitMarginTTM         ?? null;
     const netLeverage   = m?.netDebtToEBITDATTM           ?? null;  // lower = better quality
-    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? 0;
+    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? (uStock ? uStock.mktCapB * 1e9 : 0);
     const logMktCap     = mktCap > 0 ? Math.log(mktCap) : null;
 
     return {
