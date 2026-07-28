@@ -2125,15 +2125,14 @@ export default function StrategyLabPage() {
 
               // Only include holdings with both beta and vol available
               const valid = factorScores.filter(
-                (s): s is typeof s & { beta: number; realizedVol: number } =>
-                  s.beta != null && s.realizedVol != null && s.weight > 0
+                s => s.beta != null && s.realizedVol != null && s.weight > 0
               );
               if (valid.length < 2) return null;
 
               // Portfolio-level quantities
-              const portBeta    = valid.reduce((s, r) => s + r.weight * r.beta, 0);
+              const portBeta    = valid.reduce((s, r) => s + r.weight * (r.beta ?? 0), 0);
               const getIdioVar  = (r: typeof valid[0]) =>
-                Math.max(0, r.realizedVol ** 2 - r.beta ** 2 * MARKET_VOL ** 2);
+                Math.max(0, (r.realizedVol ?? 0) ** 2 - (r.beta ?? 0) ** 2 * MARKET_VOL ** 2);
               const sysPortVar  = portBeta ** 2 * MARKET_VOL ** 2;
               const idioPortVar = valid.reduce((s, r) => s + r.weight ** 2 * getIdioVar(r), 0);
               const portVar     = sysPortVar + idioPortVar;
@@ -2149,11 +2148,13 @@ export default function StrategyLabPage() {
                 sys: number; idio: number; total: number;
               };
               const riskRows: RiskRow[] = valid.map(r => {
-                const sys  = r.weight * r.beta * portBeta * MARKET_VOL ** 2 / portVar * 100;
+                const beta = r.beta ?? 0;
+                const vol  = r.realizedVol ?? 0;
+                const sys  = r.weight * beta * portBeta * MARKET_VOL ** 2 / portVar * 100;
                 const idio = r.weight ** 2 * getIdioVar(r) / portVar * 100;
                 return {
                   ticker: r.ticker, name: r.name || r.ticker, sector: r.sector || "",
-                  weight: r.weight, beta: r.beta, vol: r.realizedVol,
+                  weight: r.weight, beta, vol,
                   sys:   Math.round(sys  * 10) / 10,
                   idio:  Math.round(idio * 10) / 10,
                   total: Math.round((sys + idio) * 10) / 10,
