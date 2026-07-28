@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import CrossAssetLogo from "./CrossAssetLogo";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 const NAV = [
   { label: "Dashboard",        href: "/" },
@@ -23,7 +24,10 @@ export default function Sidebar() {
   const path = usePathname();
 
   return (
-    <aside className="fixed left-0 top-0 h-screen w-56 bg-[#0c1b38] flex flex-col z-40">
+    <aside
+      className="fixed left-0 top-0 h-screen w-56 flex flex-col z-40 transition-colors duration-300"
+      style={{ background: "var(--ca-sidebar-bg)" }}
+    >
       <div className="px-5 pt-6 pb-5 flex items-center gap-3">
         <CrossAssetLogo variant="mark" color="light" className="shrink-0" />
         <div>
@@ -49,7 +53,12 @@ export default function Sidebar() {
                   : "text-white/55 hover:text-white/85 hover:bg-white/[0.05]"
               )}
             >
-              {active && <span className="w-[3px] h-3.5 rounded-full bg-white shrink-0" />}
+              {active && (
+                <span
+                  className="w-[3px] h-3.5 rounded-full shrink-0 transition-all duration-300"
+                  style={{ background: "var(--ca-accent)" }}
+                />
+              )}
               <span className={active ? "" : "pl-[5px]"}>{label}</span>
             </Link>
           );
@@ -58,10 +67,11 @@ export default function Sidebar() {
 
       <div className="mx-6 border-t border-white/10" />
 
-      <div className="px-6 py-5">
-        <p className="text-[10.5px] font-medium text-white/30 leading-relaxed">
-          Research purposes only.<br />Not investment advice.
+      <div className="px-5 py-4 flex items-center justify-between">
+        <p className="text-[10px] font-medium text-white/30 leading-relaxed">
+          Research only.<br />Not advice.
         </p>
+        <ThemeToggle />
       </div>
     </aside>
   );

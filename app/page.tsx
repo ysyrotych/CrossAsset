@@ -130,16 +130,19 @@ function regime(q: Record<string, Quote>) {
 // ── Primitive components ───────────────────────────────────────────────────
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">{children}</p>;
+  return <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-2)" }}>{children}</p>;
 }
 
 function MiniLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{children}</p>;
+  return <p className="text-[9px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-3)" }}>{children}</p>;
 }
 
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`border border-[#e8e3da] bg-white shadow-[0_1px_0_rgba(12,27,56,0.02)] ${className}`}>
+    <section
+      className={`rounded-xl shadow-sm ${className}`}
+      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}
+    >
       {children}
     </section>
   );
@@ -147,21 +150,21 @@ function Card({ children, className = "" }: { children: React.ReactNode; classNa
 
 function PressurePill({ pressure }: { pressure: "hawkish" | "dovish" | "neutral" }) {
   const cls =
-    pressure === "hawkish" ? "text-[#b42318] bg-[#fff7f5] border-[#f2d2cc]" :
-    pressure === "dovish"  ? "text-[#147a4f] bg-[#f4fbf7] border-[#cfe8da]" :
-                             "text-[#555] bg-[#faf8f3] border-[#eee9df]";
+    pressure === "hawkish" ? "text-red-600 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-950/40 dark:border-red-900/50" :
+    pressure === "dovish"  ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-950/40 dark:border-emerald-900/50" :
+                             "text-gray-500 border-gray-200 dark:text-gray-400 dark:border-gray-700";
   return (
-    <span className={`border px-2 py-0.5 text-[9.5px] font-bold uppercase tracking-[0.12em] ${cls}`}>
+    <span className={`rounded-full border px-2 py-0.5 text-[9.5px] font-semibold ${cls}`} style={pressure === "neutral" ? { background: "var(--ca-surface-2)" } : {}}>
       {pressure}
     </span>
   );
 }
 
 function ScoreBar({ value, tone = "neutral" }: { value: number; tone?: "positive" | "negative" | "neutral" | "mixed" }) {
-  const color = tone === "positive" ? POSITIVE : tone === "negative" ? NEGATIVE : tone === "mixed" ? WARNING : NAVY;
+  const color = tone === "positive" ? "var(--ca-green)" : tone === "negative" ? "var(--ca-red)" : tone === "mixed" ? "var(--ca-amber)" : "var(--ca-text-2)";
   return (
-    <div className="h-[6px] bg-[#eee9df]">
-      <div className="h-full" style={{ width: `${value}%`, backgroundColor: color }} />
+    <div className="h-[5px] rounded-full" style={{ background: "var(--ca-surface-2)" }}>
+      <div className="h-full rounded-full" style={{ width: `${value}%`, backgroundColor: color }} />
     </div>
   );
 }
@@ -173,14 +176,14 @@ function MetricTile({
   dec?: number; prefix?: string; suffix?: string; pctSuffix?: string; invertColor?: boolean;
 }) {
   const up = (quote?.change ?? 0) > 0;
-  const color = quote == null ? "#bbb" : (invertColor ? !up : up) ? NEGATIVE : POSITIVE;
+  const color = quote == null ? "var(--ca-text-3)" : (invertColor ? !up : up) ? "var(--ca-red)" : "var(--ca-green)";
   return (
-    <div className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
+    <div className="rounded-lg px-3 py-3" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
       <MiniLabel>{label}</MiniLabel>
-      <p className="mt-1 text-[18px] font-bold tabular-nums text-[#0a0a0a]">
+      <p className="mt-1 text-[18px] font-bold tabular-nums" style={{ color: "var(--ca-text)" }}>
         {quote != null ? `${prefix}${quote.price.toFixed(dec)}${suffix}` : "—"}
       </p>
-      <p className="mt-1 text-[10px] font-semibold" style={{ color: quote ? color : "#bbb" }}>
+      <p className="mt-1 text-[10px] font-semibold" style={{ color }}>
         {quote != null ? `${quote.pct >= 0 ? "+" : ""}${quote.pct.toFixed(2)}${pctSuffix} · ` : ""}{note}
       </p>
     </div>
@@ -201,14 +204,14 @@ function SourceDot({ ok, label }: { ok: boolean; label: string }) {
 // Compact quote tile — US futures + portfolio
 function Tile({ q, label, pStr }: { q: Quote | undefined; label: string; pStr?: string }) {
   if (!q) return (
-    <div className="border border-[#eee9df] rounded-lg px-3 py-3 flex flex-col gap-1 bg-[#fbfaf7]">
+    <div className="border border-gray-100 rounded-lg px-3 py-3 flex flex-col gap-1 bg-gray-50">
       <p className="text-[9.5px] font-semibold text-[#ccc] uppercase tracking-wider truncate">{label}</p>
       <p className="text-[18px] font-light text-[#ddd]">—</p>
     </div>
   );
   const col = gc(q.changePct);
   return (
-    <div className="border border-[#eee9df] rounded-lg px-3 py-3 flex flex-col gap-1 transition-colors"
+    <div className="border border-gray-100 rounded-lg px-3 py-3 flex flex-col gap-1 transition-colors"
          style={{ backgroundColor: gb(q.changePct) }}>
       <p className="text-[9.5px] font-semibold text-[#999] uppercase tracking-wider truncate">{label}</p>
       <p className="text-[18px] font-semibold text-[#0a0a0a] tabular-nums leading-tight">{pStr ?? fp(q.price)}</p>
@@ -511,7 +514,7 @@ ${earningsCtx}
       <main className="pb-16">
 
         {/* ── Top Banner ──────────────────────────────────────────────────── */}
-        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-7">
+        <div className="-mx-10 -mt-10 mb-0 px-10 py-7" style={{ background: "var(--ca-header-bg)" }}>
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-6">
               {/* Logo */}
@@ -573,7 +576,7 @@ ${earningsCtx}
           .ticker-track { animation: ticker-scroll 60s linear infinite; }
           .ticker-track:hover { animation-play-state: paused; }
         `}</style>
-        <div className="-mx-10 mb-8 overflow-hidden border-b border-[#e8e3da] bg-[#faf9f7]">
+        <div className="-mx-10 mb-8 overflow-hidden border-b border-gray-100 bg-[#faf9f7]">
           {(() => {
             const eurusd = data?.forex?.find(f => f.pair === "EURUSD");
             const btc    = data?.crypto?.find(c => c.symbol === "BTC");
@@ -596,7 +599,7 @@ ${earningsCtx}
               const up = (pct ?? 0) > 0;
               const pctColor = pct == null ? "transparent" : up ? POSITIVE : NEGATIVE;
               return (
-                <div key={`${key}-${i}`} className="flex flex-shrink-0 flex-col justify-center border-r border-[#e8e3da] px-7 py-3.5">
+                <div key={`${key}-${i}`} className="flex flex-shrink-0 flex-col justify-center border-r border-gray-100 px-7 py-3.5">
                   <p className="mb-1 text-[8.5px] font-bold uppercase tracking-[0.2em] text-[#999]">{label}</p>
                   <div className="flex items-baseline gap-2">
                     <span className="text-[14px] font-bold tabular-nums text-[#0a0a0a]">
@@ -623,7 +626,7 @@ ${earningsCtx}
         {/* ── AI Morning Brief ──────────────────────────────────────────── */}
         <div className="mb-5">
           <Card className="overflow-hidden">
-            <div className="bg-[#0c1b38] px-6 py-4 flex items-center justify-between">
+            <div className="px-6 py-4 flex items-center justify-between" style={{ background: "var(--ca-accent)" }}>
               <div>
                 <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/50 mb-1">AI Morning Brief</p>
                 <p className="text-[13px] font-medium text-white">Powered by Claude · synthesizes all live market data below</p>
@@ -633,26 +636,29 @@ ${earningsCtx}
             <div className="p-6">
               <div className="flex items-center gap-3 mb-5 flex-wrap">
                 <button onClick={() => generateBrief("exec")} disabled={generating || !hasMorning}
-                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] hover:bg-[#dde4f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  style={{ border: "1px solid var(--ca-border-2)", background: "var(--ca-surface-2)", color: "var(--ca-text)" }}>
                   {generating && briefType === "exec" ? "Generating…" : "2-Sentence Summary"}
                 </button>
                 <button onClick={() => generateBrief("full")} disabled={generating || !hasMorning}
-                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md bg-[#0c1b38] text-white hover:bg-[#1a3361] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-lg text-white disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  style={{ background: "var(--ca-accent)" }}>
                   {generating && briefType === "full" ? "Generating…" : "Full Morning Brief"}
                 </button>
                 <button onClick={() => generateBrief("email")} disabled={generating || !hasMorning}
-                  className="text-[11px] font-semibold px-4 py-2.5 rounded-md border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] hover:bg-[#dde4f0] disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
+                  className="text-[11px] font-semibold px-4 py-2.5 rounded-lg border disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                  style={{ border: "1px solid var(--ca-border-2)", background: "var(--ca-surface-2)", color: "var(--ca-text)" }}>
                   {generating && briefType === "email" ? "Generating…" : "Draft Trader Email"}
                 </button>
                 {generating && (
-                  <span className="flex items-center gap-1.5 text-[10.5px] text-[#999]">
-                    <span className="w-2 h-2 rounded-full bg-[#0c1b38] animate-pulse" /> Streaming…
+                  <span className="flex items-center gap-1.5 text-[10.5px]" style={{ color: "var(--ca-text-3)" }}>
+                    <span className="w-2 h-2 rounded-full animate-pulse" style={{ background: "var(--ca-accent)" }} /> Streaming…
                   </span>
                 )}
               </div>
               {!hasMorning && <p className="text-[11px] text-[#ccc]">Buttons will activate once market data loads.</p>}
               {brief ? (
-                <div className="bg-[#fbfaf7] border border-[#eee9df] rounded-lg p-6">
+                <div className="bg-gray-50 border border-gray-100 rounded-lg p-6">
                   <div className="flex items-center justify-between mb-4">
                     <p className="text-[9.5px] font-bold uppercase tracking-widest text-[#bbb]">
                       {briefType === "exec" ? "Executive Summary" : briefType === "full" ? "Morning Brief" : "Trader Email Draft"}
@@ -734,9 +740,10 @@ ${earningsCtx}
                   <button
                     key={r}
                     onClick={() => setRatesTf(r)}
-                    className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
-                      ratesTf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
+                    className={`rounded-md px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
+                      ratesTf === r ? "text-white" : "text-gray-500"
                     }`}
+                    style={ratesTf === r ? { background: "var(--ca-accent)", border: "1px solid var(--ca-accent)" } : { background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}
                   >
                     {r}
                   </button>
@@ -781,7 +788,7 @@ ${earningsCtx}
               )}
             </div>
 
-            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-[#eee9df] pt-4">
+            <div className="mt-4 grid grid-cols-3 gap-4 border-t border-gray-100 pt-4">
               <div>
                 <MiniLabel>5Y–10Y spread</MiniLabel>
                 <p className="mt-1 text-[12px] font-bold text-[#0c1b38]">
@@ -814,7 +821,7 @@ ${earningsCtx}
               <p className="text-[9.5px] text-[#999]">{data?.sources.finnhub ? "Live · Finnhub" : "Add FINNHUB_API_KEY"}</p>
             </div>
             {/* Tab bar */}
-            <div className="flex gap-0 border-b border-[#eee9df] mb-4">
+            <div className="flex gap-0 border-b border-gray-100 mb-4">
               {(["headlines", "earnings", "calendar"] as const).map((tab) => (
                 <button
                   key={tab}
@@ -857,7 +864,7 @@ ${earningsCtx}
                   <p className="text-[12px] text-[#bbb]">Loading…</p>
                 ) : (data?.earnings ?? []).length > 0 ? (
                   <table className="w-full text-left">
-                    <thead><tr className="border-b border-[#eee9df]">
+                    <thead><tr className="border-b border-gray-100">
                       {["Symbol", "Date", "EPS Est.", "Rev. Est."].map((h) => (
                         <th key={h} className="pb-2 text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{h}</th>
                       ))}
@@ -925,9 +932,10 @@ ${earningsCtx}
               <div className="flex items-center gap-1 shrink-0">
                 {TF_LABELS.map((r) => (
                   <button key={r} onClick={() => setEquityTf(r)}
-                    className={`border px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
-                      equityTf === r ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"
-                    }`}>{r}</button>
+                    className={`rounded-md px-2.5 py-1.5 text-[9.5px] font-bold uppercase transition-colors ${
+                      equityTf === r ? "text-white" : "text-gray-500"
+                    }`}
+                    style={equityTf === r ? { background: "var(--ca-accent)", border: "1px solid var(--ca-accent)" } : { background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>{r}</button>
                 ))}
               </div>
             </div>
@@ -947,12 +955,16 @@ ${earningsCtx}
                 const color = q == null ? "#bbb" : (inv ? up : !up) ? NEGATIVE : POSITIVE;
                 return (
                   <button key={key} onClick={() => setExpanded(isActive ? null : key)}
-                    className={`border text-left px-3 py-3 transition-all cursor-pointer ${isActive ? "border-[#0c1b38] bg-[#0c1b38]" : "border-[#eee9df] bg-[#fbfaf7] hover:border-[#0c1b38]"}`}>
-                    <MiniLabel><span className={isActive ? "text-[#aab]" : ""}>{label}</span></MiniLabel>
-                    <p className={`mt-1 text-[18px] font-bold tabular-nums ${isActive ? "text-white" : "text-[#0a0a0a]"}`}>
+                    className="rounded-lg text-left px-3 py-3 transition-all cursor-pointer"
+                    style={isActive
+                      ? { background: "var(--ca-accent)", border: "1px solid var(--ca-accent)" }
+                      : { background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }
+                    }>
+                    <MiniLabel><span style={isActive ? { color: "rgba(255,255,255,0.6)" } : {}}>{label}</span></MiniLabel>
+                    <p className="mt-1 text-[18px] font-bold tabular-nums" style={{ color: isActive ? "#fff" : "var(--ca-text)" }}>
                       {q != null ? `${pfx ?? ""}${q.price.toFixed(dec)}` : "—"}
                     </p>
-                    <p className="mt-1 text-[10px] font-semibold" style={{ color: isActive ? "#aab" : (q ? color : "#bbb") }}>
+                    <p className="mt-1 text-[10px] font-semibold" style={{ color: isActive ? "rgba(255,255,255,0.6)" : (q ? color : "var(--ca-text-3)") }}>
                       {q != null ? `${q.pct >= 0 ? "+" : ""}${q.pct.toFixed(2)}% · ` : ""}{note}
                     </p>
                   </button>
@@ -977,7 +989,7 @@ ${earningsCtx}
               const cur = s.data.length ? s.data[s.data.length - 1].value : 0;
               const chgPct = s.data[0]?.value > 0 ? ((cur - s.data[0].value) / s.data[0].value * 100) : 0;
               return (
-                <div className="border-t border-[#eee9df] pt-5">
+                <div className="border-t border-gray-100 pt-5">
                   <div className="mb-3 flex items-center justify-between">
                     <div className="flex items-center gap-4">
                       <p className="text-[13px] font-bold text-[#0a0a0a]">{s.label}</p>
@@ -1073,7 +1085,7 @@ ${earningsCtx}
                   const inRange = qp && qp.high52w > qp.low52w;
                   const rangePct = inRange ? Math.max(0, Math.min(100, ((qp.price - qp.low52w) / (qp.high52w - qp.low52w)) * 100)) : 0;
                   return (
-                    <div key={sym} className="border border-[#eee9df] rounded-lg p-3 flex flex-col gap-1 transition-colors"
+                    <div key={sym} className="border border-gray-100 rounded-lg p-3 flex flex-col gap-1 transition-colors"
                          style={{ backgroundColor: qp ? gb(qp.changePct) : "#fbfaf7" }}>
                       <div className="flex items-start justify-between gap-1">
                         <span className={`text-[11px] font-bold ${AI_NAMES.has(sym) ? "text-[#0c1b38]" : "text-[#333]"}`}>{sym}</span>
@@ -1157,10 +1169,10 @@ ${earningsCtx}
               );
               return (
                 <div>
-                  <div className="overflow-hidden border border-[#eee9df]">
+                  <div className="overflow-hidden border border-gray-100">
                     <table className="w-full text-left">
                       <thead>
-                        <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                        <tr className="bg-gray-50 border-b border-gray-100">
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]">Meeting</th>
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#147a4f]">Cut (−25bps)</th>
                           <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#555]">Hold</th>
@@ -1177,7 +1189,7 @@ ${earningsCtx}
                               <td className="px-4 py-3 text-[12px] font-bold text-[#0a0a0a]">{row.label}</td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                  <div className="w-20 h-[5px] bg-gray-100">
                                     <div className="h-full bg-[#147a4f]" style={{ width: `${row.cutProb}%` }} />
                                   </div>
                                   <span className="text-[12px] font-bold tabular-nums text-[#147a4f]">{row.cutProb.toFixed(1)}%</span>
@@ -1185,7 +1197,7 @@ ${earningsCtx}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                  <div className="w-20 h-[5px] bg-gray-100">
                                     <div className="h-full bg-[#555]" style={{ width: `${row.holdProb}%` }} />
                                   </div>
                                   <span className="text-[12px] font-bold tabular-nums text-[#555]">{row.holdProb.toFixed(1)}%</span>
@@ -1193,7 +1205,7 @@ ${earningsCtx}
                               </td>
                               <td className="px-4 py-3">
                                 <div className="flex items-center gap-2">
-                                  <div className="w-20 h-[5px] bg-[#eee9df]">
+                                  <div className="w-20 h-[5px] bg-gray-100">
                                     <div className="h-full bg-[#b42318]" style={{ width: `${row.hikeProb}%` }} />
                                   </div>
                                   <span className="text-[12px] font-bold tabular-nums text-[#b42318]">{row.hikeProb.toFixed(1)}%</span>
@@ -1312,7 +1324,7 @@ ${earningsCtx}
                     <text x={cx} y={cy - 14} textAnchor="middle" fontSize={22} fontWeight="bold" fill="#0a0a0a">{loading ? "—" : score}</text>
                   </svg>
                   <p className="mt-1 text-[15px] font-bold tracking-wide" style={{ color: gaugeColor }}>{loading ? "…" : label}</p>
-                  <div className="mt-4 w-full space-y-1.5 border-t border-[#eee9df] pt-4">
+                  <div className="mt-4 w-full space-y-1.5 border-t border-gray-100 pt-4">
                     {[
                       { label: "Volatility (VIX)",   v: Math.round(vixScore),  note: `VIX ${vix.toFixed(1)}` },
                       { label: "Credit (HY OAS)",    v: Math.round(hyScore),   note: `${hyOas.toFixed(0)}bps` },
@@ -1323,7 +1335,7 @@ ${earningsCtx}
                     ].map((row) => (
                       <div key={row.label} className="flex items-center gap-2">
                         <p className="w-32 text-[9.5px] font-semibold text-[#777] shrink-0">{row.label}</p>
-                        <div className="flex-1 h-[4px] bg-[#eee9df]">
+                        <div className="flex-1 h-[4px] bg-gray-100">
                           <div className="h-full" style={{ width: `${loading ? 50 : row.v}%`, backgroundColor: row.v >= 58 ? POSITIVE : row.v >= 42 ? WARNING : NEGATIVE }} />
                         </div>
                         <p className="w-16 text-right text-[9.5px] tabular-nums text-[#999] shrink-0">{loading ? "…" : row.note}</p>
@@ -1486,7 +1498,7 @@ ${earningsCtx}
             </div>
             <div className="grid grid-cols-4 gap-5">
               {data!.topNews.slice(0, 8).map((story, i) => (
-                <div key={i} className={`${i % 4 !== 0 ? "border-l border-[#e8e3da] pl-4" : ""} ${i >= 4 ? "mt-5 pt-5 border-t border-[#e8e3da]" : ""}`}>
+                <div key={i} className={`${i % 4 !== 0 ? "border-l border-gray-100 pl-4" : ""} ${i >= 4 ? "mt-5 pt-5 border-t border-gray-100" : ""}`}>
                   <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999] mb-1">{story.source}</p>
                   {story.url ? (
                     <a href={story.url} target="_blank" rel="noreferrer" className="block text-[13px] font-bold leading-snug text-[#0a0a0a] mb-3 hover:text-[#0c1b38] hover:underline cursor-pointer">{story.title}</a>

@@ -12,7 +12,10 @@
   --font-serif: var(--font-serif);
 }
 
+/* ── CrossAsset Design System ─────────────────────────────────────────────── */
+
 :root {
+  /* Shadcn compat */
   --background: #ffffff;
   --foreground: #0a0a0a;
   --navy: #0f2044;
@@ -20,19 +23,72 @@
   --border: #e5e5e5;
   --muted: #737373;
   --muted-bg: #f7f7f7;
+
+  /* CrossAsset tokens (light) */
+  --ca-bg:          #f9fafb;
+  --ca-surface:     #ffffff;
+  --ca-surface-2:   #f3f4f6;
+  --ca-border:      #e5e7eb;
+  --ca-border-2:    #d1d5db;
+  --ca-text:        #0c1b38;
+  --ca-text-2:      #4b5563;
+  --ca-text-3:      #9ca3af;
+  --ca-accent:      #0c1b38;
+  --ca-accent-text: #ffffff;
+  --ca-green:       #147a4f;
+  --ca-green-bg:    #f0fdf4;
+  --ca-red:         #b42318;
+  --ca-red-bg:      #fef2f2;
+  --ca-amber:       #b7791f;
+  --ca-amber-bg:    #fffbeb;
+  --ca-sidebar-bg:  #0c1b38;
+  --ca-header-bg:   #0c1b38;
+}
+
+.dark {
+  /* Shadcn compat */
+  --background: #06090f;
+  --foreground: #e2e8f7;
+
+  /* CrossAsset tokens (dark — luxurious) */
+  --ca-bg:          #06090f;
+  --ca-surface:     #0d1525;
+  --ca-surface-2:   #111e33;
+  --ca-border:      #1e2d47;
+  --ca-border-2:    #2a3d5c;
+  --ca-text:        #e2e8f7;
+  --ca-text-2:      #6b83a8;
+  --ca-text-3:      #3a4f6e;
+  --ca-accent:      #c9a84c;
+  --ca-accent-text: #06090f;
+  --ca-green:       #34d399;
+  --ca-green-bg:    #052e1c;
+  --ca-red:         #f87171;
+  --ca-red-bg:      #2d0a0a;
+  --ca-amber:       #fbbf24;
+  --ca-amber-bg:    #1f1500;
+  --ca-sidebar-bg:  #050912;
+  --ca-header-bg:   #080e1a;
 }
 
 @layer base {
   * {
     box-sizing: border-box;
   }
+
+  html {
+    transition: color-scheme 0.3s ease;
+  }
+
   body {
-    background: #ffffff;
-    color: #0a0a0a;
+    background: var(--ca-bg);
+    color: var(--ca-text);
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
+
   ::-webkit-scrollbar {
     width: 4px;
     height: 4px;
@@ -41,7 +97,70 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: #d4d4d4;
+    background: var(--ca-border);
     border-radius: 2px;
   }
 }
+
+/* ── Dark mode transition helper ─────────────────────────────────────────── */
+.dark * {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
+}
+
+/* ── Dark mode: global Tailwind class overrides ─────────────────────────── */
+/* These override the hardcoded Tailwind grays throughout the entire app    */
+/* without needing dark: on every single element.                           */
+
+.dark .bg-white              { background-color: var(--ca-surface) !important; }
+.dark .bg-gray-50            { background-color: var(--ca-surface-2) !important; }
+.dark .bg-gray-100           { background-color: var(--ca-surface-2) !important; }
+
+.dark .border-gray-100       { border-color: var(--ca-border) !important; }
+.dark .border-gray-200       { border-color: var(--ca-border) !important; }
+
+.dark .text-gray-900         { color: var(--ca-text) !important; }
+.dark .text-gray-800         { color: var(--ca-text) !important; }
+.dark .text-gray-700         { color: var(--ca-text) !important; }
+.dark .text-gray-600         { color: var(--ca-text-2) !important; }
+.dark .text-gray-500         { color: var(--ca-text-2) !important; }
+.dark .text-gray-400         { color: var(--ca-text-3) !important; }
+.dark .text-gray-300         { color: var(--ca-text-3) !important; }
+
+/* Table rows and cells */
+.dark table                  { color: var(--ca-text); }
+.dark thead tr               { background: var(--ca-surface-2) !important; }
+.dark tbody tr:hover         { background: var(--ca-surface-2) !important; }
+
+/* Form inputs */
+.dark input[type="text"],
+.dark input[type="number"],
+.dark select,
+.dark textarea               {
+  background: var(--ca-surface-2) !important;
+  border-color: var(--ca-border) !important;
+  color: var(--ca-text) !important;
+}
+.dark input::placeholder     { color: var(--ca-text-3) !important; }
+
+/* Recharts — chart background and grid lines */
+.dark .recharts-cartesian-grid-horizontal line,
+.dark .recharts-cartesian-grid-vertical line {
+  stroke: var(--ca-border) !important;
+  opacity: 0.6;
+}
+.dark .recharts-tooltip-wrapper .recharts-default-tooltip {
+  background: var(--ca-surface) !important;
+  border-color: var(--ca-border) !important;
+  color: var(--ca-text) !important;
+}
+.dark .recharts-legend-item-text { color: var(--ca-text-2) !important; }
+.dark .recharts-text            { fill: var(--ca-text-2) !important; }
+.dark .recharts-cartesian-axis-tick-value { fill: var(--ca-text-3) !important; }
+
+/* shadcn/ui components */
+.dark [class*="bg-white"] { background-color: var(--ca-surface); }
+
+/* Hover states on interactive rows */
+.dark .hover\:bg-gray-50:hover { background-color: var(--ca-surface-2) !important; }

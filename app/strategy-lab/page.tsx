@@ -123,35 +123,38 @@ type Tab = typeof TABS[number];
 
 // ── Primitive UI components ───────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500 mb-0">{children}</p>;
+  return <p className="text-[11px] font-semibold uppercase tracking-[0.12em] mb-0" style={{ color: "var(--ca-text-2)" }}>{children}</p>;
 }
 function MiniLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-gray-400">{children}</p>;
+  return <p className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-3)" }}>{children}</p>;
 }
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
   return (
-    <section className={`rounded-xl border border-gray-100 bg-white shadow-sm ${className}`}>
+    <section
+      className={`rounded-xl shadow-sm ${className}`}
+      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}
+    >
       {children}
     </section>
   );
 }
 function DemoBadge() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-700">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-700 dark:border-amber-900/40 dark:bg-amber-900/20 dark:text-amber-400">
       Demo Data
     </span>
   );
 }
 function ResearchBadge() {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-medium text-blue-700">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-medium text-blue-700 dark:border-blue-900/40 dark:bg-blue-900/20 dark:text-blue-400">
       Research Prototype
     </span>
   );
 }
 function PhaseBadge({ phase }: { phase: 2 | 3 | 4 }) {
   return (
-    <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-medium text-gray-400">
+    <span className="rounded-full px-2.5 py-0.5 text-[10px] font-medium" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)", color: "var(--ca-text-3)" }}>
       Phase {phase}
     </span>
   );
@@ -161,7 +164,7 @@ function StatusDot({ status }: { status: ReadinessGate["status"] }) {
   return <span className={`w-2 h-2 rounded-full shrink-0 mt-[3px] ${colors[status]}`} />;
 }
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
+  return <div className={`animate-pulse rounded-lg ${className}`} style={{ background: "var(--ca-surface-2)" }} />;
 }
 
 // PDF tearsheet — loaded dynamically to avoid SSR issues with @react-pdf/renderer
@@ -799,7 +802,7 @@ export default function StrategyLabPage() {
       <main className="pb-20">
 
         {/* ── Page header ──────────────────────────────────────────────────── */}
-        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-6">
+        <div className="-mx-10 -mt-10 mb-0 px-10 py-6" style={{ background: "var(--ca-header-bg)" }}>
           <div className="flex items-start justify-between gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
@@ -818,10 +821,10 @@ export default function StrategyLabPage() {
             </div>
             <div className="flex items-center gap-4 mt-1">
               {/* Mode toggle */}
-              <div className="flex border border-white/20 overflow-hidden">
+              <div className="flex rounded-lg border border-white/20 overflow-hidden">
                 {(["original", "enhanced"] as StrategyMode[]).map(m => (
                   <button key={m} onClick={() => setMode(m)}
-                    className={`px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.16em] transition-colors ${
+                    className={`px-3.5 py-2 text-[10px] font-semibold tracking-wide transition-colors ${
                       mode === m ? "bg-white text-[#0c1b38]" : "bg-transparent text-white/55 hover:text-white/80"
                     }`}>
                     {m === "original" ? "Published Baseline" : "CrossAsset Enhanced"}
@@ -831,7 +834,7 @@ export default function StrategyLabPage() {
               <button
                 onClick={fetchRegimeData}
                 disabled={loading}
-                className="flex items-center gap-2 border border-white/20 bg-white/[0.08] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.16em] text-white/75 hover:bg-white/15 transition-all disabled:opacity-40"
+                className="flex items-center gap-2 rounded-lg border border-white/20 bg-white/[0.08] px-4 py-2 text-[10px] font-semibold text-white/75 hover:bg-white/15 transition-all disabled:opacity-40"
               >
                 <span className={loading ? "inline-block animate-spin" : ""}>↻</span>
                 {loading ? "Loading…" : "Refresh"}
@@ -853,15 +856,21 @@ export default function StrategyLabPage() {
         </div>
 
         {/* ── Sub-navigation tabs ───────────────────────────────────────── */}
-        <div className="-mx-10 mb-8 border-b border-gray-100 bg-white px-10 sticky top-0 z-20 shadow-[0_1px_0_0_#f3f4f6]">
+        <div
+          className="-mx-10 mb-8 px-10 sticky top-0 z-20"
+          style={{ background: "var(--ca-surface)", borderBottom: "1px solid var(--ca-border)", boxShadow: "0 1px 8px rgba(0,0,0,0.06)" }}
+        >
           <div className="flex gap-1 py-2">
             {TABS.map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-2 rounded-lg text-[11px] font-medium transition-all ${
-                  activeTab === tab
-                    ? "bg-[#0c1b38] text-white shadow-sm"
-                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
-                }`}>
+                className="px-4 py-2 rounded-lg text-[11px] font-medium transition-all"
+                style={activeTab === tab
+                  ? { background: "var(--ca-accent)", color: "var(--ca-accent-text)", boxShadow: "0 1px 4px rgba(0,0,0,0.15)" }
+                  : { color: "var(--ca-text-2)" }
+                }
+                onMouseEnter={e => { if (activeTab !== tab) (e.currentTarget as HTMLElement).style.background = "var(--ca-surface-2)"; }}
+                onMouseLeave={e => { if (activeTab !== tab) (e.currentTarget as HTMLElement).style.background = ""; }}
+              >
                 {tab}
               </button>
             ))}
@@ -869,7 +878,7 @@ export default function StrategyLabPage() {
         </div>
 
         {error && (
-          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[11.5px] text-[#b42318]">
+          <div className="mb-6 rounded-lg px-4 py-3 text-[11.5px]" style={{ border: "1px solid var(--ca-red)", background: "var(--ca-red-bg)", color: "var(--ca-red)" }}>
             {error} — using demo data.
           </div>
         )}
@@ -1460,7 +1469,7 @@ export default function StrategyLabPage() {
                   </p>
                 </div>
                 <button onClick={resetAllocation}
-                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
+                  className="rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-colors" style={{ borderColor: "var(--ca-border)", color: "var(--ca-text-2)" }}>
                   Reset to Published
                 </button>
               </div>
@@ -1573,7 +1582,7 @@ export default function StrategyLabPage() {
                     ))}
                   </select>
                   <button onClick={fetchUniverseScores} disabled={universeLoading}
-                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40">
+                    className="flex items-center gap-1.5 rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-40" style={{ borderColor: "var(--ca-border)", color: "var(--ca-text-2)" }}>
                     <span className={universeLoading ? "inline-block animate-spin" : ""}>↻</span>
                     {universeLoading ? "Loading…" : "Refresh"}
                   </button>
@@ -3206,7 +3215,7 @@ export default function StrategyLabPage() {
                       a.href = url; a.download = "crossasset_strategy_methodology.json"; a.click();
                       URL.revokeObjectURL(url);
                     }}
-                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
+                    className="rounded-lg border px-3 py-1.5 text-[11px] font-medium transition-colors" style={{ borderColor: "var(--ca-border)", color: "var(--ca-text-2)" }}>
                     Export JSON
                   </button>
                 </div>
