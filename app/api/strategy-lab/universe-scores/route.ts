@@ -7,7 +7,7 @@ import { NextResponse } from "next/server";
 import { fetchAdjustedHistoryBatch } from "@/lib/sources/yahoo";
 import { crossSectionalZ } from "@/lib/strategy-lab/portfolio";
 import type { FactorScoreResult } from "@/lib/strategy-lab/portfolio";
-import { UNIVERSE } from "@/lib/strategy-lab/universe";
+import { UNIVERSE, getReportingLag } from "@/lib/strategy-lab/universe";
 
 export const dynamic  = "force-dynamic";
 export const maxDuration = 60;
@@ -154,7 +154,7 @@ export async function GET() {
     grossMargin: number | null; netLeverage: number | null;
     logMktCap: number | null;
     name: string; sector: string; price: number; marketCap: number;
-    priceDataOk: boolean; fundDataOk: boolean;
+    priceDataOk: boolean; fundDataOk: boolean; reportingLagDays: number;
   };
 
   const rawRows: RawRow[] = tickers.map(ticker => {
@@ -184,6 +184,7 @@ export async function GET() {
       marketCap: mktCap,
       priceDataOk: bars.length >= 60,
       fundDataOk:  !!m,
+      reportingLagDays: getReportingLag(u),
     };
   });
 
@@ -264,8 +265,9 @@ export async function GET() {
       zQuality:   zq  != null ? Math.round(zq  * 100) / 100 : null,
       zSize:      zs  != null ? Math.round(zs  * 100) / 100 : null,
       compositeScore: Math.round(compositeScore * 100) / 100,
-      priceDataOk: r.priceDataOk,
-      fundDataOk:  r.fundDataOk,
+      priceDataOk:      r.priceDataOk,
+      fundDataOk:       r.fundDataOk,
+      reportingLagDays: r.reportingLagDays,
     };
   });
 

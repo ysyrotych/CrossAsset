@@ -91,7 +91,7 @@ function toMonthlyReturns(bars: { date: string; close: number }[]): Map<string, 
   return m;
 }
 
-// ── FRED helper (reused from regime-data route) ──────────────────────────────
+// ── FRED helpers ─────────────────────────────────────────────────────────────
 const FRED_BASE = "https://api.stlouisfed.org/fred/series/observations";
 const KEY = process.env.FRED_API_KEY;
 
@@ -114,6 +114,53 @@ async function fredMonthly(id: string, limit = 60): Promise<{ date: string; valu
   } catch {
     return [];
   }
+}
+
+// ALFRED vintage fetch — returns the INITIAL RELEASE value for each observation
+// period, eliminating look-ahead bias from data revisions.
+// ALFRED API: realtime_start=obs_date gives the first published value.
+// Falls back to current-vintage fredMonthly on any error.
+type VintageObs = { realtime_start: string; date: string; value: string };
+async function fredMonthlyInitialRelease(
+  id: string, limit = 80
+): Promise<{ date: string; value: number }[]> {
+  if (!KEY) return [];
+  try {
+    const startYear = new Date().getFullYear() - Math.ceil(limit / 12) - 1;
+    const url =
+      `${FRED_BASE}?series_id=${id}&api_key=${KEY}&file_type=json` +
+      `&realtime_start=${startYear}-01-01&realtime_end=9999-01-01` +
+      `&frequency=m&aggregation_method=avg&sort_order=asc`;
+    const r = await fetch(url, { next: { revalidate: 86400 } });
+    if (!r.ok) return fredMonthly(id, limit);
+    const raw: VintageObs[] = ((await r.json()).observations ?? []).filter(
+      (o: VintageObs) => o.value !== "." && o.value !== ""
+    );
+    // For each observation date, keep the EARLIEST realtime_start (initial release)
+    const byDate = new Map<string, number>();
+    for (const o of raw) {
+      const month = o.date.slice(0, 7);
+      if (!byDate.has(month)) {
+        const v = parseFloat(o.value);
+        if (!isNaN(v)) byDate.set(month, v);
+      }
+    }
+    return Array.from(byDate.entries())
+      .map(([date, value]) => ({ date, value }))
+      .sort((a, b) => a.date.localeCompare(b.date))
+      .slice(-limit);
+  } catch {
+    return fredMonthly(id, limit);
+  }
+}
+
+// Series known to be significantly revised — use ALFRED initial-release data
+const REVISED_SERIES = new Set(["INDPRO", "PAYEMS", "PERMIT", "UNRATE"]);
+
+async function fredMonthlyPIT(id: string, limit = 80): Promise<{ date: string; value: number }[]> {
+  return REVISED_SERIES.has(id)
+    ? fredMonthlyInitialRelease(id, limit)
+    : fredMonthly(id, limit);
 }
 
 // ── Demo regime sequence (24 months ending today) ────────────────────────────
@@ -305,7 +352,7 @@ async function handler(req: NextRequest) {
       ...DEFAULT_RISK_INDICATORS.map(i => i.fredSeries),
     ])];
     const fetched = await Promise.all(
-      allIds.map(id => fredMonthly(id, 72).then(data => [id, data] as const))
+      allIds.map(id => fredMonthlyPIT(id, 80).then(data => [id, data] as const))
     );
     const seriesMap = Object.fromEntries(fetched);
 
@@ -569,6 +616,6 @@ async function handler(req: NextRequest) {
     },
     dataNote: isDemo
       ? "Regime sequence is illustrative. ETF price history is real (Yahoo Finance)."
-      : "Regime sequence from live FRED data with publication lags enforced. ETF prices: Yahoo Finance.",
+      : "Regime sequence from FRED/ALFRED data: publication lags enforced + initial-release values used for revised series (INDPRO, PAYEMS, PERMIT, UNRATE). ETF prices: Yahoo Finance.",
   });
 }

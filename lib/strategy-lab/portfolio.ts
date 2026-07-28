@@ -32,9 +32,10 @@ export type FactorScoreResult = {
   zSize:        number | null;
   // ── Regime-weighted composite ──────────────────────────────────────────────
   compositeScore: number;
-  // ── Data quality ──────────────────────────────────────────────────────────
-  priceDataOk:  boolean;
-  fundDataOk:   boolean;
+  // ── Data quality & point-in-time metadata ────────────────────────────────
+  priceDataOk:      boolean;
+  fundDataOk:       boolean;
+  reportingLagDays: number;   // days after quarter-end until filing available
 };
 
 export type PortfolioExposure = {

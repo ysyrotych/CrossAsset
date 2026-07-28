@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
+import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
@@ -155,6 +156,15 @@ function StatusDot({ status }: { status: ReadinessGate["status"] }) {
   const colors = { complete: "bg-[#147a4f]", partial: "bg-[#b7791f]", pending: "bg-[#bbb]", blocked: "bg-[#b42318]" };
   return <span className={`w-2 h-2 rounded-full shrink-0 mt-[3px] ${colors[status]}`} />;
 }
+function Skeleton({ className = "" }: { className?: string }) {
+  return <div className={`animate-pulse bg-[#ede9e2] rounded-sm ${className}`} />;
+}
+
+// PDF tearsheet — loaded dynamically to avoid SSR issues with @react-pdf/renderer
+const TearsheetDownloadButton = dynamic(
+  () => import("@/components/strategy-lab/StrategyTearsheet"),
+  { ssr: false, loading: () => <span className="text-[10px] text-[#bbb]">Loading…</span> }
+);
 
 // ── Regime four-quadrant diagram ──────────────────────────────────────────────
 function RegimeQuadrant({
@@ -463,13 +473,25 @@ export default function StrategyLabPage() {
   const [universeSectorFilter, setUniverseSectorFilter] = useState<string>("All");
   const [universeSortBy,       setUniverseSortBy]       = useState<string>("regime");
   const [suggestedWeights,     setSuggestedWeights]     = useState<Record<string, number> | null>(null);
+  const [shareCopied,          setShareCopied]          = useState(false);
 
-  // Load portfolio from localStorage on mount
+  // Load portfolio from localStorage OR URL param on mount
   useEffect(() => {
+    try {
+      const urlParam = new URLSearchParams(window.location.search).get("p");
+      if (urlParam) {
+        const decoded = JSON.parse(atob(urlParam)) as { t: string; w: number }[];
+        if (Array.isArray(decoded) && decoded.length > 0) {
+          setHoldings(decoded.map(x => ({ ticker: x.t, weight: x.w })));
+          return;
+        }
+      }
+    } catch { /* invalid param, fall through */ }
     try {
       const saved = localStorage.getItem("sl_portfolio");
       if (saved) setHoldings(JSON.parse(saved));
     } catch { /* ignore */ }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Persist portfolio to localStorage whenever it changes
@@ -536,6 +558,18 @@ export default function StrategyLabPage() {
       fetchUniverseScores();
     }
   }, [activeTab, universeScores, universeLoading, fetchUniverseScores]);
+
+  // Share Analysis — encode current portfolio as URL param
+  const handleShare = useCallback(() => {
+    try {
+      const encoded = btoa(JSON.stringify(holdings.map(h => ({ t: h.ticker, w: h.weight }))));
+      const url = `${window.location.origin}${window.location.pathname}?p=${encoded}`;
+      navigator.clipboard.writeText(url).then(() => {
+        setShareCopied(true);
+        setTimeout(() => setShareCopied(false), 2000);
+      });
+    } catch { /* ignore */ }
+  }, [holdings]);
 
   // Derived values — recomputed when user edits indicator weights
   const factorTargets = useMemo<FactorTarget[]>(() => {
@@ -815,7 +849,7 @@ export default function StrategyLabPage() {
         </div>
 
         {/* ── Sub-navigation tabs ───────────────────────────────────────── */}
-        <div className="-mx-10 mb-8 border-b border-[#e8e3da] bg-[#fbfaf7] px-10">
+        <div className="-mx-10 mb-8 border-b border-[#e8e3da] bg-[#fbfaf7] px-10 sticky top-0 z-20">
           <div className="flex gap-0">
             {TABS.map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
@@ -1543,9 +1577,20 @@ export default function StrategyLabPage() {
               </div>
 
               {universeLoading && (
-                <div className="text-center py-8">
-                  <p className="text-[11px] text-[#999]">Scoring universe (~60 stocks from Yahoo Finance)…</p>
-                  <p className="text-[10px] text-[#bbb] mt-1">This takes 10–20 seconds on first load.</p>
+                <div className="space-y-2">
+                  <div className="flex gap-2 mb-3">
+                    {Array.from({ length: 6 }).map((_, i) => <Skeleton key={i} className="h-7 w-20" />)}
+                  </div>
+                  {Array.from({ length: 10 }).map((_, i) => (
+                    <div key={i} className="flex gap-2 items-center">
+                      <Skeleton className="h-5 w-12" />
+                      <Skeleton className="h-5 flex-1" />
+                      {Array.from({ length: 6 }).map((_, j) => <Skeleton key={j} className="h-5 w-14" />)}
+                    </div>
+                  ))}
+                  <p className="text-[10px] text-[#bbb] text-center pt-2">
+                    Scoring 150+ stocks against current regime factor weights…
+                  </p>
                 </div>
               )}
 
@@ -1828,6 +1873,22 @@ export default function StrategyLabPage() {
                     Reset
                   </button>
                   <button
+                    onClick={handleShare}
+                    className="flex items-center gap-1.5 text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                    title="Copy shareable link to clipboard"
+                  >
+                    {shareCopied ? "✓ Copied!" : "Share"}
+                  </button>
+                  {factorScores && (
+                    <TearsheetDownloadButton
+                      holdings={holdings}
+                      factorScores={factorScores}
+                      portExposures={portExposures}
+                      currentRegime={currentRegime}
+                      computedAt={scoreTimestamp}
+                    />
+                  )}
+                  <button
                     onClick={analyzePortfolio}
                     disabled={computingScores || Math.abs(totalWeight - 1) > 0.02}
                     className="text-[11px] font-semibold bg-[#0c1b38] text-white px-5 py-1.5 hover:bg-[#162d5c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
@@ -2024,6 +2085,9 @@ export default function StrategyLabPage() {
                                 <span className="text-[8.5px] font-bold" style={{ color: s.priceDataOk && s.fundDataOk ? "#147a4f" : s.priceDataOk ? "#b7791f" : "#b42318" }}>
                                   {s.priceDataOk && s.fundDataOk ? "FULL" : s.priceDataOk ? "PRICE" : "NONE"}
                                 </span>
+                                {s.reportingLagDays != null && (
+                                  <span className="block text-[7.5px] text-[#ccc] mt-0.5">{s.reportingLagDays}d lag</span>
+                                )}
                               </td>
                             </tr>
                           );
@@ -2417,10 +2481,29 @@ export default function StrategyLabPage() {
               </div>
             )}
             {computingScores && (
-              <div className="border border-[#eee9df] bg-[#fbfaf7] px-6 py-8 text-center">
-                <p className="text-[12px] font-semibold text-[#0c1b38] mb-1">Computing factor scores…</p>
-                <p className="text-[11px] text-[#999]">Fetching 2Y adjusted price history + fundamentals for {holdings.length} stocks. This takes ~15–30 seconds.</p>
-              </div>
+              <Card className="p-5 space-y-3">
+                <div className="flex items-center justify-between mb-1">
+                  <Skeleton className="h-3 w-36" />
+                  <Skeleton className="h-3 w-24" />
+                </div>
+                <div className="grid grid-cols-5 gap-2">
+                  {Array.from({ length: 5 }).map((_, i) => (
+                    <Skeleton key={i} className="h-8 w-full" />
+                  ))}
+                </div>
+                {Array.from({ length: holdings.length > 0 ? Math.min(holdings.length, 8) : 6 }).map((_, i) => (
+                  <div key={i} className="flex gap-2 items-center">
+                    <Skeleton className="h-4 w-12" />
+                    <Skeleton className="h-4 flex-1" />
+                    {Array.from({ length: 5 }).map((_, j) => (
+                      <Skeleton key={j} className="h-4 w-14" />
+                    ))}
+                  </div>
+                ))}
+                <p className="text-[10px] text-[#bbb] text-center pt-1">
+                  Fetching 2Y price history + fundamentals for {holdings.length} stocks…
+                </p>
+              </Card>
             )}
           </div>
         )}
@@ -2432,10 +2515,22 @@ export default function StrategyLabPage() {
           <div className="space-y-5">
             {/* Loading / error states */}
             {backtestLoading && (
-              <Card className="p-8 text-center">
-                <div className="text-[11px] text-[#999] mb-2">Fetching ETF price history from Yahoo Finance…</div>
-                <div className="text-[10px] text-[#bbb]">MTUM · USMV · VLUE · QUAL · IJR · SPY</div>
-              </Card>
+              <div className="space-y-5">
+                <Card className="p-5 space-y-3">
+                  <Skeleton className="h-3 w-40 mb-2" />
+                  <Skeleton className="h-[220px] w-full" />
+                  <div className="flex gap-3 mt-2">
+                    {Array.from({ length: 4 }).map((_, i) => <Skeleton key={i} className="h-14 flex-1" />)}
+                  </div>
+                </Card>
+                <Card className="p-5 space-y-2">
+                  <Skeleton className="h-3 w-32 mb-2" />
+                  <Skeleton className="h-[100px] w-full" />
+                </Card>
+                <p className="text-[10px] text-[#bbb] text-center">
+                  Fetching ETF price history from Yahoo Finance — MTUM · USMV · VLUE · QUAL · IJR · SPY
+                </p>
+              </div>
             )}
             {backtestError && (
               <Card className="p-5">
