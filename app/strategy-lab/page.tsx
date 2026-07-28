@@ -2206,13 +2206,14 @@ export default function StrategyLabPage() {
                           tick={{ fontSize: 10, fill: "#0c1b38", fontWeight: 600 }} />
                         <Tooltip
                           contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }}
-                          formatter={(val: unknown, name: string) => [
+                          formatter={(val: unknown, name: string | number | undefined) => [
                             `${typeof val === "number" ? val.toFixed(1) : val}%`,
                             name === "sys" ? "Systematic (β)" : "Idiosyncratic",
                           ]}
-                          labelFormatter={(label: string) => {
-                            const r = riskRows.find(r => r.ticker === label);
-                            return r ? `${r.ticker} · β=${r.beta.toFixed(2)} · σ=${(r.vol * 100).toFixed(0)}%` : label;
+                          labelFormatter={(label: unknown) => {
+                            const key = String(label);
+                            const r = riskRows.find(r => r.ticker === key);
+                            return r ? `${r.ticker} · β=${r.beta.toFixed(2)} · σ=${(r.vol * 100).toFixed(0)}%` : key;
                           }}
                         />
                         <Bar dataKey="sys"  stackId="r" fill={NAVY}  name="sys"  radius={0} />
