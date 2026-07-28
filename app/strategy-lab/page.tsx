@@ -2119,6 +2119,192 @@ export default function StrategyLabPage() {
               </Card>
             )}
 
+            {/* ── Portfolio Risk Decomposition ──────────────────────────────── */}
+            {factorScores && factorScores.length > 0 && (() => {
+              const MARKET_VOL = 0.16; // long-run SPY annualised vol
+
+              // Only include holdings with both beta and vol available
+              const valid = factorScores.filter(
+                (s): s is typeof s & { beta: number; realizedVol: number } =>
+                  s.beta != null && s.realizedVol != null && s.weight > 0
+              );
+              if (valid.length < 2) return null;
+
+              // Portfolio-level quantities
+              const portBeta    = valid.reduce((s, r) => s + r.weight * r.beta, 0);
+              const getIdioVar  = (r: typeof valid[0]) =>
+                Math.max(0, r.realizedVol ** 2 - r.beta ** 2 * MARKET_VOL ** 2);
+              const sysPortVar  = portBeta ** 2 * MARKET_VOL ** 2;
+              const idioPortVar = valid.reduce((s, r) => s + r.weight ** 2 * getIdioVar(r), 0);
+              const portVar     = sysPortVar + idioPortVar;
+              const portVol     = Math.sqrt(portVar);
+              if (portVol <= 0) return null;
+
+              // Euler decomposition: RC_i = w_i × MRC_i
+              // MRC_i = (β_i × β_p × σ²_m + w_i × σ²_ε,i) / σ_p
+              // %RC_i = RC_i / σ_p = w_i × (β_i × β_p × σ²_m + w_i × σ²_ε,i) / σ²_p
+              type RiskRow = {
+                ticker: string; name: string; sector: string;
+                weight: number; beta: number; vol: number;
+                sys: number; idio: number; total: number;
+              };
+              const riskRows: RiskRow[] = valid.map(r => {
+                const sys  = r.weight * r.beta * portBeta * MARKET_VOL ** 2 / portVar * 100;
+                const idio = r.weight ** 2 * getIdioVar(r) / portVar * 100;
+                return {
+                  ticker: r.ticker, name: r.name || r.ticker, sector: r.sector || "",
+                  weight: r.weight, beta: r.beta, vol: r.realizedVol,
+                  sys:   Math.round(sys  * 10) / 10,
+                  idio:  Math.round(idio * 10) / 10,
+                  total: Math.round((sys + idio) * 10) / 10,
+                };
+              }).sort((a, b) => b.total - a.total);
+
+              const sysShare  = Math.round(sysPortVar  / portVar * 100);
+              const idioShare = Math.round(idioPortVar / portVar * 100);
+              const coveredWt = valid.reduce((s, r) => s + r.weight, 0);
+              const excluded  = factorScores.length - valid.length;
+
+              return (
+                <Card className="p-6">
+                  <div className="flex items-center gap-3 mb-5">
+                    <SectionLabel>Portfolio Risk Decomposition</SectionLabel>
+                    <span className="text-[9.5px] text-[#bbb]">
+                      Euler (MRC) decomposition · beta model · σ_m = 16% ann.
+                    </span>
+                  </div>
+
+                  {/* ── Summary stats ── */}
+                  <div className="grid grid-cols-4 gap-3 mb-6">
+                    {[
+                      { label: "Portfolio Beta",     val: portBeta.toFixed(2),         sub: "weighted avg β vs SPY",   color: portBeta > 1.2 ? NEGATIVE : portBeta < 0.8 ? POSITIVE : NAVY },
+                      { label: "Est. Portfolio Vol", val: `${(portVol * 100).toFixed(1)}%`, sub: "beta model, annualised",color: NAVY },
+                      { label: "Systematic Risk",    val: `${sysShare}%`,               sub: "driven by market beta",   color: "#2563eb" },
+                      { label: "Idiosyncratic Risk", val: `${idioShare}%`,              sub: "stock-specific exposure",  color: AMBER },
+                    ].map(({ label, val, sub, color }) => (
+                      <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                        <MiniLabel>{label}</MiniLabel>
+                        <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
+                        <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* ── Stacked bar chart: risk contribution per position ── */}
+                  <MiniLabel>Risk Contribution per Position — % of total portfolio vol</MiniLabel>
+                  <div className="mt-3" style={{ height: Math.max(180, riskRows.length * 30 + 44) }}>
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart layout="vertical" data={riskRows}
+                        margin={{ top: 4, right: 56, bottom: 8, left: 4 }}>
+                        <CartesianGrid stroke="#eee9df" horizontal={false} />
+                        <XAxis type="number" axisLine={false} tickLine={false}
+                          tick={{ fontSize: 9, fill: "#bbb" }}
+                          tickFormatter={(v: number) => `${v.toFixed(0)}%`}
+                          domain={[0, "dataMax + 2"]} />
+                        <YAxis type="category" dataKey="ticker" width={44} axisLine={false} tickLine={false}
+                          tick={{ fontSize: 10, fill: "#0c1b38", fontWeight: 600 }} />
+                        <Tooltip
+                          contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }}
+                          formatter={(val: unknown, name: string) => [
+                            `${typeof val === "number" ? val.toFixed(1) : val}%`,
+                            name === "sys" ? "Systematic (β)" : "Idiosyncratic",
+                          ]}
+                          labelFormatter={(label: string) => {
+                            const r = riskRows.find(r => r.ticker === label);
+                            return r ? `${r.ticker} · β=${r.beta.toFixed(2)} · σ=${(r.vol * 100).toFixed(0)}%` : label;
+                          }}
+                        />
+                        <Bar dataKey="sys"  stackId="r" fill={NAVY}  name="sys"  radius={0} />
+                        <Bar dataKey="idio" stackId="r" fill={AMBER} name="idio" radius={[0, 2, 2, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                  <div className="flex items-center gap-5 mt-1 text-[9.5px] text-[#999]">
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-2.5 inline-block" style={{ backgroundColor: NAVY }} />
+                      Systematic (β × market)
+                    </span>
+                    <span className="flex items-center gap-1.5">
+                      <span className="w-3 h-2.5 inline-block" style={{ backgroundColor: AMBER }} />
+                      Idiosyncratic (stock-specific)
+                    </span>
+                  </div>
+
+                  {/* ── Detailed table ── */}
+                  <div className="mt-5 border border-[#eee9df] overflow-x-auto">
+                    <table className="w-full text-left min-w-[580px]">
+                      <thead>
+                        <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Ticker</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Wt.</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Beta</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Ann. Vol</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-right" style={{ color: NAVY }}>Sys. RC%</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-right" style={{ color: AMBER }}>Idio. RC%</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] text-right">Total RC%</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {riskRows.map(r => (
+                          <tr key={r.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                            <td className="px-3 py-2">
+                              <span className="text-[11.5px] font-bold text-[#0c1b38]">{r.ticker}</span>
+                              <span className="ml-1.5 text-[9px] text-[#ccc]">{r.sector}</span>
+                            </td>
+                            <td className="px-3 py-2 text-[11px] tabular-nums text-[#777] text-right">{(r.weight * 100).toFixed(1)}%</td>
+                            <td className="px-3 py-2 text-[11px] tabular-nums text-right font-semibold"
+                              style={{ color: r.beta > 1.3 ? NEGATIVE : r.beta < 0.7 ? POSITIVE : "#555" }}>
+                              {r.beta.toFixed(2)}
+                            </td>
+                            <td className="px-3 py-2 text-[11px] tabular-nums text-[#555] text-right">
+                              {(r.vol * 100).toFixed(1)}%
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <span className="text-[11px] font-semibold tabular-nums" style={{ color: NAVY }}>
+                                {r.sys.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <span className="text-[11px] font-semibold tabular-nums" style={{ color: AMBER }}>
+                                {r.idio.toFixed(1)}%
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              <span className="text-[12px] font-bold tabular-nums text-[#0c1b38]">
+                                {r.total.toFixed(1)}%
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                      <tfoot>
+                        <tr className="border-t-2 border-[#ddd]">
+                          <td className="px-3 py-2 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Portfolio</td>
+                          <td className="px-3 py-2 text-right text-[11px] tabular-nums text-[#777]">{(coveredWt * 100).toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right text-[11.5px] font-bold text-[#0c1b38]">{portBeta.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right text-[11.5px] font-bold text-[#0c1b38]">{(portVol * 100).toFixed(1)}%</td>
+                          <td className="px-3 py-2 text-right">
+                            <span className="text-[11.5px] font-bold tabular-nums" style={{ color: NAVY }}>{sysShare}%</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <span className="text-[11.5px] font-bold tabular-nums" style={{ color: AMBER }}>{idioShare}%</span>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <span className="text-[12px] font-bold tabular-nums text-[#0c1b38]">100%</span>
+                          </td>
+                        </tr>
+                      </tfoot>
+                    </table>
+                  </div>
+
+                  <p className="mt-2 text-[9.5px] text-[#bbb]">
+                    RC_i = w_i × (β_i·β_p·σ²_m + w_i·σ²_ε,i) / σ²_p · sums to 100% by Euler&apos;s theorem
+                    {excluded > 0 && ` · ${excluded} holding${excluded > 1 ? "s" : ""} excluded (price data unavailable)`}
+                  </p>
+                </Card>
+              );
+            })()}
+
             {/* ── Portfolio Optimizer ───────────────────────────────────────── */}
             {factorScores && factorScores.length > 0 && currentRegime && (
               <Card className="p-6">
