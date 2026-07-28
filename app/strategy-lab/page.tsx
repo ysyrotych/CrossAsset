@@ -2305,6 +2305,20 @@ export default function StrategyLabPage() {
                             <XAxis dataKey="date" axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} interval="preserveStartEnd" />
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} domain={["auto", 0]} />
                             <Tooltip contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }} formatter={(v: unknown) => [`${typeof v === "number" ? (v * 100).toFixed(2) : v}%`, "Drawdown"]} />
+                            {(() => {
+                              const RFILL: Record<string, string> = { Recovery: "#dbeafe", Expansion: "#d1fae5", Slowdown: "#fef3c7", Contraction: "#fee2e2" };
+                              const periods: { x1: string; x2: string; regime: string }[] = [];
+                              let cur = months[0]?.regime; let st = months[0]?.date;
+                              for (let i = 1; i <= months.length; i++) {
+                                if (i === months.length || months[i].regime !== cur) {
+                                  if (cur && st) periods.push({ x1: st, x2: months[i - 1]?.date ?? st, regime: cur });
+                                  if (i < months.length) { cur = months[i].regime; st = months[i].date; }
+                                }
+                              }
+                              return periods.map((p, i) => (
+                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#f0f0f0"} fillOpacity={0.35} strokeOpacity={0} />
+                              ));
+                            })()}
                             <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke={NEGATIVE} fill={NEGATIVE} fillOpacity={0.15} strokeWidth={1.5} dot={false} />
                           </AreaChart>
                         </ResponsiveContainer>
@@ -2332,6 +2346,68 @@ export default function StrategyLabPage() {
                       </div>
                     </Card>
                   )}
+
+                  {/* ── Year-by-Year returns table ── */}
+                  {months.length > 0 && (() => {
+                    const byYear: Record<string, { strat: number; bench: number }> = {};
+                    for (const m of months) {
+                      const yr = m.date.slice(0, 4);
+                      if (!byYear[yr]) byYear[yr] = { strat: 1, bench: 1 };
+                      byYear[yr].strat *= (1 + (m.stratReturn ?? 0));
+                      byYear[yr].bench *= (1 + (m.benchReturn ?? 0));
+                    }
+                    const rows = Object.entries(byYear)
+                      .sort(([a], [b]) => a.localeCompare(b))
+                      .map(([year, v]) => ({ year, strat: v.strat - 1, bench: v.bench - 1, alpha: (v.strat - 1) - (v.bench - 1) }));
+                    return (
+                      <Card className="p-5">
+                        <SectionLabel>Calendar Year Returns</SectionLabel>
+                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Full-year performance — strategy vs S&P 500 (SPY) · partial year shown for current year</p>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-[11px] border-collapse">
+                            <thead>
+                              <tr className="border-b border-[#eee9df]">
+                                <th className="text-left py-2 pr-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Year</th>
+                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Strategy</th>
+                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">S&P 500</th>
+                                <th className="text-right py-2 pl-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Alpha</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {rows.map(r => (
+                                <tr key={r.year} className="border-b border-[#f4f1ec] hover:bg-[#fbfaf7] transition-colors">
+                                  <td className="py-2 pr-4 font-semibold text-[#444]">{r.year}</td>
+                                  <td className="py-2 px-4 text-right tabular-nums font-bold" style={{ color: r.strat >= 0 ? POSITIVE : NEGATIVE }}>
+                                    {r.strat >= 0 ? "+" : ""}{(r.strat * 100).toFixed(1)}%
+                                  </td>
+                                  <td className="py-2 px-4 text-right tabular-nums text-[#555]">
+                                    {r.bench >= 0 ? "+" : ""}{(r.bench * 100).toFixed(1)}%
+                                  </td>
+                                  <td className="py-2 pl-4 text-right tabular-nums font-semibold" style={{ color: r.alpha >= 0 ? POSITIVE : NEGATIVE }}>
+                                    {r.alpha >= 0 ? "+" : ""}{(r.alpha * 100).toFixed(1)}%
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                            <tfoot>
+                              <tr className="border-t-2 border-[#ddd]">
+                                <td className="py-2 pr-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Full Period</td>
+                                <td className="py-2 px-4 text-right tabular-nums font-bold" style={{ color: bt.stats && bt.stats.annStrat >= 0 ? POSITIVE : NEGATIVE }}>
+                                  {bt.stats ? `${bt.stats.annStrat >= 0 ? "+" : ""}${(bt.stats.annStrat * 100).toFixed(1)}% ann.` : "—"}
+                                </td>
+                                <td className="py-2 px-4 text-right tabular-nums text-[#555]">
+                                  {bt.stats ? `${bt.stats.annBench >= 0 ? "+" : ""}${(bt.stats.annBench * 100).toFixed(1)}% ann.` : "—"}
+                                </td>
+                                <td className="py-2 pl-4 text-right tabular-nums font-semibold" style={{ color: bt.stats && bt.stats.ir > 0 ? POSITIVE : NEGATIVE }}>
+                                  {bt.stats ? `IR ${bt.stats.ir.toFixed(2)}` : "—"}
+                                </td>
+                              </tr>
+                            </tfoot>
+                          </table>
+                        </div>
+                      </Card>
+                    );
+                  })()}
 
                   {/* ── Regime performance attribution ── */}
                   <Card className="p-5">
