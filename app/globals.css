@@ -164,3 +164,62 @@
 
 /* Hover states on interactive rows */
 .dark .hover\:bg-gray-50:hover { background-color: var(--ca-surface-2) !important; }
+
+/* ── Hardcoded navy overrides (bg-[#0c1b38] used throughout as card headers, buttons) */
+.dark .bg-\[#0c1b38\]   { background-color: var(--ca-surface-2) !important; }
+.dark .text-\[#0c1b38\] { color: var(--ca-text) !important; }
+.dark .border-\[#0c1b38\] { border-color: var(--ca-accent) !important; }
+
+/* Dashboard specific beige leftovers */
+.dark .bg-\[#fbfaf7\]   { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#eee9df\]   { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#fafafa\]   { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#f5f6f8\]   { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#fafaf8\]   { background-color: var(--ca-surface-2) !important; }
+.dark .border-\[#e8e3da\] { border-color: var(--ca-border) !important; }
+.dark .border-\[#eee9df\] { border-color: var(--ca-border) !important; }
+
+/* Generic dark text that should be light in dark mode */
+.dark .text-\[#333\]    { color: var(--ca-text) !important; }
+.dark .text-\[#444\]    { color: var(--ca-text) !important; }
+.dark .text-\[#555\]    { color: var(--ca-text-2) !important; }
+.dark .text-\[#666\]    { color: var(--ca-text-2) !important; }
+.dark .text-\[#777\]    { color: var(--ca-text-2) !important; }
+.dark .text-\[#888\]    { color: var(--ca-text-2) !important; }
+.dark .text-\[#999\]    { color: var(--ca-text-3) !important; }
+.dark .text-\[#aaa\]    { color: var(--ca-text-3) !important; }
+.dark .text-\[#bbb\]    { color: var(--ca-text-3) !important; }
+.dark .text-\[#0a0a0a\] { color: var(--ca-text) !important; }
+.dark .text-\[#1a1a1a\] { color: var(--ca-text) !important; }
+
+/* Specific border overrides */
+.dark .border-\[#e8e8e8\] { border-color: var(--ca-border) !important; }
+.dark .border-\[#ebebeb\] { border-color: var(--ca-border) !important; }
+.dark .border-\[#d0d7e8\] { border-color: var(--ca-border-2) !important; }
+.dark .border-\[#dce5ff\] { border-color: var(--ca-border-2) !important; }
+.dark .border-\[#c8d0e8\] { border-color: var(--ca-border) !important; }
+.dark .divide-\[#f1eee8\] > * + * { border-color: var(--ca-border) !important; }
+
+/* Background overrides for highlighted/active states */
+.dark .bg-\[#eef1f8\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#f5f8ff\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#f5f7ff\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#dce5ff\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#eef0f5\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#f5f5f5\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#fef9ef\]  { background-color: var(--ca-amber-bg) !important; }
+.dark .bg-\[#faf8f3\]  { background-color: var(--ca-surface-2) !important; }
+.dark .bg-\[#fff7f5\]  { background-color: var(--ca-red-bg) !important; }
+.dark .bg-\[#f4fbf7\]  { background-color: var(--ca-green-bg) !important; }
+.dark .bg-\[#f0faf4\]  { background-color: var(--ca-green-bg) !important; }
+.dark .bg-\[#fff5f5\]  { background-color: var(--ca-red-bg) !important; }
+.dark .bg-\[#fff5f4\]  { background-color: var(--ca-red-bg) !important; }
+.dark .bg-\[#f0fbf5\]  { background-color: var(--ca-green-bg) !important; }
+.dark .bg-\[#fffbf0\]  { background-color: var(--ca-amber-bg) !important; }
+.dark .bg-\[#fffbeb\]  { background-color: var(--ca-amber-bg) !important; }
+
+/* 10K specific: section-level dark bg that should lighten */
+.dark .bg-\[#1e3560\]  { background-color: var(--ca-surface-2) !important; }
+
+/* Scrollbar in dark mode */
+.dark ::-webkit-scrollbar-thumb { background: var(--ca-border-2); }

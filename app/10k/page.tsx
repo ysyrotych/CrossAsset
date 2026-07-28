@@ -139,15 +139,15 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
   const displayYears = allYears.slice(-5);
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
-      <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
+      <div className="px-4 py-2.5 flex items-center justify-between" style={{ background: "var(--ca-header-bg)" }}>
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">5-Year Financial History</p>
         <TrendingUp size={12} className="text-white/40" />
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[620px]">
           <thead>
-            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+            <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-2 text-left text-[10px] font-bold uppercase tracking-wider text-[#999] w-36">Metric</th>
               {displayYears.map(y => (
                 <th key={y} className="px-3 py-2 text-right text-[10px] font-bold uppercase tracking-wider text-[#999]">
@@ -171,7 +171,7 @@ function HistoryTable({ history }: { history: Record<string, Record<string, numb
               const c = cagr(first ?? null, latest ?? null, nYears);
 
               return (
-                <tr key={label} className={`border-b border-[#f0f0f0] last:border-0 ${ri % 2 === 0 ? "bg-white" : "bg-[#fafafa]"}`}>
+                <tr key={label} className={`border-b border-gray-100 last:border-0 ${ri % 2 === 0 ? "bg-white" : "bg-gray-50"}`}>
                   <td className="px-4 py-2.5 text-[11.5px] font-semibold text-[#333]">
                     <div>{label}</div>
                     {yoy != null && (
@@ -260,10 +260,10 @@ function FinStmtTable({
       <tbody>
         {rows.map((row, i) => {
           if (row.divider) return (
-            <tr key={i}><td colSpan={showPctRev ? 3 : 2} className="px-0 py-0"><div className="border-t border-[#d8dde8] mx-4 my-0.5" /></td></tr>
+            <tr key={i}><td colSpan={showPctRev ? 3 : 2} className="px-0 py-0"><div className="border-t border-gray-200 mx-4 my-0.5" /></td></tr>
           );
           if (row.header) return (
-            <tr key={i} className="bg-[#f5f6f8]">
+            <tr key={i} className="bg-gray-50">
               <td colSpan={showPctRev ? 3 : 2} className="px-4 py-1.5 text-[9px] font-bold uppercase tracking-widest text-[#0c1b38]">{row.label}</td>
             </tr>
           );
@@ -277,7 +277,7 @@ function FinStmtTable({
           const pctRev = showPctRev && rev && rev !== 0 ? (val / rev * 100) : null;
           const isEven = i % 2 === 0;
           return (
-            <tr key={row.key} className={`border-b border-[#f0f0f0] last:border-0 ${isEven ? "bg-white" : "bg-[#fafafa]"}`}>
+            <tr key={row.key} className={`border-b border-gray-100 last:border-0 ${isEven ? "bg-white" : "bg-gray-50"}`}>
               <td className={`px-4 ${row.indent ? "pl-7" : ""} py-2 text-[11.5px] text-[#444] ${row.bold ? "font-semibold text-[#0a0a0a]" : ""}`}>
                 {row.label}
               </td>
@@ -324,7 +324,7 @@ function MarginBadges({ facts, history }: { facts: Record<string, number>; histo
         const prior = priorMargin(numKey, denKey);
         const delta = prior != null ? val - prior : null;
         return (
-          <div key={key} className="border border-[#ebebeb] rounded-lg px-4 py-3 bg-white text-center">
+          <div key={key} className="border border-gray-200 rounded-lg px-4 py-3 bg-white text-center">
             <p className="text-[9px] uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
             <p className="text-[24px] font-bold tabular-nums leading-none" style={{ color: pctColor(val) }}>{fmtNum(val, "", "%")}</p>
             {delta != null && (
@@ -419,7 +419,7 @@ function FinancialStatements({ facts, history }: { facts: Record<string, number>
   const [tab, setTab] = useState<"income" | "balance" | "cashflow">("income");
 
   if (!Object.keys(facts).length) return (
-    <div className="border border-[#ebebeb] rounded-lg px-5 py-4 bg-[#fafafa]">
+    <div className="border border-gray-200 rounded-lg px-5 py-4 bg-gray-50">
       <p className="text-[11.5px] text-[#999]">XBRL financial data unavailable — SEC filing may not include structured data or extraction failed.</p>
     </div>
   );
@@ -433,9 +433,9 @@ function FinancialStatements({ facts, history }: { facts: Record<string, number>
   return (
     <div className="space-y-5">
       <MarginBadges facts={facts} history={history} />
-      <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+      <div className="border border-gray-200 rounded-lg overflow-hidden">
         {/* Tab bar */}
-        <div className="flex border-b border-[#ebebeb] bg-[#fafafa]">
+        <div className="flex border-b border-gray-200 bg-gray-50">
           {TABS.map(({ id, label }) => (
             <button key={id} onClick={() => setTab(id)}
               className={`px-5 py-3 text-[11.5px] font-semibold border-b-2 transition-colors ${
@@ -513,7 +513,7 @@ function SectionBody({ text, query }: { text: string; query: string }) {
       {visible.map((para, i) => {
         const isHeader = para.length < 120 && /^[A-Z\s\d\-—:\.]+$/.test(para) && !para.endsWith(",");
         if (isHeader) return (
-          <p key={i} className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#0c1b38] mt-5 first:mt-0 pb-1 border-b border-[#eef0f5]">{para}</p>
+          <p key={i} className="text-[10px] font-bold tracking-[0.14em] uppercase text-[#0c1b38] mt-5 first:mt-0 pb-1 border-b border-gray-100">{para}</p>
         );
         return (
           <p key={i} className="text-[12.5px] text-[#2c2c2c] leading-[1.8]">{highlightText(para, query)}</p>
@@ -617,7 +617,7 @@ function SectionViewer({ annual, quarterly, ticker }: {
   const summaryVisible = showSummary[active] !== false && !!thisSummary;
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       {/* Header */}
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
         <BookOpen size={12} className="text-white/40" />
@@ -626,7 +626,7 @@ function SectionViewer({ annual, quarterly, ticker }: {
       </div>
 
       {/* Tab bar */}
-      <div className="flex border-b border-[#ebebeb] bg-[#fafafa] overflow-x-auto">
+      <div className="flex border-b border-gray-200 bg-gray-50 overflow-x-auto">
         {SECTION_TABS.map(t => {
           const has = hasSec(t);
           return (
@@ -651,7 +651,7 @@ function SectionViewer({ annual, quarterly, ticker }: {
       {section ? (
         <>
           {/* Controls */}
-          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-[#f0f0f0] bg-[#fdfcfc] flex-wrap">
+          <div className="flex items-center gap-2 px-5 py-2.5 border-b border-gray-100 bg-[#fdfcfc] flex-wrap">
             <div className="flex-1 min-w-0">
               <p className="text-[11.5px] font-semibold text-[#0a0a0a] truncate">{section.title}</p>
               <p className="text-[9.5px] text-[#bbb] mt-0.5">{wordCount.toLocaleString()} words · {section.char_count.toLocaleString()} chars · full text</p>
@@ -718,7 +718,7 @@ type RatioItem = { label: string; value: string; sub?: string; color?: string };
 
 function RatioCard({ label, value, sub, color = "#0a0a0a" }: RatioItem) {
   return (
-    <div className="border border-[#ebebeb] rounded-lg px-3 py-2.5 bg-white">
+    <div className="border border-gray-200 rounded-lg px-3 py-2.5 bg-white">
       <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#bbb] mb-1">{label}</p>
       <p className="text-[15px] font-bold tabular-nums leading-none" style={{ color }}>{value}</p>
       {sub && <p className="text-[9.5px] text-[#999] mt-0.5">{sub}</p>}
@@ -785,7 +785,7 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
   const showDuPont   = netMarginPct != null && assetTO != null && equityMult != null;
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Financial Ratios & Quality Metrics</p>
       </div>
@@ -793,7 +793,7 @@ function FinancialRatios({ facts }: { facts: Record<string, number> }) {
         {ratios.map(r => <RatioCard key={r.label} {...r} />)}
       </div>
       {showDuPont && (
-        <div className="border-t border-[#ebebeb] px-4 py-3 bg-[#fafafa]">
+        <div className="border-t border-gray-200 px-4 py-3 bg-gray-50">
           <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#999] mb-2">DuPont ROE Decomposition</p>
           <div className="flex items-center gap-1.5 flex-wrap">
             <span className="text-[11px] font-bold text-[#0c1b38]">{roe?.toFixed(1)}% ROE</span>
@@ -820,7 +820,7 @@ function CompanyOverview({ ext, ticker }: { ext: FmpExtended; ticker: string }) 
   if (!hasMeta) return null;
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Company Overview</p>
         {ext.fmp_rating && (
@@ -891,7 +891,7 @@ function PeerComparison({ peers, ticker }: { peers: PeerComp; ticker: string }) 
   const fmtPct = (v: number|null) => v == null ? <span className="text-[#ddd]">—</span> : <span style={{ color: pctColor(v) }}>{v.toFixed(1)}%</span>;
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Peer Comparison</p>
         <span className="ml-auto text-[9px] text-white/30">{peers.length} peers · FMP data</span>
@@ -899,7 +899,7 @@ function PeerComparison({ peers, ticker }: { peers: PeerComp; ticker: string }) 
       <div className="overflow-x-auto">
         <table className="w-full min-w-[580px]">
           <thead>
-            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+            <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-28">Ticker</th>
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">P/E</th>
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">EV/EBITDA</th>
@@ -910,7 +910,7 @@ function PeerComparison({ peers, ticker }: { peers: PeerComp; ticker: string }) 
           </thead>
           <tbody>
             {peers.map((p, i) => (
-              <tr key={p.symbol} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"} ${p.symbol === ticker ? "ring-1 ring-inset ring-[#0c1b38]/20" : ""}`}>
+              <tr key={p.symbol} className={`border-b border-gray-100 last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${p.symbol === ticker ? "ring-1 ring-inset ring-[#0c1b38]/20" : ""}`}>
                 <td className="px-4 py-2.5">
                   <span className={`text-[12px] font-bold tabular-nums ${p.symbol === ticker ? "text-[#0c1b38]" : "text-[#1a1a1a]"}`}>{p.symbol}</span>
                   {p.symbol === ticker && <span className="ml-1 text-[8px] font-bold text-[#0c1b38] bg-[#eef1f8] px-1 rounded">SUBJECT</span>}
@@ -939,14 +939,14 @@ function NewsFeed({ news }: { news: RecentNews }) {
   };
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center gap-2">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Recent News</p>
         <span className="ml-auto text-[9px] text-white/30">{news.length} articles</span>
       </div>
       <div className="divide-y divide-[#f0f0f0]">
         {news.map((item, i) => (
-          <div key={i} className="px-4 py-3 hover:bg-[#fafafa] transition-colors">
+          <div key={i} className="px-4 py-3 hover:bg-gray-50 transition-colors">
             <div className="flex items-start justify-between gap-3">
               <p className="text-[12px] font-semibold text-[#0a0a0a] leading-[1.4] flex-1">{item.title}</p>
               <span className="text-[9.5px] text-[#bbb] whitespace-nowrap shrink-0">{fmtDate(item.date)}</span>
@@ -981,14 +981,14 @@ function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
   if (!cols.length) return null;
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38]">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Historical Multiples</p>
       </div>
       <div className="overflow-x-auto">
         <table className="w-full min-w-[520px]">
           <thead>
-            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+            <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-28">Period</th>
               {cols.map(c => (
                 <th key={c.key as string} className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{c.label}</th>
@@ -997,7 +997,7 @@ function MultiplesHistory({ kmHistory }: { kmHistory: KmHistory }) {
           </thead>
           <tbody>
             {recent.map((row, i) => (
-              <tr key={row.date} className={`border-b border-[#f0f0f0] last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-[#fafafa]"} ${i === 0 ? "font-semibold" : ""}`}>
+              <tr key={row.date} className={`border-b border-gray-100 last:border-0 ${i % 2 === 0 ? "bg-white" : "bg-gray-50"} ${i === 0 ? "font-semibold" : ""}`}>
                 <td className="px-4 py-2 text-[11px] text-[#333]">{row.date?.slice(0, 7) ?? "—"}</td>
                 {cols.map(c => {
                   const v = row[c.key as keyof KmHistory[number]] as number|null;
@@ -1161,7 +1161,7 @@ function QualityScorecard({
     wcMetrics.push({ label: "FCF Conversion", value: `${(fcfConversion * 100).toFixed(0)}%`, sub: "FCF / net income" });
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between gap-4">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">Quality Scorecard & Signal Flags</p>
         <div className="flex items-center gap-3 text-right">
@@ -1190,7 +1190,7 @@ function QualityScorecard({
       </div>
       {/* Working capital efficiency */}
       {wcMetrics.length > 0 && (
-        <div className="border-t border-[#ebebeb]">
+        <div className="border-t border-gray-200">
           <div className="px-4 py-2 bg-[#f8f8f8]">
             <p className="text-[8.5px] font-bold uppercase tracking-widest text-[#999]">Cash Cycle & Efficiency</p>
           </div>
@@ -1245,7 +1245,7 @@ function QuarterlySnapshot({ annual, quarterly, period, priorQuarter, priorPerio
   const shortDate = (d: string) => d ? d.slice(0, 7) : "Prev Q";
 
   return (
-    <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+    <div className="border border-gray-200 rounded-lg overflow-hidden">
       <div className="px-4 py-2.5 bg-[#0c1b38] flex items-center justify-between">
         <p className="text-[9.5px] font-bold uppercase tracking-widest text-white/60">
           Most Recent Quarter vs Annual — {period || "Latest Quarter"}
@@ -1255,7 +1255,7 @@ function QuarterlySnapshot({ annual, quarterly, period, priorQuarter, priorPerio
       <div className="overflow-x-auto">
         <table className="w-full min-w-[600px]">
           <thead>
-            <tr className="bg-[#f5f6f8] border-b border-[#ebebeb]">
+            <tr className="bg-gray-50 border-b border-gray-200">
               <th className="px-4 py-2 text-left text-[9.5px] font-bold uppercase tracking-wider text-[#999] w-40">Metric</th>
               <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{shortDate(period)} MRQ</th>
               {hasQoQ && <th className="px-3 py-2 text-right text-[9.5px] font-bold uppercase tracking-wider text-[#999]">{shortDate(priorPeriod)}</th>}
@@ -1283,7 +1283,7 @@ function QuarterlySnapshot({ annual, quarterly, period, priorQuarter, priorPerio
                 : <span style={{ color: val >= 0 ? "#0d6b45" : "#b42318" }} className="font-semibold">{val >= 0 ? "▲" : "▼"}{Math.abs(val).toFixed(1)}%</span>;
 
               return (
-                <tr key={key} className={`border-b border-[#f0f0f0] last:border-0 ${isEven ? "bg-white" : "bg-[#fafafa]"}`}>
+                <tr key={key} className={`border-b border-gray-100 last:border-0 ${isEven ? "bg-white" : "bg-gray-50"}`}>
                   <td className="px-4 py-2 text-[11.5px] font-semibold text-[#333]">{label}</td>
                   <td className="px-3 py-2 text-right text-[12px] font-bold tabular-nums text-[#0a0a0a]">
                     {fmtNum(qVal, prefix, suffix)}
@@ -1350,7 +1350,7 @@ function BriefBody({ text }: { text: string }) {
       // Pipe-delimited table rows
       const cells = t.split("|").map(c => c.trim()).filter(Boolean);
       nodes.push(
-        <div key={i} className="flex border-b border-[#ebebeb] py-1.5">
+        <div key={i} className="flex border-b border-gray-200 py-1.5">
           {cells.map((c, ci) => (
             <span key={ci} className={`text-[11px] ${ci === 0 ? "w-48 shrink-0 text-[#555] font-medium" : "flex-1 text-[#1a1a1a] font-semibold"}`}>{inline(c, ci)}</span>
           ))}
@@ -1888,12 +1888,12 @@ export default function TenKPage() {
     <AppShell>
 
       {/* Header */}
-      <div className="mb-8 pb-6 border-b border-[#ebebeb]">
-        <p className="text-[10px] font-bold tracking-[0.22em] uppercase text-[#0c1b38] mb-2">10-K & 10-Q Analysis</p>
-        <h1 className="text-[34px] font-light text-[#0a0a0a] tracking-tight leading-none mb-3" style={{ fontFamily: "var(--font-serif)" }}>
+      <div className="mb-8 pb-6" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+        <p className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-2" style={{ color: "var(--ca-text-2)" }}>10-K & 10-Q Analysis</p>
+        <h1 className="text-[34px] font-light tracking-tight leading-none mb-3" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>
           SEC Filing Intelligence
         </h1>
-        <p className="text-[13px] text-[#9ca3af]">
+        <p className="text-[13px]" style={{ color: "var(--ca-text-3)" }}>
           Institutional-grade financial data and filing analysis directly from SEC EDGAR.
         </p>
       </div>
@@ -1902,14 +1902,16 @@ export default function TenKPage() {
       <div className="mb-8">
         <div className="flex gap-3 mb-4">
           <div className="relative flex-1 max-w-sm">
-            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2 text-[#bbb]" />
+            <Search size={14} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: "var(--ca-text-3)" }} />
             <input value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === "Enter" && !loading && fetchFiling()}
               placeholder="Enter ticker — e.g. AAPL, NVDA, META"
-              className="w-full pl-9 pr-4 py-2.5 text-[13px] border border-[#d0d7e8] rounded-md focus:outline-none focus:ring-2 focus:ring-[#0c1b38]/20 focus:border-[#0c1b38] placeholder:text-[#ccc] transition-colors" />
+              className="w-full pl-9 pr-4 py-2.5 text-[13px] rounded-md focus:outline-none transition-colors"
+              style={{ border: "1px solid var(--ca-border-2)", background: "var(--ca-surface)", color: "var(--ca-text)" }} />
           </div>
           <button onClick={() => fetchFiling()} disabled={loading || !ticker.trim()}
-            className="px-5 py-2.5 bg-[#0c1b38] text-white text-[12px] font-semibold rounded-md hover:bg-[#1a3361] disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2">
+            className="px-5 py-2.5 text-white text-[12px] font-semibold rounded-md disabled:opacity-40 disabled:cursor-not-allowed transition-colors flex items-center gap-2"
+            style={{ background: "var(--ca-accent)" }}>
             {loading
               ? <><span className="w-3 h-3 border-2 border-white border-t-transparent rounded-full animate-spin" /> Fetching…</>
               : <><FileText size={13} /> Fetch Filing</>}
@@ -1947,8 +1949,8 @@ export default function TenKPage() {
         <div className="space-y-6">
 
           {/* Company header — Bloomberg-style terminal card */}
-          <div className="border border-[#d0d7e8] rounded-lg overflow-hidden">
-            <div className="bg-[#0c1b38] px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+          <div className="rounded-lg overflow-hidden" style={{ border: "1px solid var(--ca-border-2)" }}>
+            <div className="px-5 py-3 flex items-center justify-between flex-wrap gap-3" style={{ background: "var(--ca-header-bg)" }}>
               <div className="flex items-center gap-4">
                 <span className="text-[26px] font-bold text-white leading-none tracking-tight">{data.company.ticker}</span>
                 <div>
@@ -2393,7 +2395,7 @@ export default function TenKPage() {
 
             {/* Generation progress */}
             {primerRunning && (
-              <div className="px-5 py-3 border-b border-[#ebebeb] bg-[#fafafa]">
+              <div className="px-5 py-3 border-b border-gray-200 bg-gray-50">
                 <div className="flex items-center gap-2 mb-2">
                   <span className="w-2 h-2 rounded-full bg-[#0c1b38] animate-pulse" />
                   <span className="text-[10.5px] font-semibold text-[#0c1b38]">
@@ -2421,7 +2423,7 @@ export default function TenKPage() {
 
             {/* Primer preview */}
             {showPrimer && primerText && (
-              <div ref={primerRef} className="p-6 border-b border-[#ebebeb]">
+              <div ref={primerRef} className="p-6 border-b border-gray-200">
                 {/* Download PDF button */}
                 {primerDone && (
                   <div className="flex items-center justify-between mb-5">
@@ -2452,8 +2454,8 @@ export default function TenKPage() {
           </div>
 
           {/* Optional AI Note */}
-          <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
-            <div className="px-5 py-4 bg-[#fafafa] flex items-center justify-between gap-4 border-b border-[#ebebeb]">
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
+            <div className="px-5 py-4 bg-gray-50 flex items-center justify-between gap-4 border-b border-gray-200">
               <div>
                 <p className="text-[11.5px] font-semibold text-[#0a0a0a]">AI Institutional Research Note</p>
                 <p className="text-[11px] text-[#999] mt-0.5">
@@ -2487,7 +2489,7 @@ export default function TenKPage() {
           </div>
 
           {/* ── Ask the Filing — AI Chat ──────────────────────────────────────── */}
-          <div className="border border-[#ebebeb] rounded-lg overflow-hidden">
+          <div className="border border-gray-200 rounded-lg overflow-hidden">
             <div className="px-5 py-3.5 bg-gradient-to-r from-[#0c1b38] to-[#1a3361] flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <div className="w-7 h-7 rounded-full bg-white/10 flex items-center justify-center">
@@ -2545,7 +2547,7 @@ export default function TenKPage() {
 
             {/* Quick starter questions */}
             {chatMsgs.length === 0 && (
-              <div className="px-4 py-3 border-b border-[#f0f0f0] bg-[#fafafa]">
+              <div className="px-4 py-3 border-b border-gray-100 bg-gray-50">
                 <p className="text-[9px] font-bold uppercase tracking-widest text-[#bbb] mb-2">Try asking:</p>
                 <div className="flex flex-wrap gap-1.5">
                   {[
@@ -2578,7 +2580,7 @@ export default function TenKPage() {
                     <div className={`max-w-[85%] rounded-xl px-3.5 py-2.5 ${
                       msg.role === "user"
                         ? "bg-[#0c1b38] text-white text-[12.5px] leading-[1.7]"
-                        : "bg-[#f5f6f8] text-[#1a1a1a] text-[12.5px] leading-[1.8]"
+                        : "bg-gray-50 text-[#1a1a1a] text-[12.5px] leading-[1.8]"
                     }`}>
                       {msg.role === "assistant" && !msg.content
                         ? <span className="inline-flex gap-1 items-center text-[#bbb]">
@@ -2599,7 +2601,7 @@ export default function TenKPage() {
             )}
 
             {/* Input */}
-            <div className={`flex gap-2 px-4 py-3 border-t border-[#f0f0f0] ${chatMsgs.length === 0 ? "" : "bg-white"}`}>
+            <div className={`flex gap-2 px-4 py-3 border-t border-gray-100 ${chatMsgs.length === 0 ? "" : "bg-white"}`}>
               <input
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}

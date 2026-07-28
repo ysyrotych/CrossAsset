@@ -86,19 +86,19 @@ const BORDER = "#e8e3da";
 
 // ── Primitive components ──────────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">{children}</p>;
+  return <p className="text-[10px] font-semibold uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-2)" }}>{children}</p>;
 }
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`border border-[#e8e3da] bg-white ${className}`}>{children}</section>;
+  return <section className={`rounded-xl shadow-sm ${className}`} style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>{children}</section>;
 }
 function MiniLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{children}</p>;
+  return <p className="text-[9px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-3)" }}>{children}</p>;
 }
 function ConfidenceBadge({ level }: { level: Confidence }) {
-  const cls = level === "high" ? "text-[#147a4f] bg-[#f0fbf5] border-[#b8e6ce]"
-    : level === "medium" ? "text-[#b7791f] bg-[#fffbf0] border-[#f0d89a]"
-    : "text-[#b42318] bg-[#fff5f4] border-[#f5c6c0]";
-  return <span className={`border px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] ${cls}`}>{level}</span>;
+  const cls = level === "high" ? "text-emerald-700 bg-emerald-50 border-emerald-200 dark:text-emerald-400 dark:bg-emerald-900/20 dark:border-emerald-900/40"
+    : level === "medium" ? "text-amber-700 bg-amber-50 border-amber-200 dark:text-amber-400 dark:bg-amber-900/20 dark:border-amber-900/40"
+    : "text-red-700 bg-red-50 border-red-200 dark:text-red-400 dark:bg-red-900/20 dark:border-red-900/40";
+  return <span className={`rounded-full border px-2 py-0.5 text-[9px] font-semibold uppercase ${cls}`}>{level}</span>;
 }
 function fmtUSD(v: number) {
   if (v >= 1_000_000) return `$${(v/1_000_000).toFixed(2)}M`;
@@ -121,28 +121,31 @@ function StepInput({ onSubmit, onRestoreHistory }: { onSubmit: (d: string) => vo
 
   return (
     <div className="max-w-2xl">
-      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] mb-4">Step 1 — Strategy Description</p>
-      <h2 className="text-[34px] font-light leading-[1.05] tracking-tight text-[#0a0a0a] mb-3" style={{ fontFamily: "var(--font-serif)" }}>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-4" style={{ color: "var(--ca-text-2)" }}>Step 1 — Strategy Description</p>
+      <h2 className="text-[34px] font-light leading-[1.05] tracking-tight mb-3" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>
         Tell me how you invest.
       </h2>
-      <p className="text-[13px] font-medium text-[#888] mb-8 leading-relaxed">
+      <p className="text-[13px] font-medium mb-8 leading-relaxed" style={{ color: "var(--ca-text-2)" }}>
         Describe your strategy in plain English — entry signals, exit rules, universe, risk limits. The system extracts structured assumptions and asks you to confirm before running.
       </p>
       <div className="flex flex-wrap gap-2 mb-5">
         {EXAMPLES.map(ex => (
           <button key={ex} onClick={() => setText(ex)}
-            className="text-[11px] font-medium text-[#0c1b38] border border-[#dce5ff] bg-[#f5f8ff] px-3 py-1.5 hover:bg-[#e8eeff] transition-colors leading-snug text-left">
+            className="rounded-lg text-[11px] font-medium px-3 py-1.5 transition-colors leading-snug text-left"
+            style={{ color: "var(--ca-text)", background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
             {ex}
           </button>
         ))}
       </div>
       <textarea value={text} onChange={e => setText(e.target.value)} rows={6}
         placeholder="e.g. Buy the top 20 S&P 500 stocks by 12-month momentum, equal-weight, rebalance monthly. Exit when they fall out of the top 30%. Stop-loss at 10% below entry. Benchmark against SPY."
-        className="w-full border border-[#e8e8e8] px-4 py-3.5 text-[13.5px] font-medium text-[#0a0a0a] placeholder:text-[#bbb] resize-none focus:outline-none focus:border-[#0c1b38] transition-colors leading-relaxed" />
+        className="w-full rounded-lg px-4 py-3.5 text-[13.5px] font-medium resize-none focus:outline-none transition-colors leading-relaxed"
+        style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)", color: "var(--ca-text)" }} />
       <div className="mt-4 flex items-center justify-between">
-        <p className="text-[11px] font-medium text-[#bbb]">{text.length} chars — more detail → better assumptions</p>
+        <p className="text-[11px] font-medium" style={{ color: "var(--ca-text-3)" }}>{text.length} chars — more detail → better assumptions</p>
         <button disabled={text.trim().length < 15} onClick={() => onSubmit(text.trim())}
-          className="px-6 py-2.5 bg-[#0c1b38] text-white text-[12px] font-semibold tracking-[0.08em] uppercase disabled:opacity-30 disabled:cursor-not-allowed hover:bg-[#1a2f5e] transition-colors">
+          className="rounded-lg px-6 py-2.5 text-white text-[12px] font-semibold disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+          style={{ background: "var(--ca-accent)" }}>
           Parse Strategy →
         </button>
       </div>
@@ -150,10 +153,10 @@ function StepInput({ onSubmit, onRestoreHistory }: { onSubmit: (d: string) => vo
       {history.length > 0 && (
         <div className="mt-10">
           <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#888] mb-3">Recent Strategies</p>
-          <div className="border border-[#e8e3da] divide-y divide-[#f1eee8]">
+          <div className="border border-gray-100 divide-y divide-gray-100">
             {history.slice(0, 5).map(h => (
               <button key={h.id} onClick={() => onRestoreHistory(h.config)}
-                className="w-full flex items-center justify-between px-4 py-3 hover:bg-[#fdfcfa] transition-colors text-left">
+                className="w-full flex items-center justify-between px-4 py-3 hover:bg-gray-50 transition-colors text-left">
                 <div>
                   <p className="text-[12.5px] font-bold text-[#0a0a0a]">{h.strategyName}</p>
                   <p className="text-[10.5px] text-[#888] mt-0.5">{h.config.assetClass} · {h.config.startDate} → {h.config.endDate}</p>
@@ -189,8 +192,8 @@ function StepParsing() {
   }, []);
   return (
     <div className="flex flex-col items-center justify-center py-36 text-center">
-      <div className="w-8 h-8 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin mb-7" />
-      <p className="text-[13px] font-semibold text-[#0c1b38] mb-2">{PARSE_STAGES[stage]}</p>
+      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mb-7" style={{ borderColor: "var(--ca-accent)", borderTopColor: "transparent" }} />
+      <p className="text-[13px] font-semibold mb-2" style={{ color: "var(--ca-text)" }}>{PARSE_STAGES[stage]}</p>
       <p className="text-[11px] text-[#bbb]">Analysing your strategy with AI…</p>
     </div>
   );
@@ -222,18 +225,18 @@ function StepAssumptions({ config, onApprove, onBack }: { config: BacktestConfig
 
   return (
     <div className="max-w-3xl">
-      <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] mb-4">Step 2 — Review Assumptions</p>
+      <p className="text-[10px] font-semibold uppercase tracking-[0.12em] mb-4" style={{ color: "var(--ca-text-2)" }}>Step 2 — Review Assumptions</p>
       <div className="flex items-start justify-between gap-6 mb-6">
         <div>
-          <h2 className="text-[26px] font-light tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>{config.strategyName}</h2>
-          <p className="text-[12px] text-[#888] mt-1.5">{assumptions.length} assumptions extracted · {config.startDate} → {config.endDate} · ${(config.initialCapital/1000).toFixed(0)}k initial capital</p>
+          <h2 className="text-[26px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>{config.strategyName}</h2>
+          <p className="text-[12px] mt-1.5" style={{ color: "var(--ca-text-2)" }}>{assumptions.length} assumptions extracted · {config.startDate} → {config.endDate} · ${(config.initialCapital/1000).toFixed(0)}k initial capital</p>
         </div>
-        <span className="border border-[#dce5ff] bg-[#f5f8ff] text-[#0c1b38] text-[10px] font-semibold px-2.5 py-1 uppercase tracking-[0.1em] shrink-0">{config.assetClass}</span>
+        <span className="rounded-full text-[10px] font-semibold px-2.5 py-1 shrink-0" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)", color: "var(--ca-text)" }}>{config.assetClass}</span>
       </div>
       {lowCount > 0 && (
-        <div className="mb-5 flex items-start gap-3 border border-[#f0d89a] bg-[#fffbf0] px-4 py-3">
-          <span className="text-[#b7791f] text-[12px] font-bold shrink-0">⚠</span>
-          <p className="text-[12px] font-medium text-[#b7791f]">{lowCount} assumption{lowCount > 1 ? "s" : ""} marked <strong>low confidence</strong> — the AI inferred these from defaults. Review and edit before running.</p>
+        <div className="mb-5 flex items-start gap-3 rounded-lg px-4 py-3" style={{ border: "1px solid var(--ca-amber)", background: "var(--ca-amber-bg)" }}>
+          <span className="text-[12px] font-bold shrink-0" style={{ color: "var(--ca-amber)" }}>⚠</span>
+          <p className="text-[12px] font-medium" style={{ color: "var(--ca-amber)" }}>{lowCount} assumption{lowCount > 1 ? "s" : ""} marked <strong>low confidence</strong> — the AI inferred these from defaults. Review and edit before running.</p>
         </div>
       )}
       <div className="space-y-6 mb-8">
@@ -243,22 +246,23 @@ function StepAssumptions({ config, onApprove, onBack }: { config: BacktestConfig
           return (
             <div key={cat}>
               <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-[#888] mb-2">{cat}</p>
-              <div className="border border-[#e8e3da] divide-y divide-[#f1eee8]">
+              <div className="border border-gray-100 divide-y divide-gray-100">
                 {items.map(a => (
-                  <div key={a.id} className="flex items-start gap-4 px-4 py-3 hover:bg-[#fdfcfa] transition-colors">
-                    <div className="w-36 shrink-0 pt-0.5"><p className="text-[12px] font-semibold text-[#0a0a0a]">{a.label}</p></div>
+                  <div key={a.id} className="flex items-start gap-4 px-4 py-3 hover:bg-gray-50 transition-colors">
+                    <div className="w-36 shrink-0 pt-0.5"><p className="text-[12px] font-semibold" style={{ color: "var(--ca-text)" }}>{a.label}</p></div>
                     <div className="flex-1 min-w-0">
                       {editing === a.id ? (
                         <div className="flex items-center gap-2">
                           <input autoFocus value={editVal} onChange={e => setEditVal(e.target.value)}
                             onKeyDown={e => { if (e.key==="Enter") saveEdit(a.id); if (e.key==="Escape") setEditing(null); }}
-                            className="flex-1 border border-[#0c1b38] px-2 py-1 text-[12px] font-medium focus:outline-none" />
-                          <button onClick={() => saveEdit(a.id)} className="text-[11px] font-semibold text-[#0c1b38] hover:underline">Save</button>
-                          <button onClick={() => setEditing(null)} className="text-[11px] font-semibold text-[#999] hover:underline">Cancel</button>
+                            className="flex-1 rounded px-2 py-1 text-[12px] font-medium focus:outline-none"
+                            style={{ border: "1px solid var(--ca-accent)", background: "var(--ca-surface-2)", color: "var(--ca-text)" }} />
+                          <button onClick={() => saveEdit(a.id)} className="text-[11px] font-semibold hover:underline" style={{ color: "var(--ca-accent)" }}>Save</button>
+                          <button onClick={() => setEditing(null)} className="text-[11px] font-semibold hover:underline" style={{ color: "var(--ca-text-3)" }}>Cancel</button>
                         </div>
                       ) : (
-                        <p className={`text-[12.5px] font-medium text-[#333] ${a.editable ? "cursor-pointer hover:text-[#0c1b38] hover:underline" : ""}`} onClick={() => startEdit(a)}>
-                          {a.value}{a.editable && <span className="ml-2 text-[9.5px] text-[#ccc] font-normal">click to edit</span>}
+                        <p className={`text-[12.5px] font-medium ${a.editable ? "cursor-pointer hover:underline" : ""}`} style={{ color: "var(--ca-text-2)" }} onClick={() => startEdit(a)}>
+                          {a.value}{a.editable && <span className="ml-2 text-[9.5px] font-normal" style={{ color: "var(--ca-text-3)" }}>click to edit</span>}
                         </p>
                       )}
                     </div>
@@ -266,10 +270,10 @@ function StepAssumptions({ config, onApprove, onBack }: { config: BacktestConfig
                       <ConfidenceBadge level={a.confidence} />
                       {a.note && (
                         <div className="relative">
-                          <button onClick={() => setShowNote(showNote === a.id ? null : a.id)} className="text-[#bbb] hover:text-[#0c1b38] transition-colors text-[13px]">ⓘ</button>
+                          <button onClick={() => setShowNote(showNote === a.id ? null : a.id)} className="transition-colors text-[13px]" style={{ color: "var(--ca-text-3)" }}>ⓘ</button>
                           {showNote === a.id && (
-                            <div className="absolute right-0 top-6 z-20 w-64 border border-[#e8e3da] bg-white shadow-lg p-3">
-                              <p className="text-[11px] font-medium text-[#555] leading-relaxed">{a.note}</p>
+                            <div className="absolute right-0 top-6 z-20 w-64 rounded-lg shadow-xl p-3" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+                              <p className="text-[11px] font-medium leading-relaxed" style={{ color: "var(--ca-text-2)" }}>{a.note}</p>
                             </div>
                           )}
                         </div>
@@ -312,7 +316,7 @@ function StepRunning() {
     <div className="flex flex-col items-center justify-center py-36 text-center max-w-sm mx-auto">
       <div className="w-8 h-8 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin mb-7" />
       <p className="text-[13px] font-semibold text-[#0c1b38] mb-5">{RUN_STAGES[idx]}</p>
-      <div className="w-full bg-[#eee9df] h-[4px] mb-3">
+      <div className="w-full bg-gray-100 h-[4px] mb-3">
         <div className="h-full bg-[#0c1b38] transition-all duration-700" style={{ width: `${pct}%` }} />
       </div>
       <p className="text-[11px] text-[#bbb]">{pct}% complete</p>
@@ -323,7 +327,7 @@ function StepRunning() {
 // ── Stats Grid ─────────────────────────────────────────────────────────────────
 function StatTile({ label, value, sub, color }: { label: string; value: string; sub?: string; color?: string }) {
   return (
-    <div className="border border-[#e8e3da] bg-white px-4 py-4">
+    <div className="border border-gray-100 bg-white px-4 py-4">
       <MiniLabel>{label}</MiniLabel>
       <p className={`mt-1.5 text-[24px] font-bold tabular-nums leading-none ${color ?? "text-[#0a0a0a]"}`}>{value}</p>
       {sub && <p className="mt-1.5 text-[10.5px] font-medium text-[#999]">{sub}</p>}
@@ -541,7 +545,7 @@ function MonthlyHeatmap({ data }: { data: MonthlyReturn[] }) {
                     );
                   })}
                   <td className="pl-2">
-                    <div className="h-8 flex items-center justify-center text-[9.5px] font-bold tabular-nums border border-[#e8e3da]" style={{ color: annRet > 0 ? GREEN : RED }}>
+                    <div className="h-8 flex items-center justify-center text-[9.5px] font-bold tabular-nums border border-gray-100" style={{ color: annRet > 0 ? GREEN : RED }}>
                       {annRet > 0 ? "+" : ""}{(annRet*100).toFixed(1)}%
                     </div>
                   </td>
@@ -588,14 +592,14 @@ function TradeLog({ trades }: { trades: TradeRecord[] }) {
         </div>
         <button onClick={exportCSV} className="text-[11px] font-semibold text-[#888] hover:text-[#0c1b38] border border-[#e8e8e8] px-3 py-1.5">Export CSV ↓</button>
       </div>
-      <div className="overflow-x-auto border border-[#e8e3da]">
+      <div className="overflow-x-auto border border-gray-100">
         <table className="w-full text-left">
-          <thead className="bg-[#fbfaf7] border-b border-[#e8e3da]">
+          <thead className="bg-gray-50 border-b border-gray-100">
             <tr><Th k="ticker" l="Ticker" /><Th k="entryDate" l="Entry" /><Th k="exitDate" l="Exit" /><Th k="entryPrice" l="Entry$" /><Th k="exitPrice" l="Exit$" /><Th k="returnPct" l="Return" /><Th k="holdingDays" l="Days" /><Th k="pnl" l="P&L" /></tr>
           </thead>
           <tbody>
             {pageData.map((t, i) => (
-              <tr key={i} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fdfcfa]">
+              <tr key={i} className="border-b border-[#f1eee8] last:border-0 hover:bg-gray-50">
                 <td className="px-3 py-2.5 text-[12px] font-bold text-[#0a0a0a]">{t.ticker}</td>
                 <td className="px-3 py-2.5 text-[11.5px] text-[#666]">{t.entryDate}</td>
                 <td className="px-3 py-2.5 text-[11.5px] text-[#666]">{t.exitDate}</td>
@@ -667,11 +671,11 @@ function StressTestPanel({ tests }: { tests: StressTest[] }) {
     <Card className="p-5 mb-4">
       <SectionLabel>Historical Stress Tests</SectionLabel>
       <p className="text-[11px] text-[#888] mt-1 mb-5">Simulated strategy performance during crisis regimes</p>
-      <div className="border border-[#e8e3da] divide-y divide-[#f1eee8]">
+      <div className="border border-gray-100 divide-y divide-gray-100">
         {tests.map(t => {
           const v = vs[t.verdict];
           return (
-            <div key={t.name} className="px-4 py-4 hover:bg-[#fdfcfa]">
+            <div key={t.name} className="px-4 py-4 hover:bg-gray-50">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex-1">
                   <div className="flex items-center gap-3 mb-1">
@@ -758,7 +762,7 @@ function FactorExposureChart({ factors }: { factors: FactorExposure[] }) {
                 <span className="text-[10px] text-[#999]">t={f.tStat.toFixed(1)}</span>
               </div>
             </div>
-            <div className="relative h-[6px] bg-[#eee9df]">
+            <div className="relative h-[6px] bg-gray-100">
               <div className="absolute top-0 h-full" style={{ left: f.exposure>=0 ? "50%" : `${50-Math.min(50,Math.abs(f.exposure)*40)}%`, width: `${Math.min(50,Math.abs(f.exposure)*40)}%`, backgroundColor: f.exposure>=0 ? NAVY : RED }} />
               <div className="absolute top-0 h-full w-px bg-[#ccc]" style={{ left: "50%" }} />
             </div>
@@ -905,7 +909,7 @@ function ParamSensHeatmap({ data }: { data: ParamSensCell[] }) {
             </tbody>
           </table>
         </div>
-        <div className="shrink-0 w-44 border border-[#e8e3da] p-3">
+        <div className="shrink-0 w-44 border border-gray-100 p-3">
           <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#888] mb-3">Optimal Parameters</p>
           <div className="space-y-2">
             <div><MiniLabel>Stop-Loss</MiniLabel><p className="text-[14px] font-bold text-[#0c1b38]">{maxSharpeCell.stopLoss}%</p></div>
@@ -1136,7 +1140,7 @@ function StepResults({ result, onReset }: { result: BacktestResult; onReset: () 
         </div>
         <button onClick={onReset} className="text-[11px] font-semibold text-[#888] hover:text-[#0c1b38] transition-colors shrink-0">← New strategy</button>
       </div>
-      <div className="mb-6 flex items-center gap-6 py-3 px-5 border border-[#e8e3da] bg-[#fbfaf7]">
+      <div className="mb-6 flex items-center gap-6 py-3 px-5 border border-gray-100 bg-gray-50">
         <p className="text-[11px] font-medium text-[#555] leading-relaxed flex-1">{result.summary}</p>
       </div>
       <div className="flex gap-0 border-b border-[#e8e8e8] mb-6">
