@@ -43,7 +43,7 @@ export default function Sidebar() {
               key={href}
               href={href}
               className={cn(
-                "flex items-center gap-2.5 px-3 py-2.5 rounded-sm text-[13px] font-medium transition-all",
+                "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-[13px] font-medium transition-all",
                 active
                   ? "text-white bg-white/10"
                   : "text-white/55 hover:text-white/85 hover:bg-white/[0.05]"

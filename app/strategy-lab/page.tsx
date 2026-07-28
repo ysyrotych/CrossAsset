@@ -1644,7 +1644,7 @@ export default function StrategyLabPage() {
                           <tr key={s.ticker} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${inPortfolio ? "bg-[#f5f7ff]" : ""}`}>
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-1.5">
-                                <span className="text-[9px] tabular-nums text-[#ccc] w-4">#{rank+1}</span>
+                                <span className="text-[9px] tabular-nums text-gray-300 w-4">#{rank+1}</span>
                                 <span className="text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</span>
                               </div>
                             </td>
@@ -1824,7 +1824,7 @@ export default function StrategyLabPage() {
                             ? { ...d, components: d.components.map(c => c.id === comp.id ? { ...c, enabled: !c.enabled } : c) }
                             : d
                           ))}
-                          className={`w-3.5 h-3.5 border rounded-sm flex items-center justify-center text-[7px] font-bold ${comp.enabled ? "bg-[#0c1b38] border-[#0c1b38] text-white" : "border-[#ccc] text-[#ccc]"}`}>
+                          className={`w-3.5 h-3.5 border rounded-sm flex items-center justify-center text-[7px] font-bold ${comp.enabled ? "bg-[#0c1b38] border-[#0c1b38] text-white" : "border-[#ccc] text-gray-300"}`}>
                           {comp.enabled ? "✓" : ""}
                         </button>
                       </div>
@@ -2055,7 +2055,7 @@ export default function StrategyLabPage() {
                         .sort((a, b) => b.compositeScore - a.compositeScore)
                         .map(s => {
                           const zScoreCell = (z: number | null) => {
-                            if (z == null) return <td className="px-3 py-2 text-center"><span className="text-[10px] text-[#ccc]">—</span></td>;
+                            if (z == null) return <td className="px-3 py-2 text-center"><span className="text-[10px] text-gray-300">—</span></td>;
                             const abs = Math.abs(z);
                             const alpha = Math.min(abs / 2, 1);
                             const bg = z > 0
@@ -2090,7 +2090,7 @@ export default function StrategyLabPage() {
                                   {s.priceDataOk && s.fundDataOk ? "FULL" : s.priceDataOk ? "PRICE" : "NONE"}
                                 </span>
                                 {s.reportingLagDays != null && (
-                                  <span className="block text-[7.5px] text-[#ccc] mt-0.5">{s.reportingLagDays}d lag</span>
+                                  <span className="block text-[7.5px] text-gray-300 mt-0.5">{s.reportingLagDays}d lag</span>
                                 )}
                               </td>
                             </tr>
@@ -2160,7 +2160,7 @@ export default function StrategyLabPage() {
                           )}
                           {!hasData && (
                             <div className="absolute inset-0 flex items-center justify-center">
-                              <span className="text-[9px] text-[#ccc]">requires FMP data</span>
+                              <span className="text-[9px] text-gray-300">requires FMP data</span>
                             </div>
                           )}
                           {/* Target marker */}
@@ -2319,7 +2319,7 @@ export default function StrategyLabPage() {
                           <tr key={r.ticker} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                             <td className="px-3 py-2">
                               <span className="text-[11.5px] font-bold text-[#0c1b38]">{r.ticker}</span>
-                              <span className="ml-1.5 text-[9px] text-[#ccc]">{r.sector}</span>
+                              <span className="ml-1.5 text-[9px] text-gray-300">{r.sector}</span>
                             </td>
                             <td className="px-3 py-2 text-[11px] tabular-nums text-gray-500 text-right">{(r.weight * 100).toFixed(1)}%</td>
                             <td className="px-3 py-2 text-[11px] tabular-nums text-right font-semibold"
