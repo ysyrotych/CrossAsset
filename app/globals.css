@@ -47,28 +47,28 @@
 
 .dark {
   /* Shadcn compat */
-  --background: #06090f;
-  --foreground: #e2e8f7;
+  --background: #0c0c0c;
+  --foreground: #f0f0f0;
 
-  /* CrossAsset tokens (dark — luxurious) */
-  --ca-bg:          #06090f;
-  --ca-surface:     #0d1525;
-  --ca-surface-2:   #111e33;
-  --ca-border:      #1e2d47;
-  --ca-border-2:    #2a3d5c;
-  --ca-text:        #e2e8f7;
-  --ca-text-2:      #6b83a8;
-  --ca-text-3:      #3a4f6e;
+  /* CrossAsset tokens (dark — premium charcoal, Bloomberg-grade) */
+  --ca-bg:          #0c0c0c;
+  --ca-surface:     #161616;
+  --ca-surface-2:   #222222;
+  --ca-border:      #2a2a2a;
+  --ca-border-2:    #383838;
+  --ca-text:        #f0f0f0;
+  --ca-text-2:      #888888;
+  --ca-text-3:      #555555;
   --ca-accent:      #c9a84c;
-  --ca-accent-text: #06090f;
-  --ca-green:       #34d399;
-  --ca-green-bg:    #052e1c;
-  --ca-red:         #f87171;
-  --ca-red-bg:      #2d0a0a;
+  --ca-accent-text: #0c0c0c;
+  --ca-green:       #22c55e;
+  --ca-green-bg:    #0a1a10;
+  --ca-red:         #ef4444;
+  --ca-red-bg:      #1a0808;
   --ca-amber:       #fbbf24;
-  --ca-amber-bg:    #1f1500;
-  --ca-sidebar-bg:  #050912;
-  --ca-header-bg:   #080e1a;
+  --ca-amber-bg:    #1a1200;
+  --ca-sidebar-bg:  #080808;
+  --ca-header-bg:   #0c0c0c;
 }
 
 @layer base {
