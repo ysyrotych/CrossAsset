@@ -23,14 +23,14 @@ import {
 } from "@/lib/strategy-lab/portfolio";
 import type { PortfolioPosition, FactorScoreResult, PortfolioExposure } from "@/lib/strategy-lab/portfolio";
 
-// ── Design tokens (match CrossAsset conventions exactly) ─────────────────────
+// ── Design tokens ────────────────────────────────────────────────────────────
 const NAVY    = "#0c1b38";
 const POSITIVE= "#147a4f";
 const NEGATIVE= "#b42318";
 const AMBER   = "#b7791f";
-const BORDER  = "#e8e3da";
-const LGRAY   = "#fbfaf7";
-const DGRAY   = "#555";
+const BORDER  = "#e5e7eb";
+const LGRAY   = "#f9fafb";
+const DGRAY   = "#4b5563";
 
 const REGIME_COLORS: Record<RegimeLabel, { bg: string; border: string; text: string; dot: string }> = {
   Recovery:    { bg: "#f0f4ff", border: "#c8d0e8", text: "#1e3a8a", dot: "#3b82f6" },
@@ -121,49 +121,53 @@ const READINESS_GATES: ReadinessGate[] = [
 const TABS = ["Overview", "Regime Engine", "Factor Model", "Portfolio Builder", "Backtest", "Diagnostics", "Methodology"] as const;
 type Tab = typeof TABS[number];
 
-// ── Primitive UI components (match CrossAsset conventions) ────────────────────
+// ── Primitive UI components ───────────────────────────────────────────────────
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] mb-0">{children}</p>;
+  return <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-gray-500 mb-0">{children}</p>;
 }
 function MiniLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{children}</p>;
+  return <p className="text-[10px] font-medium uppercase tracking-[0.1em] text-gray-400">{children}</p>;
 }
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`border border-[#e8e3da] bg-white ${className}`}>{children}</section>;
+  return (
+    <section className={`rounded-xl border border-gray-100 bg-white shadow-sm ${className}`}>
+      {children}
+    </section>
+  );
 }
 function DemoBadge() {
   return (
-    <span className="inline-flex items-center gap-1 border border-amber-300 bg-amber-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-amber-700">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-amber-200 bg-amber-50 px-2.5 py-0.5 text-[10px] font-medium text-amber-700">
       Demo Data
     </span>
   );
 }
 function ResearchBadge() {
   return (
-    <span className="inline-flex items-center gap-1 border border-[#c8d0e8] bg-[#eef1f8] px-2.5 py-0.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38]">
+    <span className="inline-flex items-center gap-1.5 rounded-full border border-blue-200 bg-blue-50 px-2.5 py-0.5 text-[10px] font-medium text-blue-700">
       Research Prototype
     </span>
   );
 }
 function PhaseBadge({ phase }: { phase: 2 | 3 | 4 }) {
   return (
-    <span className="border border-[#e8e3da] bg-[#fbfaf7] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">
+    <span className="rounded-full border border-gray-200 bg-gray-50 px-2.5 py-0.5 text-[10px] font-medium text-gray-400">
       Phase {phase}
     </span>
   );
 }
 function StatusDot({ status }: { status: ReadinessGate["status"] }) {
-  const colors = { complete: "bg-[#147a4f]", partial: "bg-[#b7791f]", pending: "bg-[#bbb]", blocked: "bg-[#b42318]" };
+  const colors = { complete: "bg-emerald-500", partial: "bg-amber-500", pending: "bg-gray-300", blocked: "bg-red-500" };
   return <span className={`w-2 h-2 rounded-full shrink-0 mt-[3px] ${colors[status]}`} />;
 }
 function Skeleton({ className = "" }: { className?: string }) {
-  return <div className={`animate-pulse bg-[#ede9e2] rounded-sm ${className}`} />;
+  return <div className={`animate-pulse bg-gray-100 rounded-lg ${className}`} />;
 }
 
 // PDF tearsheet — loaded dynamically to avoid SSR issues with @react-pdf/renderer
 const TearsheetDownloadButton = dynamic(
   () => import("@/components/strategy-lab/StrategyTearsheet"),
-  { ssr: false, loading: () => <span className="text-[10px] text-[#bbb]">Loading…</span> }
+  { ssr: false, loading: () => <span className="text-[10px] text-gray-400">Loading…</span> }
 );
 
 // ── Regime four-quadrant diagram ──────────────────────────────────────────────
@@ -282,12 +286,12 @@ function FactorBar({
   const label  = FACTOR_LABELS[target.factor];
 
   return (
-    <div className="flex items-center gap-3 py-2 border-b border-[#f1eee8] last:border-0">
+    <div className="flex items-center gap-3 py-2 border-b border-gray-100 last:border-0">
       <span className="w-[88px] text-[11.5px] font-semibold text-[#333] shrink-0">
         {target.factor === "LowVolatility" ? "Low Volatility" : target.factor}
       </span>
       {/* Bar: centered at 50% */}
-      <div className="flex-1 relative h-[6px] bg-[#eee9df]">
+      <div className="flex-1 relative h-[6px] bg-gray-100">
         <div
           className="absolute top-0 h-full"
           style={{
@@ -302,7 +306,7 @@ function FactorBar({
         {active >= 0 ? "+" : ""}{active.toFixed(2)}
       </span>
       {mode === "enhanced" && Math.abs(target.baselineActive - target.enhancedActive) > 0.05 && (
-        <span className="text-[9.5px] text-[#999] w-14 text-right tabular-nums">
+        <span className="text-[9.5px] text-gray-400 w-14 text-right tabular-nums">
           base {target.baselineActive >= 0 ? "+" : ""}{target.baselineActive.toFixed(1)}
         </span>
       )}
@@ -379,11 +383,11 @@ function IndicatorRow({
   const zColor = z == null ? "#bbb" : z > 0.5 ? POSITIVE : z < -0.5 ? NEGATIVE : AMBER;
 
   return (
-    <tr className={`border-b border-[#f1eee8] last:border-0 ${!ind.enabled ? "opacity-40" : ""}`}>
+    <tr className={`border-b border-gray-100 last:border-0 ${!ind.enabled ? "opacity-40" : ""}`}>
       <td className="py-2 pr-3 text-[11px] font-semibold text-[#0a0a0a] w-44">{ind.name}</td>
-      <td className="py-2 pr-3 text-[10px] text-[#777] w-20 tabular-nums font-mono">{ind.fredSeries}</td>
-      <td className="py-2 pr-3 text-[10px] text-[#999] w-16">{ind.frequency}</td>
-      <td className="py-2 pr-3 text-[10px] text-[#999] w-14">
+      <td className="py-2 pr-3 text-[10px] text-gray-500 w-20 tabular-nums font-mono">{ind.fredSeries}</td>
+      <td className="py-2 pr-3 text-[10px] text-gray-400 w-16">{ind.frequency}</td>
+      <td className="py-2 pr-3 text-[10px] text-gray-400 w-14">
         {ind.direction === 1 ? "→" : "← inv."}
       </td>
       <td className="py-2 pr-3 text-[11px] tabular-nums w-20">
@@ -395,7 +399,7 @@ function IndicatorRow({
             {z >= 0 ? "+" : ""}{z.toFixed(2)}σ
           </span>
         ) : (
-          <span className="text-[10px] text-[#bbb]">—</span>
+          <span className="text-[10px] text-gray-400">—</span>
         )}
       </td>
       <td className="py-2 pr-3 w-16">
@@ -413,13 +417,13 @@ function IndicatorRow({
             className="w-14 accent-[#0c1b38]"
             disabled={!ind.enabled}
           />
-          <span className="text-[10px] tabular-nums text-[#999] w-6">{(ind.weight * 100).toFixed(0)}%</span>
+          <span className="text-[10px] tabular-nums text-gray-400 w-6">{(ind.weight * 100).toFixed(0)}%</span>
         </div>
       </td>
       <td className="py-2 pl-1 w-8">
         <button
           onClick={() => onToggle(ind.id)}
-          className={`w-4 h-4 border rounded-sm flex items-center justify-center text-[9px] font-bold transition-colors ${ind.enabled ? "bg-[#0c1b38] border-[#0c1b38] text-white" : "border-[#ccc] text-[#ccc]"}`}
+          className={`w-4 h-4 border rounded flex items-center justify-center text-[9px] font-bold transition-colors ${ind.enabled ? "bg-[#0c1b38] border-[#0c1b38] text-white" : "border-gray-300 text-gray-300"}`}
         >
           {ind.enabled ? "✓" : ""}
         </button>
@@ -849,14 +853,14 @@ export default function StrategyLabPage() {
         </div>
 
         {/* ── Sub-navigation tabs ───────────────────────────────────────── */}
-        <div className="-mx-10 mb-8 border-b border-[#e8e3da] bg-[#fbfaf7] px-10 sticky top-0 z-20">
-          <div className="flex gap-0">
+        <div className="-mx-10 mb-8 border-b border-gray-100 bg-white px-10 sticky top-0 z-20 shadow-[0_1px_0_0_#f3f4f6]">
+          <div className="flex gap-1 py-2">
             {TABS.map(tab => (
               <button key={tab} onClick={() => setActiveTab(tab)}
-                className={`px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] border-b-2 -mb-px transition-colors ${
+                className={`px-4 py-2 rounded-lg text-[11px] font-medium transition-all ${
                   activeTab === tab
-                    ? "border-[#0c1b38] text-[#0c1b38]"
-                    : "border-transparent text-[#999] hover:text-[#555]"
+                    ? "bg-[#0c1b38] text-white shadow-sm"
+                    : "text-gray-500 hover:text-gray-800 hover:bg-gray-100"
                 }`}>
                 {tab}
               </button>
@@ -865,7 +869,7 @@ export default function StrategyLabPage() {
         </div>
 
         {error && (
-          <div className="mb-6 border border-[#f5c6c0] bg-[#fff5f4] px-4 py-3 text-[11.5px] text-[#b42318]">
+          <div className="mb-6 rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-[11.5px] text-[#b42318]">
             {error} — using demo data.
           </div>
         )}
@@ -905,8 +909,8 @@ export default function StrategyLabPage() {
                     </p>
                   </div>
                 ) : (
-                  <div className="mb-4 border border-[#eee9df] px-3 py-2.5 text-center bg-[#fbfaf7]">
-                    <p className="text-[14px] text-[#bbb]">{loading ? "Loading…" : "—"}</p>
+                  <div className="mb-4 border border-gray-100 px-3 py-2.5 text-center bg-gray-50">
+                    <p className="text-[14px] text-gray-400">{loading ? "Loading…" : "—"}</p>
                   </div>
                 )}
 
@@ -923,15 +927,15 @@ export default function StrategyLabPage() {
 
                 {/* Probabilities (enhanced mode) */}
                 {mode === "enhanced" && probs && (
-                  <div className="space-y-1.5 border-t border-[#eee9df] pt-3">
+                  <div className="space-y-1.5 border-t border-gray-100 pt-3">
                     <MiniLabel>Regime Probabilities</MiniLabel>
                     {(["Expansion", "Slowdown", "Recovery", "Contraction"] as RegimeLabel[]).map(r => {
                       const p  = probs[r];
                       const c  = REGIME_COLORS[r];
                       return (
                         <div key={r} className="flex items-center gap-2">
-                          <span className="text-[10.5px] text-[#555] w-20 shrink-0">{r}</span>
-                          <div className="flex-1 h-[4px] bg-[#eee9df]">
+                          <span className="text-[10.5px] text-gray-600 w-20 shrink-0">{r}</span>
+                          <div className="flex-1 h-[4px] bg-gray-100">
                             <div className="h-full" style={{ width: `${p * 100}%`, backgroundColor: c.dot }} />
                           </div>
                           <span className="text-[10.5px] font-bold tabular-nums w-8 text-right" style={{ color: c.dot }}>
@@ -945,7 +949,7 @@ export default function StrategyLabPage() {
 
                 {/* Previous regime */}
                 {prevRegime && prevRegime !== currentRegime && (
-                  <p className="mt-3 text-[10px] text-[#999] border-t border-[#eee9df] pt-3">
+                  <p className="mt-3 text-[10px] text-gray-400 border-t border-gray-100 pt-3">
                     Previous: <span className="font-semibold">{prevRegime}</span>
                   </p>
                 )}
@@ -956,18 +960,18 @@ export default function StrategyLabPage() {
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Composite Signal History</SectionLabel>
                   <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5 text-[9.5px] text-[#999]">
+                    <span className="flex items-center gap-1.5 text-[9.5px] text-gray-400">
                       <span className="w-4 h-0.5 bg-[#0c1b38] inline-block" /> Growth
                     </span>
-                    <span className="flex items-center gap-1.5 text-[9.5px] text-[#999]">
+                    <span className="flex items-center gap-1.5 text-[9.5px] text-gray-400">
                       <span className="w-4 h-0.5 bg-[#147a4f] inline-block border-dashed border-t border-[#147a4f]" style={{ borderTopStyle: "dashed" }} /> Risk Appetite
                     </span>
                     {isDemo && <DemoBadge />}
                   </div>
                 </div>
                 <SignalChart history={history} />
-                <div className="mt-3 border-t border-[#eee9df] pt-3">
-                  <p className="text-[10px] text-[#bbb] leading-relaxed">
+                <div className="mt-3 border-t border-gray-100 pt-3">
+                  <p className="text-[10px] text-gray-400 leading-relaxed">
                     Growth composite: weighted z-score of {growthInds.filter(i => i.enabled).length} macro indicators.
                     Background shading = classified regime. Zero line = long-run trend.
                     {isDemo ? " Illustrative demo data shown." : " 24-month history from FRED."}
@@ -976,7 +980,7 @@ export default function StrategyLabPage() {
 
                 {/* Regime explanation */}
                 {regimeData?.explanation && (
-                  <div className="mt-3 border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
+                  <div className="mt-3 border border-gray-100 bg-gray-50 px-4 py-3">
                     <MiniLabel>Why this regime?</MiniLabel>
                     <p className="mt-1.5 text-[11.5px] text-[#333] leading-relaxed">
                       {regimeData.explanation}
@@ -986,23 +990,23 @@ export default function StrategyLabPage() {
 
                 {/* Calculation walkthrough */}
                 {regimeData && (
-                  <details className="mt-3 border border-[#eee9df]" open={isDemo}>
-                    <summary className="px-4 py-3 cursor-pointer text-[10px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] flex items-center justify-between select-none hover:bg-[#fbfaf7] [&::-webkit-details-marker]:hidden">
+                  <details className="mt-3 border border-gray-100" open={isDemo}>
+                    <summary className="px-4 py-3 cursor-pointer text-[10px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] flex items-center justify-between select-none hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
                       <span>Step-by-Step Calculation</span>
-                      <span className="text-[#bbb] text-[11px]">▾</span>
+                      <span className="text-gray-400 text-[11px]">▾</span>
                     </summary>
-                    <div className="px-4 pb-4 pt-3 space-y-4 border-t border-[#eee9df] bg-white">
+                    <div className="px-4 pb-4 pt-3 space-y-4 border-t border-gray-100 bg-white">
 
                       {/* Step 1 */}
                       <div>
                         <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 1 — Z-score each indicator</p>
-                        <p className="text-[10px] text-[#999] mb-2 font-mono bg-[#f5f5f5] px-2 py-1 inline-block">zᵢ = (xᵢ − μᵢ) / σᵢ&nbsp;&nbsp;&nbsp;contribution = zᵢ × dᵢ × wᵢ</p>
+                        <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">zᵢ = (xᵢ − μᵢ) / σᵢ&nbsp;&nbsp;&nbsp;contribution = zᵢ × dᵢ × wᵢ</p>
                         <div className="overflow-x-auto -mx-1">
                           <table className="w-full text-left">
                             <thead>
-                              <tr className="border-b border-[#eee9df] bg-[#fbfaf7]">
+                              <tr className="border-b border-gray-100 bg-gray-50">
                                 {["Indicator","Value","μ","σ","z-score","Dir.","Weight","Contribution"].map(h => (
-                                  <th key={h} className="px-2 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb] whitespace-nowrap">{h}</th>
+                                  <th key={h} className="px-2 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.1em] text-gray-400 whitespace-nowrap">{h}</th>
                                 ))}
                               </tr>
                             </thead>
@@ -1012,16 +1016,16 @@ export default function StrategyLabPage() {
                                 const c = r.contribution;
                                 const zColor = z == null ? "#bbb" : z > 0.5 ? POSITIVE : z < -0.5 ? NEGATIVE : AMBER;
                                 return (
-                                  <tr key={r.id} className="border-b border-[#f5f2ed] last:border-0">
+                                  <tr key={r.id} className="border-b border-gray-100 last:border-0">
                                     <td className="px-2 py-1.5 text-[10px] font-medium text-[#333] whitespace-nowrap">{r.name}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-[#555]">{r.latestValue != null ? r.latestValue.toFixed(2) : "—"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-[#999]">{r.mean != null ? r.mean.toFixed(2) : "—"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-[#999]">{r.stdDev != null ? r.stdDev.toFixed(2) : "—"}</td>
+                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-600">{r.latestValue != null ? r.latestValue.toFixed(2) : "—"}</td>
+                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-400">{r.mean != null ? r.mean.toFixed(2) : "—"}</td>
+                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-400">{r.stdDev != null ? r.stdDev.toFixed(2) : "—"}</td>
                                     <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: zColor }}>
                                       {z != null ? `${z >= 0 ? "+" : ""}${z.toFixed(2)}σ` : "—"}
                                     </td>
-                                    <td className="px-2 py-1.5 text-[10px] text-[#999]">{r.direction === 1 ? "+1" : "−1"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] tabular-nums text-[#555]">{(r.weight * 100).toFixed(0)}%</td>
+                                    <td className="px-2 py-1.5 text-[10px] text-gray-400">{r.direction === 1 ? "+1" : "−1"}</td>
+                                    <td className="px-2 py-1.5 text-[10px] tabular-nums text-gray-600">{(r.weight * 100).toFixed(0)}%</td>
                                     <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: c == null ? "#bbb" : c >= 0 ? POSITIVE : NEGATIVE }}>
                                       {c != null ? `${c >= 0 ? "+" : ""}${c.toFixed(3)}` : "—"}
                                     </td>
@@ -1031,18 +1035,18 @@ export default function StrategyLabPage() {
                             </tbody>
                           </table>
                         </div>
-                        <p className="mt-1.5 text-[9px] text-[#bbb] italic leading-relaxed">
+                        <p className="mt-1.5 text-[9px] text-gray-400 italic leading-relaxed">
                           * VALUE shows the raw series level. For transformed series (3M change / YoY change), μ and σ are computed on the transformed values — the z-score uses the transformed reading, not the raw level directly.
                         </p>
                       </div>
 
                       {/* Step 2 */}
-                      <div className="border-t border-[#eee9df] pt-3">
+                      <div className="border-t border-gray-100 pt-3">
                         <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 2 — Growth Composite</p>
-                        <p className="text-[10px] text-[#999] mb-2 font-mono bg-[#f5f5f5] px-2 py-1 inline-block">G = Σ(zᵢ × dᵢ × wᵢ) / Σwᵢ</p>
+                        <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">G = Σ(zᵢ × dᵢ × wᵢ) / Σwᵢ</p>
                         <div className="flex items-start gap-4">
-                          <div className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-2.5 text-center shrink-0">
-                            <p className="text-[8.5px] text-[#bbb] mb-0.5">Growth Composite G</p>
+                          <div className="border border-gray-100 bg-gray-50 px-4 py-2.5 text-center shrink-0">
+                            <p className="text-[8.5px] text-gray-400 mb-0.5">Growth Composite G</p>
                             <p className="text-[18px] font-bold tabular-nums" style={{
                               color: regimeData.growthComposite == null ? "#bbb"
                                 : (regimeData.growthComposite ?? 0) >= 0.2 ? POSITIVE
@@ -1051,7 +1055,7 @@ export default function StrategyLabPage() {
                               {regimeData.growthComposite != null ? `${regimeData.growthComposite >= 0 ? "+" : ""}${regimeData.growthComposite.toFixed(2)}σ` : "—"}
                             </p>
                           </div>
-                          <div className="text-[10.5px] text-[#555] space-y-1">
+                          <div className="text-[10.5px] text-gray-600 space-y-1">
                             <p><span className="font-semibold">Level:</span> {regimeData.growthLevel === "above" ? "Above trend (G ≥ 0)" : regimeData.growthLevel === "below" ? "Below trend (G < 0)" : "—"}</p>
                             <p><span className="font-semibold">Direction Δ:</span> G[now] − G[3 months ago] = <span className="font-mono font-bold">{directionScore != null ? `${directionScore >= 0 ? "+" : ""}${directionScore.toFixed(2)}` : "—"}</span></p>
                             <p><span className="font-semibold">Direction:</span> {regimeData.growthDirection === "accelerating" ? "Accelerating (Δ ≥ 0)" : regimeData.growthDirection === "decelerating" ? "Decelerating (Δ < 0)" : "—"}</p>
@@ -1060,7 +1064,7 @@ export default function StrategyLabPage() {
                       </div>
 
                       {/* Step 3 */}
-                      <div className="border-t border-[#eee9df] pt-3">
+                      <div className="border-t border-gray-100 pt-3">
                         <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 3 — Regime Classification</p>
                         <div className="grid grid-cols-2 gap-1.5">
                           {([
@@ -1089,24 +1093,24 @@ export default function StrategyLabPage() {
 
                       {/* Step 4: Enhanced probabilities */}
                       {mode === "enhanced" && probs && (
-                        <div className="border-t border-[#eee9df] pt-3">
+                        <div className="border-t border-gray-100 pt-3">
                           <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 4 — Regime Probabilities (Enhanced Mode)</p>
-                          <p className="text-[10px] text-[#999] mb-2 font-mono bg-[#f5f5f5] px-2 py-1 inline-block">P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)&nbsp;&nbsp;τ = 0.8</p>
+                          <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)&nbsp;&nbsp;τ = 0.8</p>
                           <div className="grid grid-cols-4 gap-1.5 mb-2">
                             {(["Expansion","Recovery","Slowdown","Contraction"] as RegimeLabel[]).map(r => {
                               const p = probs[r];
                               const c = REGIME_COLORS[r];
                               const centroid = r === "Recovery" ? "(−0.6,+0.6)" : r === "Expansion" ? "(+0.6,+0.6)" : r === "Slowdown" ? "(+0.6,−0.6)" : "(−0.6,−0.6)";
                               return (
-                                <div key={r} className="border border-[#eee9df] bg-[#fbfaf7] px-2 py-2 text-center">
+                                <div key={r} className="border border-gray-100 bg-gray-50 px-2 py-2 text-center">
                                   <p className="text-[9px] font-bold mb-0.5" style={{ color: c.text }}>{r}</p>
                                   <p className="text-[16px] font-bold tabular-nums" style={{ color: c.dot }}>{Math.round(p * 100)}%</p>
-                                  <p className="text-[8px] font-mono text-[#bbb] mt-0.5">{centroid}</p>
+                                  <p className="text-[8px] font-mono text-gray-400 mt-0.5">{centroid}</p>
                                 </div>
                               );
                             })}
                           </div>
-                          <p className="text-[9.5px] text-[#bbb]">
+                          <p className="text-[9.5px] text-gray-400">
                             Current position s = (level={levelScore?.toFixed(2) ?? "—"}, dir={directionScore?.toFixed(2) ?? "—"}) clamped to ±1.
                             Factor targets = Σ P(r) × baseline[r] − 1
                           </p>
@@ -1127,14 +1131,14 @@ export default function StrategyLabPage() {
               <Card className="p-5">
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Factor Targets</SectionLabel>
-                  <span className="text-[9.5px] text-[#999]">Active vs. benchmark</span>
+                  <span className="text-[9.5px] text-gray-400">Active vs. benchmark</span>
                 </div>
 
                 {/* Active weight scale labels */}
                 <div className="flex justify-between mb-1 px-[88px]">
-                  <span className="text-[8.5px] text-[#bbb]">−1</span>
-                  <span className="text-[8.5px] text-[#bbb]">0</span>
-                  <span className="text-[8.5px] text-[#bbb]">+1</span>
+                  <span className="text-[8.5px] text-gray-400">−1</span>
+                  <span className="text-[8.5px] text-gray-400">0</span>
+                  <span className="text-[8.5px] text-gray-400">+1</span>
                 </div>
 
                 <div>
@@ -1144,30 +1148,30 @@ export default function StrategyLabPage() {
                 </div>
 
                 {mode === "enhanced" && (
-                  <div className="mt-3 border-t border-[#eee9df] pt-3 space-y-1">
+                  <div className="mt-3 border-t border-gray-100 pt-3 space-y-1">
                     <MiniLabel>Enhanced decomposition</MiniLabel>
                     {factorTargets.filter(t => Math.abs(t.enhancedActive) > 0.05).slice(0, 2).map(t => (
-                      <div key={t.factor} className="text-[10px] text-[#999]">
-                        <span className="font-semibold text-[#555]">{t.factor === "LowVolatility" ? "LowVol" : t.factor}</span>
+                      <div key={t.factor} className="text-[10px] text-gray-400">
+                        <span className="font-semibold text-gray-600">{t.factor === "LowVolatility" ? "LowVol" : t.factor}</span>
                         : regime {t.regimeContribution >= 0 ? "+" : ""}{t.regimeContribution.toFixed(2)}
                         {t.valuationContribution !== 0 && <> + val {t.valuationContribution >= 0 ? "+" : ""}{t.valuationContribution.toFixed(2)}</>}
                         {t.crowdingPenalty !== 0 && <> − crowd {Math.abs(t.crowdingPenalty).toFixed(2)}</>}
-                        <span className="text-[#bbb] ml-1">(val/momentum/crowding: Phase 2)</span>
+                        <span className="text-gray-400 ml-1">(val/momentum/crowding: Phase 2)</span>
                       </div>
                     ))}
                   </div>
                 )}
 
                 {/* Current regime allocation reference */}
-                <div className="mt-3 border-t border-[#eee9df] pt-3">
+                <div className="mt-3 border-t border-gray-100 pt-3">
                   <MiniLabel>Published baseline ({currentRegime ?? "—"})</MiniLabel>
                   <div className="mt-1.5 grid grid-cols-5 gap-1 text-center">
                     {(["LowVolatility","Size","Value","Momentum","Quality"] as FactorName[]).map(f => {
                       const val = currentRegime ? PUBLISHED_BASELINE[currentRegime][f] : 1;
                       const color = val === 2 ? POSITIVE : val === 0 ? NEGATIVE : "#999";
                       return (
-                        <div key={f} className="border border-[#eee9df] bg-[#fbfaf7] px-1 py-1.5">
-                          <p className="text-[8px] font-bold text-[#bbb] mb-0.5">{FACTOR_LABELS[f].short}</p>
+                        <div key={f} className="border border-gray-100 bg-gray-50 px-1 py-1.5">
+                          <p className="text-[8px] font-bold text-gray-400 mb-0.5">{FACTOR_LABELS[f].short}</p>
                           <p className="text-[13px] font-bold tabular-nums" style={{ color }}>
                             {val === 2 ? "↑↑" : val === 1 ? "→" : "↓↓"}
                           </p>
@@ -1183,18 +1187,18 @@ export default function StrategyLabPage() {
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <SectionLabel>Model Readiness</SectionLabel>
-                <span className="text-[10px] text-[#bbb]">
+                <span className="text-[10px] text-gray-400">
                   {READINESS_GATES.filter(g => g.status === "complete").length} / {READINESS_GATES.length} gates passed
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 {READINESS_GATES.map(gate => (
-                  <div key={gate.id} className="border border-[#eee9df] px-3 py-3">
+                  <div key={gate.id} className="border border-gray-100 px-3 py-3">
                     <div className="flex items-start gap-2 mb-1.5">
                       <StatusDot status={gate.status} />
                       <p className="text-[11px] font-semibold text-[#0a0a0a] leading-snug">{gate.label}</p>
                     </div>
-                    <p className="text-[10px] text-[#999] leading-relaxed">{gate.note}</p>
+                    <p className="text-[10px] text-gray-400 leading-relaxed">{gate.note}</p>
                     <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[0.1em]" style={{
                       color: gate.status === "complete" ? POSITIVE : gate.status === "blocked" ? NEGATIVE : AMBER
                     }}>
@@ -1203,7 +1207,7 @@ export default function StrategyLabPage() {
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10px] text-[#bbb]">
+              <p className="mt-3 text-[10px] text-gray-400">
                 Strategy must not be labeled "live" until all 8 required gates pass.
                 Current status: <span className="font-semibold text-amber-600">Research workbench — Phase 1 complete.</span>
               </p>
@@ -1226,7 +1230,7 @@ export default function StrategyLabPage() {
               <div className="grid grid-cols-3 gap-5">
                 <div>
                   <MiniLabel>Classification method</MiniLabel>
-                  <select className="mt-2 w-full border border-[#e8e3da] bg-white px-3 py-2 text-[11.5px] text-[#0a0a0a] focus:outline-none focus:border-[#0c1b38]">
+                  <select className="mt-2 w-full border border-gray-100 bg-white px-3 py-2 text-[11.5px] text-[#0a0a0a] focus:outline-none focus:border-[#0c1b38]">
                     <option value="hard">Hard four-quadrant (published baseline)</option>
                     <option value="probabilistic">Distance-based probabilistic (enhanced)</option>
                     <option value="hmm">Hidden Markov Model (Phase 3)</option>
@@ -1235,28 +1239,28 @@ export default function StrategyLabPage() {
                 <div>
                   <MiniLabel>Growth level threshold (σ)</MiniLabel>
                   <input type="number" defaultValue={0} step={0.1} min={-1} max={1}
-                    className="mt-2 w-full border border-[#e8e3da] bg-white px-3 py-2 text-[11.5px] focus:outline-none focus:border-[#0c1b38]"
+                    className="mt-2 w-full border border-gray-100 bg-white px-3 py-2 text-[11.5px] focus:outline-none focus:border-[#0c1b38]"
                   />
-                  <p className="mt-1 text-[9.5px] text-[#bbb]">Composite z-score above/below this = "above/below trend"</p>
+                  <p className="mt-1 text-[9.5px] text-gray-400">Composite z-score above/below this = "above/below trend"</p>
                 </div>
                 <div>
                   <MiniLabel>Confirmation window (months)</MiniLabel>
                   <input type="number" defaultValue={1} step={1} min={1} max={3}
-                    className="mt-2 w-full border border-[#e8e3da] bg-white px-3 py-2 text-[11.5px] focus:outline-none focus:border-[#0c1b38]"
+                    className="mt-2 w-full border border-gray-100 bg-white px-3 py-2 text-[11.5px] focus:outline-none focus:border-[#0c1b38]"
                   />
-                  <p className="mt-1 text-[9.5px] text-[#bbb]">Hysteresis: regime must persist N months before rotation</p>
+                  <p className="mt-1 text-[9.5px] text-gray-400">Hysteresis: regime must persist N months before rotation</p>
                 </div>
               </div>
 
               {/* Current readings summary */}
-              <div className="mt-5 grid grid-cols-4 gap-3 border-t border-[#eee9df] pt-4">
+              <div className="mt-5 grid grid-cols-4 gap-3 border-t border-gray-100 pt-4">
                 {[
                   { label: "Growth Composite", val: regimeData?.growthComposite, sfx: "σ" },
                   { label: "Risk Appetite",    val: regimeData?.riskAppetiteComposite, sfx: "σ" },
                   { label: "Growth Level",     val: regimeData?.growthLevelScore, sfx: "σ" },
                   { label: "Direction Score",  val: regimeData?.growthDirectionScore, sfx: "" },
                 ].map(({ label, val, sfx }) => (
-                  <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
+                  <div key={label} className="border border-gray-100 bg-gray-50 px-4 py-3">
                     <MiniLabel>{label}</MiniLabel>
                     <p className="mt-1 text-[20px] font-bold tabular-nums" style={{
                       color: val == null ? "#bbb" : val >= 0.2 ? POSITIVE : val <= -0.2 ? NEGATIVE : "#555"
@@ -1285,26 +1289,26 @@ export default function StrategyLabPage() {
               <div className="grid grid-cols-3 gap-5">
                 {/* Formula box */}
                 <div className="col-span-2 space-y-3">
-                  <div className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
+                  <div className="border border-gray-100 bg-gray-50 px-4 py-3">
                     <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-2">Z-score</p>
                     <p className="font-mono text-[13px] text-[#333]">zᵢ = (xᵢ − μᵢ) / σᵢ</p>
-                    <p className="text-[9.5px] text-[#999] mt-1">where μᵢ, σᵢ = mean and std dev over the 36-month FRED window</p>
+                    <p className="text-[9.5px] text-gray-400 mt-1">where μᵢ, σᵢ = mean and std dev over the 36-month FRED window</p>
                   </div>
-                  <div className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
+                  <div className="border border-gray-100 bg-gray-50 px-4 py-3">
                     <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-2">Growth Composite</p>
                     <p className="font-mono text-[13px] text-[#333]">G = Σ (zᵢ × dᵢ × wᵢ) / Σ wᵢ</p>
-                    <p className="text-[9.5px] text-[#999] mt-1">dᵢ = direction (±1) · wᵢ = indicator weight · sums only over enabled indicators</p>
+                    <p className="text-[9.5px] text-gray-400 mt-1">dᵢ = direction (±1) · wᵢ = indicator weight · sums only over enabled indicators</p>
                   </div>
-                  <div className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
+                  <div className="border border-gray-100 bg-gray-50 px-4 py-3">
                     <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-2">Direction Score</p>
                     <p className="font-mono text-[13px] text-[#333]">Δ = G[t] − G[t−3]</p>
-                    <p className="text-[9.5px] text-[#999] mt-1">3-month change in composite · positive = accelerating growth</p>
+                    <p className="text-[9.5px] text-gray-400 mt-1">3-month change in composite · positive = accelerating growth</p>
                   </div>
                   {mode === "enhanced" && (
-                    <div className="border border-[#c8d0e8] bg-[#eef1f8] px-4 py-3">
+                    <div className="border border-blue-100 bg-blue-50 px-4 py-3">
                       <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-2">Enhanced Probabilities</p>
                       <p className="font-mono text-[12px] text-[#333]">P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)  · τ = 0.8</p>
-                      <p className="text-[9.5px] text-[#555] mt-1">s = (G, Δ) clamped to ±1 · centroids cᵣ at (±0.6, ±0.6)</p>
+                      <p className="text-[9.5px] text-gray-600 mt-1">s = (G, Δ) clamped to ±1 · centroids cᵣ at (±0.6, ±0.6)</p>
                       <p className="font-mono text-[11px] text-[#333] mt-1">Target(f) = Σᵣ P(r) × baseline[r][f] − 1</p>
                     </div>
                   )}
@@ -1348,12 +1352,12 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <SectionLabel>Growth Composite Indicators</SectionLabel>
-                  <p className="mt-1 text-[10.5px] text-[#bbb]">
+                  <p className="mt-1 text-[10.5px] text-gray-400">
                     Each indicator z-scored from its history, signed by direction, weighted, and summed.
                     {isDemo && " FRED_API_KEY not configured — values are illustrative."}
                   </p>
                 </div>
-                <span className="text-[10px] text-[#bbb]">
+                <span className="text-[10px] text-gray-400">
                   {growthInds.filter(i => i.enabled).length} active indicators
                 </span>
               </div>
@@ -1361,9 +1365,9 @@ export default function StrategyLabPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-[#e8e3da] bg-[#fbfaf7]">
+                    <tr className="border-b border-gray-100 bg-gray-50">
                       {["Indicator", "FRED Series", "Freq.", "Dir.", "Latest", "Z-score", "Contribution", "Weight", "Active"].map(h => (
-                        <th key={h} className="px-0 pr-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.14em] text-[#999]">{h}</th>
+                        <th key={h} className="px-0 pr-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.14em] text-gray-400">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1388,7 +1392,7 @@ export default function StrategyLabPage() {
                 </table>
               </div>
 
-              <div className="mt-4 border-t border-[#eee9df] pt-3 grid grid-cols-2 gap-4">
+              <div className="mt-4 border-t border-gray-100 pt-3 grid grid-cols-2 gap-4">
                 <div className="border border-amber-200 bg-amber-50 px-4 py-3">
                   <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-amber-700 mb-1">Data Quality Notice</p>
                   <p className="text-[10.5px] text-amber-800 leading-relaxed">
@@ -1397,9 +1401,9 @@ export default function StrategyLabPage() {
                     Full PIT validation is Phase 3.
                   </p>
                 </div>
-                <div className="border border-[#eee9df] bg-[#fbfaf7] px-4 py-3">
-                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-[#999] mb-1">Methodology Notes</p>
-                  <p className="text-[10.5px] text-[#777] leading-relaxed">
+                <div className="border border-gray-100 bg-gray-50 px-4 py-3">
+                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-400 mb-1">Methodology Notes</p>
+                  <p className="text-[10.5px] text-gray-500 leading-relaxed">
                     ISM PMI not available via free FRED; yield curve and initial claims serve as leading-indicator proxies.
                     Users may import custom series via CSV upload (Phase 2). Weekly series aggregated to monthly average.
                   </p>
@@ -1412,18 +1416,18 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <SectionLabel>Risk Appetite Composite</SectionLabel>
-                  <p className="mt-1 text-[10.5px] text-[#bbb]">
+                  <p className="mt-1 text-[10.5px] text-gray-400">
                     Market-derived — use with caution for predicting equity-factor returns (circularity risk).
                   </p>
                 </div>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 {DEFAULT_RISK_INDICATORS.map(ind => (
-                  <div key={ind.id} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3">
+                  <div key={ind.id} className="border border-gray-100 bg-gray-50 px-3 py-3">
                     <MiniLabel>{ind.name}</MiniLabel>
-                    <p className="mt-1 text-[11px] text-[#555]">{ind.description}</p>
-                    <p className="mt-2 text-[10px] text-[#bbb]">Weight: {(ind.weight * 100).toFixed(0)}%</p>
-                    <p className="mt-0.5 text-[10px] text-[#bbb]">Series: {ind.fredSeries}</p>
+                    <p className="mt-1 text-[11px] text-gray-600">{ind.description}</p>
+                    <p className="mt-2 text-[10px] text-gray-400">Weight: {(ind.weight * 100).toFixed(0)}%</p>
+                    <p className="mt-0.5 text-[10px] text-gray-400">Series: {ind.fredSeries}</p>
                   </div>
                 ))}
               </div>
@@ -1450,13 +1454,13 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-4">
                 <div>
                   <SectionLabel>Published Baseline Allocation</SectionLabel>
-                  <p className="mt-1 text-[10.5px] text-[#bbb]">
+                  <p className="mt-1 text-[10.5px] text-gray-400">
                     FTSE Russell / Invesco Dynamic Multifactor — public methodology only.
                     Not a reproduction of proprietary signals. Scale: 0 = avoid, 1 = neutral, 2 = overweight.
                   </p>
                 </div>
                 <button onClick={resetAllocation}
-                  className="border border-[#e8e3da] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors">
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
                   Reset to Published
                 </button>
               </div>
@@ -1464,10 +1468,10 @@ export default function StrategyLabPage() {
               <div className="overflow-x-auto">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="border-b border-[#e8e3da] bg-[#fbfaf7]">
-                      <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777] w-32">Regime</th>
+                    <tr className="border-b border-gray-100 bg-gray-50">
+                      <th className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-gray-500 w-32">Regime</th>
                       {(["LowVolatility","Size","Value","Momentum","Quality"] as FactorName[]).map(f => (
-                        <th key={f} className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-[#777]"
+                        <th key={f} className="px-4 py-3 text-[9.5px] font-bold uppercase tracking-[0.16em] text-gray-500"
                           style={{ color: FACTOR_LABELS[f].color }}>
                           {f === "LowVolatility" ? "Low Vol." : f}
                         </th>
@@ -1486,14 +1490,14 @@ export default function StrategyLabPage() {
                       const prob = probs ? probs[r] : null;
                       return (
                         <tr key={r}
-                          className={`border-b border-[#f1eee8] last:border-0 ${isActive ? "bg-[#f5f7ff]" : ""}`}>
+                          className={`border-b border-gray-100 last:border-0 ${isActive ? "bg-[#f5f7ff]" : ""}`}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.dot }} />
                               <span className="text-[12px] font-bold" style={{ color: c.text }}>{r}</span>
-                              {isActive && <span className="text-[8.5px] font-bold border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] px-1.5 py-0.5">Current</span>}
+                              {isActive && <span className="text-[8.5px] font-bold border border-blue-100 bg-blue-50 text-[#0c1b38] px-1.5 py-0.5">Current</span>}
                               {prob != null && mode === "enhanced" && (
-                                <span className="text-[9px] text-[#bbb]">{Math.round(prob * 100)}%</span>
+                                <span className="text-[9px] text-gray-400">{Math.round(prob * 100)}%</span>
                               )}
                             </div>
                           </td>
@@ -1512,7 +1516,7 @@ export default function StrategyLabPage() {
                                             ? v === 2 ? "bg-[#147a4f] border-[#147a4f] text-white"
                                             : v === 1 ? "bg-[#0c1b38] border-[#0c1b38] text-white"
                                             : "bg-[#b42318] border-[#b42318] text-white"
-                                          : "border-[#e8e3da] text-[#bbb] hover:border-[#555]"
+                                          : "border-gray-100 text-gray-400 hover:border-[#555]"
                                         }`}>
                                         {v}
                                       </button>
@@ -1551,25 +1555,25 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-4 gap-4">
                 <div>
                   <SectionLabel>Universe Screener</SectionLabel>
-                  <p className="mt-1 text-[10.5px] text-[#bbb]">
+                  <p className="mt-1 text-[10.5px] text-gray-400">
                     Factor scores for all {universeScores ? universeScores.length : "~60"} universe stocks · cross-sectional z-scores · sorted by {currentRegime ?? "equal-weight"} regime score · click + to add to portfolio
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <select value={universeSectorFilter} onChange={e => setUniverseSectorFilter(e.target.value)}
-                    className="border border-[#e8e3da] bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
+                    className="border border-gray-100 bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
                     {["All","Technology","Communication","Consumer Disc.","Consumer Staples","Healthcare","Financials","Industrials","Energy","Materials"].map(s => (
                       <option key={s}>{s}</option>
                     ))}
                   </select>
                   <select value={universeSortBy} onChange={e => setUniverseSortBy(e.target.value)}
-                    className="border border-[#e8e3da] bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
+                    className="border border-gray-100 bg-white px-2.5 py-1.5 text-[10px] outline-none focus:border-[#0c1b38]">
                     {[["regime","Regime Score"],["momentum","Momentum"],["quality","Quality"],["value","Value"],["lowvol","Low Vol"],["size","Size"]].map(([v,l]) => (
                       <option key={v} value={v}>{l}</option>
                     ))}
                   </select>
                   <button onClick={fetchUniverseScores} disabled={universeLoading}
-                    className="flex items-center gap-1.5 border border-[#e8e3da] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
+                    className="flex items-center gap-1.5 rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-40">
                     <span className={universeLoading ? "inline-block animate-spin" : ""}>↻</span>
                     {universeLoading ? "Loading…" : "Refresh"}
                   </button>
@@ -1588,43 +1592,43 @@ export default function StrategyLabPage() {
                       {Array.from({ length: 6 }).map((_, j) => <Skeleton key={j} className="h-5 w-14" />)}
                     </div>
                   ))}
-                  <p className="text-[10px] text-[#bbb] text-center pt-2">
+                  <p className="text-[10px] text-gray-400 text-center pt-2">
                     Scoring 150+ stocks against current regime factor weights…
                   </p>
                 </div>
               )}
 
               {!universeScores && !universeLoading && (
-                <div className="text-center py-8 border border-dashed border-[#e8e3da]">
+                <div className="text-center py-8 border border-dashed border-gray-100">
                   <p className="text-[12px] font-semibold text-[#0c1b38] mb-2">Universe not loaded</p>
-                  <p className="text-[11px] text-[#999] mb-4">Click Refresh to score all universe stocks against current regime factor weights.</p>
+                  <p className="text-[11px] text-gray-400 mb-4">Click Refresh to score all universe stocks against current regime factor weights.</p>
                   <button onClick={fetchUniverseScores}
-                    className="bg-[#0c1b38] text-white px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#162d5c] transition-colors">
+                    className="rounded-lg bg-[#0c1b38] text-white px-5 py-2 text-[11px] font-semibold hover:bg-[#162d5c] transition-colors shadow-sm">
                     Screen Universe
                   </button>
                 </div>
               )}
 
               {filteredUniverseScores.length > 0 && (
-                <div className="border border-[#eee9df] overflow-x-auto">
+                <div className="rounded-lg border border-gray-100 overflow-x-auto">
                   <table className="w-full text-left min-w-[820px]">
                     <thead>
-                      <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16">Ticker</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Name</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-24">Sector</th>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16">Ticker</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">Name</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-24">Sector</th>
                         {(["Mom","LV","Val","Qlty","Sz"] as const).map(f => (
-                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16 text-center">{f}</th>
+                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16 text-center">{f}</th>
                         ))}
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] w-20 text-center">Regime</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-10 text-center">+</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-10 text-center">+</th>
                       </tr>
                     </thead>
                     <tbody>
                       {filteredUniverseScores.map((s, rank) => {
                         const inPortfolio = holdings.some(h => h.ticker === s.ticker);
                         const zCell = (z: number | null) => {
-                          if (z == null) return <td className="px-2 py-1.5 text-center"><span className="text-[9.5px] text-[#ddd]">—</span></td>;
+                          if (z == null) return <td className="px-2 py-1.5 text-center"><span className="text-[9.5px] text-gray-300">—</span></td>;
                           const abs = Math.min(Math.abs(z) / 2, 1);
                           const bg = z > 0 ? `rgba(20,122,79,${abs * 0.15})` : `rgba(180,35,24,${abs * 0.15})`;
                           const color = z > 0 ? "#147a4f" : "#b42318";
@@ -1637,18 +1641,18 @@ export default function StrategyLabPage() {
                           );
                         };
                         return (
-                          <tr key={s.ticker} className={`border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7] ${inPortfolio ? "bg-[#f5f7ff]" : ""}`}>
+                          <tr key={s.ticker} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${inPortfolio ? "bg-[#f5f7ff]" : ""}`}>
                             <td className="px-3 py-1.5">
                               <div className="flex items-center gap-1.5">
                                 <span className="text-[9px] tabular-nums text-[#ccc] w-4">#{rank+1}</span>
                                 <span className="text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</span>
                               </div>
                             </td>
-                            <td className="px-3 py-1.5 text-[10.5px] text-[#555]">
+                            <td className="px-3 py-1.5 text-[10.5px] text-gray-600">
                               {s.name}
-                              {inPortfolio && <span className="ml-1.5 text-[8.5px] border border-[#c8d0e8] bg-[#eef1f8] text-[#0c1b38] px-1 py-0.5">IN PORTFOLIO</span>}
+                              {inPortfolio && <span className="ml-1.5 text-[8.5px] border border-blue-100 bg-blue-50 text-[#0c1b38] px-1 py-0.5">IN PORTFOLIO</span>}
                             </td>
-                            <td className="px-3 py-1.5 text-[9.5px] text-[#999]">{s.sector}</td>
+                            <td className="px-3 py-1.5 text-[9.5px] text-gray-400">{s.sector}</td>
                             {zCell(s.zMomentum)}
                             {zCell(s.zLowVol)}
                             {zCell(s.zValue)}
@@ -1682,7 +1686,7 @@ export default function StrategyLabPage() {
                 </div>
               )}
               {universeScores && filteredUniverseScores.length === 0 && (
-                <p className="text-center py-4 text-[11px] text-[#bbb]">No stocks in sector "{universeSectorFilter}"</p>
+                <p className="text-center py-4 text-[11px] text-gray-400">No stocks in sector "{universeSectorFilter}"</p>
               )}
             </Card>
 
@@ -1735,7 +1739,7 @@ export default function StrategyLabPage() {
               return (
                 <Card className="p-5">
                   <SectionLabel>Factor Correlation Matrix</SectionLabel>
-                  <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                  <p className="mt-1 mb-4 text-[10.5px] text-gray-400">
                     Pairwise Pearson correlations of cross-sectional z-scores across {coveredCount} scored stocks.
                     Low inter-factor correlation improves composite diversification.
                   </p>
@@ -1764,7 +1768,7 @@ export default function StrategyLabPage() {
                               const textColor = isDiag ? "white" : (r != null && Math.abs(r as number) > 0.35) ? "white" : "#333";
                               return (
                                 <td key={f2.key}
-                                  className="w-14 h-11 text-center tabular-nums text-[11.5px] font-bold border border-[#e8e3da]"
+                                  className="w-14 h-11 text-center tabular-nums text-[11.5px] font-bold border border-gray-100"
                                   style={{ backgroundColor: bg, color: textColor }}>
                                   {isDiag ? "1.00" : r != null ? (r as number).toFixed(2) : "—"}
                                 </td>
@@ -1775,7 +1779,7 @@ export default function StrategyLabPage() {
                       </tbody>
                     </table>
                   </div>
-                  <p className="mt-3 text-[9.5px] text-[#bbb] text-center">
+                  <p className="mt-3 text-[9.5px] text-gray-400 text-center">
                     Green = positive · Red = negative · Navy = diagonal · — = &lt;5 stocks with both scores
                   </p>
                 </Card>
@@ -1792,18 +1796,18 @@ export default function StrategyLabPage() {
                         <span style={{ color: FACTOR_LABELS[def.factor].color }}>{def.factor === "LowVolatility" ? "Low Volatility" : def.factor}</span>
                       </SectionLabel>
                       {def.components.some(c => !c.enabled) && (
-                        <span className="text-[9px] text-[#bbb]">({def.components.filter(c => c.enabled).length}/{def.components.length} components active)</span>
+                        <span className="text-[9px] text-gray-400">({def.components.filter(c => c.enabled).length}/{def.components.length} components active)</span>
                       )}
                     </div>
-                    <p className="mt-1.5 text-[11.5px] text-[#555]">{def.description}</p>
-                    <p className="mt-1 text-[10.5px] text-[#bbb] italic">{def.rationale}</p>
+                    <p className="mt-1.5 text-[11.5px] text-gray-600">{def.description}</p>
+                    <p className="mt-1 text-[10.5px] text-gray-400 italic">{def.rationale}</p>
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {def.sectorNeutral && (
-                      <span className="border border-[#c8d0e8] bg-[#eef1f8] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[#0c1b38]">Sector-Neutral</span>
+                      <span className="border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[#0c1b38]">Sector-Neutral</span>
                     )}
                     {def.winsorize && (
-                      <span className="border border-[#e8e3da] bg-[#fbfaf7] px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[#777]">
+                      <span className="border border-gray-100 bg-gray-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-gray-500">
                         Winsorise {(def.winsorizeClip * 100).toFixed(0)}%
                       </span>
                     )}
@@ -1812,7 +1816,7 @@ export default function StrategyLabPage() {
                 <div className="grid grid-cols-4 gap-2.5 mt-3">
                   {def.components.map(comp => (
                     <div key={comp.id}
-                      className={`border px-3 py-3 transition-opacity ${comp.enabled ? "border-[#eee9df] bg-[#fbfaf7]" : "border-[#f1eee8] bg-[#fefefe] opacity-50"}`}>
+                      className={`border px-3 py-3 transition-opacity ${comp.enabled ? "border-gray-100 bg-gray-50" : "border-gray-100 bg-[#fefefe] opacity-50"}`}>
                       <div className="flex items-center justify-between mb-1.5">
                         <p className="text-[11px] font-semibold text-[#0a0a0a]">{comp.name}</p>
                         <button
@@ -1824,7 +1828,7 @@ export default function StrategyLabPage() {
                           {comp.enabled ? "✓" : ""}
                         </button>
                       </div>
-                      <p className="text-[10px] text-[#777] mb-2 leading-snug">{comp.description}</p>
+                      <p className="text-[10px] text-gray-500 mb-2 leading-snug">{comp.description}</p>
                       <div className="flex items-center gap-1.5 mb-1.5">
                         <input type="range" min={0} max={0.5} step={0.05} value={comp.weight}
                           onChange={e => setFactorDefs(prev => prev.map(d => d.factor === def.factor
@@ -1832,9 +1836,9 @@ export default function StrategyLabPage() {
                             : d
                           ))}
                           className="w-full accent-[#0c1b38]" disabled={!comp.enabled} />
-                        <span className="text-[10px] text-[#999] w-7 shrink-0">{(comp.weight * 100).toFixed(0)}%</span>
+                        <span className="text-[10px] text-gray-400 w-7 shrink-0">{(comp.weight * 100).toFixed(0)}%</span>
                       </div>
-                      <p className="text-[9px] text-[#bbb]">Data: {comp.dataDep}</p>
+                      <p className="text-[9px] text-gray-400">Data: {comp.dataDep}</p>
                     </div>
                   ))}
                 </div>
@@ -1854,27 +1858,27 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <SectionLabel>Holdings</SectionLabel>
-                  <span className={`text-[10px] font-bold px-2 py-0.5 border ${Math.abs(totalWeight - 1) < 0.005 ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]"}`}>
+                  <span className={`text-[10px] font-semibold rounded-full px-2.5 py-0.5 ${Math.abs(totalWeight - 1) < 0.005 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
                     {(totalWeight * 100).toFixed(1)}% allocated
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
                   <button
                     onClick={exportCSV}
-                    className="text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                    className="text-[11px] font-medium text-gray-500 rounded-lg border border-gray-200 px-3 py-1.5 hover:border-gray-400 hover:text-gray-700 transition-colors"
                     title="Export holdings as CSV"
                   >
                     Export CSV
                   </button>
                   <button
                     onClick={resetPortfolio}
-                    className="text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                    className="text-[11px] font-medium text-gray-500 rounded-lg border border-gray-200 px-3 py-1.5 hover:border-gray-400 hover:text-gray-700 transition-colors"
                   >
                     Reset
                   </button>
                   <button
                     onClick={handleShare}
-                    className="flex items-center gap-1.5 text-[10.5px] text-[#777] border border-[#ddd] px-3 py-1.5 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                    className="flex items-center gap-1.5 text-[11px] font-medium text-gray-500 rounded-lg border border-gray-200 px-3 py-1.5 hover:border-gray-400 hover:text-gray-700 transition-colors"
                     title="Copy shareable link to clipboard"
                   >
                     {shareCopied ? "✓ Copied!" : "Share"}
@@ -1891,7 +1895,7 @@ export default function StrategyLabPage() {
                   <button
                     onClick={analyzePortfolio}
                     disabled={computingScores || Math.abs(totalWeight - 1) > 0.02}
-                    className="text-[11px] font-semibold bg-[#0c1b38] text-white px-5 py-1.5 hover:bg-[#162d5c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                    className="text-[11px] font-semibold rounded-lg bg-[#0c1b38] text-white px-5 py-1.5 hover:bg-[#162d5c] disabled:opacity-40 disabled:cursor-not-allowed transition-colors shadow-sm"
                   >
                     {computingScores ? "Computing…" : "Analyze Portfolio"}
                   </button>
@@ -1908,7 +1912,7 @@ export default function StrategyLabPage() {
                 const barPct = Math.min(pct, 105);
                 return (
                   <div className="mb-4">
-                    <div className="relative h-2 bg-[#eee9df] overflow-hidden mb-1">
+                    <div className="relative h-2 bg-gray-100 overflow-hidden mb-1">
                       <div className="absolute top-0 left-0 h-full transition-all" style={{ width: `${barPct}%`, backgroundColor: barColor }} />
                       <div className="absolute top-0 h-full w-[1px] bg-[#aaa]" style={{ left: "95.24%"  }} />
                     </div>
@@ -1917,24 +1921,24 @@ export default function StrategyLabPage() {
                         {pct.toFixed(1)}% allocated
                         {ok ? " — ready to analyze" : diff > 0 ? ` — remove ${diff.toFixed(1)}% excess` : ` — add ${Math.abs(diff).toFixed(1)}% more`}
                       </p>
-                      <p className="text-[9.5px] text-[#bbb]">target: 100%</p>
+                      <p className="text-[9.5px] text-gray-400">target: 100%</p>
                     </div>
                   </div>
                 );
               })()}
 
               {scoreError && (
-                <div className="border border-[#f5c6c0] bg-[#fff5f4] px-4 py-3 mb-4 text-[11px] text-[#b42318]">
+                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-4 text-[11px] text-[#b42318]">
                   {scoreError}
                 </div>
               )}
 
-              <div className="border border-[#eee9df] overflow-hidden">
+              <div className="rounded-lg border border-gray-100 overflow-hidden">
                 <table className="w-full text-left">
                   <thead>
-                    <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                    <tr className="bg-gray-50 border-b border-gray-100">
                       {["Ticker", "Name", "Weight %", ""].map(h => (
-                        <th key={h} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">{h}</th>
+                        <th key={h} className="px-4 py-3 text-[10px] font-semibold uppercase tracking-[0.08em] text-gray-400">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -1942,10 +1946,10 @@ export default function StrategyLabPage() {
                     {holdings.map((h, idx) => {
                       const isCash = h.ticker === "USD" || h.ticker.includes("Crncy") || h.name?.toLowerCase().includes("cash");
                       return (
-                      <tr key={`${h.ticker}-${idx}`} className={`border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7] ${isCash ? "bg-[#fafaf8]" : ""}`}>
+                      <tr key={`${h.ticker}-${idx}`} className={`border-b border-gray-100 last:border-0 hover:bg-gray-50 ${isCash ? "bg-gray-50" : ""}`}>
                         <td className="px-3 py-2 text-[12px] font-bold w-20" style={{ color: isCash ? "#aaa" : "#0c1b38" }}>{h.ticker}</td>
                         <td className="px-3 py-2 text-[11px]" style={{ color: isCash ? "#aaa" : "#555" }}>
-                          {h.name ?? h.ticker}{isCash && <span className="ml-1.5 text-[9px] border border-[#ddd] px-1 py-0.5 text-[#bbb]">CASH</span>}
+                          {h.name ?? h.ticker}{isCash && <span className="ml-1.5 text-[9px] border border-gray-200 px-1 py-0.5 text-gray-400">CASH</span>}
                         </td>
                         <td className="px-3 py-2 w-32">
                           {editingIdx === idx ? (
@@ -1956,7 +1960,7 @@ export default function StrategyLabPage() {
                               min="0.1"
                               max="100"
                               defaultValue={(h.weight * 100).toFixed(1)}
-                              className="w-20 border border-[#0c1b38] px-2 py-0.5 text-[11px] tabular-nums outline-none"
+                              className="w-20 rounded border border-[#0c1b38] px-2 py-0.5 text-[11px] tabular-nums outline-none focus:ring-1 focus:ring-[#0c1b38]/20"
                               onBlur={e => {
                                 const v = parseFloat(e.target.value);
                                 if (!isNaN(v) && v > 0) updateHoldingWeight(idx, v / 100);
@@ -1979,7 +1983,7 @@ export default function StrategyLabPage() {
                         <td className="px-3 py-2 w-10 text-right">
                           <button
                             onClick={() => removeHolding(idx)}
-                            className="text-[10px] text-[#bbb] hover:text-[#b42318] transition-colors font-bold"
+                            className="text-[10px] text-gray-400 hover:text-[#b42318] transition-colors font-bold"
                           >
                             ×
                           </button>
@@ -1999,7 +2003,7 @@ export default function StrategyLabPage() {
                   value={newTicker}
                   onChange={e => setNewTicker(e.target.value.toUpperCase())}
                   onKeyDown={e => e.key === "Enter" && addHolding()}
-                  className="border border-[#ddd] px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] uppercase placeholder:normal-case placeholder:text-[#ccc]"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 uppercase placeholder:normal-case placeholder:text-gray-300"
                 />
                 <input
                   type="number"
@@ -2008,19 +2012,19 @@ export default function StrategyLabPage() {
                   onChange={e => setNewWeight(e.target.value)}
                   onKeyDown={e => e.key === "Enter" && addHolding()}
                   min="0.1" max="100" step="0.1"
-                  className="border border-[#ddd] px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] tabular-nums placeholder:text-[#ccc]"
+                  className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] w-24 outline-none focus:border-[#0c1b38] focus:ring-1 focus:ring-[#0c1b38]/20 tabular-nums placeholder:text-gray-300"
                 />
                 <button
                   onClick={addHolding}
                   disabled={!newTicker.trim() || !newWeight}
-                  className="text-[10.5px] font-semibold text-white bg-[#0c1b38] px-4 py-1.5 hover:bg-[#162d5c] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                  className="rounded-lg text-[11px] font-semibold text-white bg-[#0c1b38] px-4 py-1.5 hover:bg-[#162d5c] disabled:opacity-30 disabled:cursor-not-allowed transition-colors shadow-sm"
                 >
                   + Add
                 </button>
               </div>
 
               {scoreTimestamp && (
-                <p className="mt-3 text-[9.5px] text-[#bbb]">Last analyzed at {scoreTimestamp} · {factorScores?.length ?? 0} stocks scored</p>
+                <p className="mt-3 text-[9.5px] text-gray-400">Last analyzed at {scoreTimestamp} · {factorScores?.length ?? 0} stocks scored</p>
               )}
             </Card>
 
@@ -2030,20 +2034,20 @@ export default function StrategyLabPage() {
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-4">
                   <SectionLabel>Factor Scores</SectionLabel>
-                  <span className="text-[9.5px] text-[#bbb]">cross-sectional z-scores within portfolio universe · clamped ±3σ</span>
+                  <span className="text-[9.5px] text-gray-400">cross-sectional z-scores within portfolio universe · clamped ±3σ</span>
                 </div>
-                <div className="border border-[#eee9df] overflow-x-auto">
+                <div className="rounded-lg border border-gray-100 overflow-x-auto">
                   <table className="w-full text-left min-w-[820px]">
                     <thead>
-                      <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-16">Ticker</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Name</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-14 text-right">Weight</th>
+                      <tr className="bg-gray-50 border-b border-gray-100">
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16">Ticker</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">Name</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-14 text-right">Weight</th>
                         {(["Momentum","Low Vol","Value","Quality","Size"] as const).map(f => (
-                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-[88px] text-center">{f}</th>
+                          <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-[88px] text-center">{f}</th>
                         ))}
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] w-20 text-center">Score</th>
-                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] w-14 text-center">Data</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-14 text-center">Data</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -2067,10 +2071,10 @@ export default function StrategyLabPage() {
                             );
                           };
                           return (
-                            <tr key={s.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                            <tr key={s.ticker} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                               <td className="px-3 py-2 text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</td>
-                              <td className="px-3 py-2 text-[11px] text-[#555]">{s.name || s.ticker}</td>
-                              <td className="px-3 py-2 text-[11px] tabular-nums text-[#777] text-right">{(s.weight * 100).toFixed(1)}%</td>
+                              <td className="px-3 py-2 text-[11px] text-gray-600">{s.name || s.ticker}</td>
+                              <td className="px-3 py-2 text-[11px] tabular-nums text-gray-500 text-right">{(s.weight * 100).toFixed(1)}%</td>
                               {zScoreCell(s.zMomentum)}
                               {zScoreCell(s.zLowVol)}
                               {zScoreCell(s.zValue)}
@@ -2095,7 +2099,7 @@ export default function StrategyLabPage() {
                     </tbody>
                   </table>
                 </div>
-                <p className="mt-2 text-[9.5px] text-[#bbb]">
+                <p className="mt-2 text-[9.5px] text-gray-400">
                   Momentum = 0.6×12-1M + 0.4×6-1M · Low Vol = 0.5×(−σ) + 0.5×(−β) · Value = 0.35×EY + 0.35×FCF + 0.30×(−EV/EBITDA) · Quality = 0.40×ROIC + 0.35×GM + 0.25×(−leverage)
                 </p>
               </Card>
@@ -2107,7 +2111,7 @@ export default function StrategyLabPage() {
               <Card className="p-6">
                 <div className="flex items-center gap-3 mb-5">
                   <SectionLabel>Portfolio Factor Exposures</SectionLabel>
-                  <span className="text-[9.5px] text-[#bbb]">weight-averaged z-score vs {mode === "enhanced" ? "enhanced" : "baseline"} regime target</span>
+                  <span className="text-[9.5px] text-gray-400">weight-averaged z-score vs {mode === "enhanced" ? "enhanced" : "baseline"} regime target</span>
                 </div>
                 <div className="space-y-4">
                   {portExposures.map(e => {
@@ -2127,19 +2131,19 @@ export default function StrategyLabPage() {
                           <div className="flex items-center gap-2">
                             <span className="text-[11px] font-semibold text-[#0a0a0a] w-20 shrink-0">{factorLabels[e.factor] ?? e.factor}</span>
                             {!hasData ? (
-                              <span className="text-[9px] font-bold px-1.5 py-0.5 border border-[#ddd] bg-[#f9f9f9] text-[#bbb]">no data</span>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 border border-gray-200 bg-gray-50 text-gray-400">no data</span>
                             ) : (
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border whitespace-nowrap ${aligned ? "border-[#b8e6ce] bg-[#f0faf4] text-[#147a4f]" : gap! < 0 ? "border-[#f5c6c0] bg-[#fff5f4] text-[#b42318]" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
+                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border whitespace-nowrap ${aligned ? "border-emerald-200 bg-emerald-50 text-emerald-700" : gap! < 0 ? "border-red-200 bg-red-50 text-red-600" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
                                 {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} under` : `${gap!.toFixed(2)} over`}
                               </span>
                             )}
                           </div>
                           <div className="flex items-center gap-4 text-[10px] tabular-nums">
-                            <span className="text-[#555]">Portfolio: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "—"}</span></span>
-                            <span className="text-[#555]">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
+                            <span className="text-gray-600">Portfolio: <span className="font-bold text-[#0c1b38]">{hasData ? `${pct >= 0 ? "+" : ""}${pct.toFixed(2)}σ` : "—"}</span></span>
+                            <span className="text-gray-600">Target: <span className="font-bold" style={{ color: tgt > 0.1 ? POSITIVE : tgt < -0.1 ? NEGATIVE : "#999" }}>{tgt >= 0 ? "+" : ""}{tgt.toFixed(2)}σ</span></span>
                           </div>
                         </div>
-                        <div className="relative h-5 bg-[#f5f2ed] overflow-hidden">
+                        <div className="relative h-5 bg-gray-100 overflow-hidden">
                           {/* Zero line */}
                           <div className="absolute left-1/2 top-0 bottom-0 w-[1px] bg-[#ccc] z-10" />
                           {/* Portfolio bar — only when data available */}
@@ -2168,14 +2172,14 @@ export default function StrategyLabPage() {
                             }}
                           />
                         </div>
-                        <div className="flex justify-between text-[8.5px] text-[#bbb] mt-0.5">
+                        <div className="flex justify-between text-[8.5px] text-gray-400 mt-0.5">
                           <span>−1.5σ</span><span>0</span><span>+1.5σ</span>
                         </div>
                       </div>
                     );
                   })}
                 </div>
-                <div className="mt-4 pt-3 border-t border-[#f1eee8] flex items-center gap-5 text-[9.5px] text-[#999]">
+                <div className="mt-4 pt-3 border-t border-gray-100 flex items-center gap-5 text-[9.5px] text-gray-400">
                   <span className="flex items-center gap-1.5"><span className="w-3 h-2 bg-[#0c1b38] opacity-70 inline-block" /> Portfolio exposure</span>
                   <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#147a4f] inline-block" /> Regime target (overweight)</span>
                   <span className="flex items-center gap-1.5"><span className="w-0.5 h-3 bg-[#b42318] inline-block" /> Regime target (underweight)</span>
@@ -2234,7 +2238,7 @@ export default function StrategyLabPage() {
                 <Card className="p-6">
                   <div className="flex items-center gap-3 mb-5">
                     <SectionLabel>Portfolio Risk Decomposition</SectionLabel>
-                    <span className="text-[9.5px] text-[#bbb]">
+                    <span className="text-[9.5px] text-gray-400">
                       Euler (MRC) decomposition · beta model · σ_m = 16% ann.
                     </span>
                   </div>
@@ -2247,10 +2251,10 @@ export default function StrategyLabPage() {
                       { label: "Systematic Risk",    val: `${sysShare}%`,               sub: "driven by market beta",   color: "#2563eb" },
                       { label: "Idiosyncratic Risk", val: `${idioShare}%`,              sub: "stock-specific exposure",  color: AMBER },
                     ].map(({ label, val, sub, color }) => (
-                      <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                      <div key={label} className="border border-gray-100 bg-gray-50 px-3 py-3 text-center">
                         <MiniLabel>{label}</MiniLabel>
                         <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
-                        <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                        <p className="text-[9px] text-gray-400 mt-1">{sub}</p>
                       </div>
                     ))}
                   </div>
@@ -2285,7 +2289,7 @@ export default function StrategyLabPage() {
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
-                  <div className="flex items-center gap-5 mt-1 text-[9.5px] text-[#999]">
+                  <div className="flex items-center gap-5 mt-1 text-[9.5px] text-gray-400">
                     <span className="flex items-center gap-1.5">
                       <span className="w-3 h-2.5 inline-block" style={{ backgroundColor: NAVY }} />
                       Systematic (β × market)
@@ -2297,14 +2301,14 @@ export default function StrategyLabPage() {
                   </div>
 
                   {/* ── Detailed table ── */}
-                  <div className="mt-5 border border-[#eee9df] overflow-x-auto">
+                  <div className="mt-5 border border-gray-100 overflow-x-auto">
                     <table className="w-full text-left min-w-[580px]">
                       <thead>
-                        <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
-                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999]">Ticker</th>
-                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Wt.</th>
-                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Beta</th>
-                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] text-right">Ann. Vol</th>
+                        <tr className="bg-gray-50 border-b border-gray-100">
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">Ticker</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 text-right">Wt.</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 text-right">Beta</th>
+                          <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 text-right">Ann. Vol</th>
                           <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-right" style={{ color: NAVY }}>Sys. RC%</th>
                           <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-right" style={{ color: AMBER }}>Idio. RC%</th>
                           <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#0c1b38] text-right">Total RC%</th>
@@ -2312,17 +2316,17 @@ export default function StrategyLabPage() {
                       </thead>
                       <tbody>
                         {riskRows.map(r => (
-                          <tr key={r.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                          <tr key={r.ticker} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                             <td className="px-3 py-2">
                               <span className="text-[11.5px] font-bold text-[#0c1b38]">{r.ticker}</span>
                               <span className="ml-1.5 text-[9px] text-[#ccc]">{r.sector}</span>
                             </td>
-                            <td className="px-3 py-2 text-[11px] tabular-nums text-[#777] text-right">{(r.weight * 100).toFixed(1)}%</td>
+                            <td className="px-3 py-2 text-[11px] tabular-nums text-gray-500 text-right">{(r.weight * 100).toFixed(1)}%</td>
                             <td className="px-3 py-2 text-[11px] tabular-nums text-right font-semibold"
                               style={{ color: r.beta > 1.3 ? NEGATIVE : r.beta < 0.7 ? POSITIVE : "#555" }}>
                               {r.beta.toFixed(2)}
                             </td>
-                            <td className="px-3 py-2 text-[11px] tabular-nums text-[#555] text-right">
+                            <td className="px-3 py-2 text-[11px] tabular-nums text-gray-600 text-right">
                               {(r.vol * 100).toFixed(1)}%
                             </td>
                             <td className="px-3 py-2 text-right">
@@ -2344,9 +2348,9 @@ export default function StrategyLabPage() {
                         ))}
                       </tbody>
                       <tfoot>
-                        <tr className="border-t-2 border-[#ddd]">
-                          <td className="px-3 py-2 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Portfolio</td>
-                          <td className="px-3 py-2 text-right text-[11px] tabular-nums text-[#777]">{(coveredWt * 100).toFixed(1)}%</td>
+                        <tr className="border-t-2 border-gray-200">
+                          <td className="px-3 py-2 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">Portfolio</td>
+                          <td className="px-3 py-2 text-right text-[11px] tabular-nums text-gray-500">{(coveredWt * 100).toFixed(1)}%</td>
                           <td className="px-3 py-2 text-right text-[11.5px] font-bold text-[#0c1b38]">{portBeta.toFixed(2)}</td>
                           <td className="px-3 py-2 text-right text-[11.5px] font-bold text-[#0c1b38]">{(portVol * 100).toFixed(1)}%</td>
                           <td className="px-3 py-2 text-right">
@@ -2363,7 +2367,7 @@ export default function StrategyLabPage() {
                     </table>
                   </div>
 
-                  <p className="mt-2 text-[9.5px] text-[#bbb]">
+                  <p className="mt-2 text-[9.5px] text-gray-400">
                     RC_i = w_i × (β_i·β_p·σ²_m + w_i·σ²_ε,i) / σ²_p · sums to 100% by Euler&apos;s theorem
                     {excluded > 0 && ` · ${excluded} holding${excluded > 1 ? "s" : ""} excluded (price data unavailable)`}
                   </p>
@@ -2377,7 +2381,7 @@ export default function StrategyLabPage() {
                 <div className="flex items-center justify-between gap-4 mb-4">
                   <div className="min-w-0">
                     <SectionLabel>Portfolio Optimizer</SectionLabel>
-                    <p className="mt-1 text-[10.5px] text-[#bbb] truncate">
+                    <p className="mt-1 text-[10.5px] text-gray-400 truncate">
                       {currentRegime} regime · regime-weighted factor scores → softmax (T=0.5) → 15% max weight
                     </p>
                     {(() => {
@@ -2388,7 +2392,7 @@ export default function StrategyLabPage() {
                       return (
                         <p className="mt-1 text-[10px]">
                           <span className="text-[#147a4f] font-semibold">Using: {active.join(", ") || "—"}</span>
-                          <span className="text-[#bbb]"> · </span>
+                          <span className="text-gray-400"> · </span>
                           <span className="text-amber-600">Missing: {missing.join(", ")} — add FMP_API_KEY to Vercel to unlock</span>
                         </p>
                       );
@@ -2406,15 +2410,15 @@ export default function StrategyLabPage() {
                       {suggestedWeights ? "Re-optimize" : "Optimize Weights"}
                     </button>
                     <button onClick={() => setSuggestedWeights(null)}
-                      className={`border border-[#e8e3da] text-[#bbb] px-3 py-2 text-[10px] hover:border-[#b42318] hover:text-[#b42318] transition-colors ${suggestedWeights ? "" : "hidden"}`}>
+                      className={`border border-gray-100 text-gray-400 px-3 py-2 text-[10px] hover:border-[#b42318] hover:text-[#b42318] transition-colors ${suggestedWeights ? "" : "hidden"}`}>
                       ✕
                     </button>
                   </div>
                 </div>
 
                 {!suggestedWeights && (
-                  <div className="border border-dashed border-[#e8e3da] px-5 py-6 text-center">
-                    <p className="text-[11px] text-[#999]">
+                  <div className="border border-dashed border-gray-100 px-5 py-6 text-center">
+                    <p className="text-[11px] text-gray-400">
                       Click "Optimize Weights" to compute regime-optimal position sizes using current {currentRegime} factor allocations and your portfolio factor scores.
                     </p>
                   </div>
@@ -2426,12 +2430,12 @@ export default function StrategyLabPage() {
                   );
                   return (
                     <>
-                      <div className="border border-[#eee9df] overflow-hidden mb-4">
+                      <div className="rounded-lg border border-gray-100 overflow-hidden mb-4">
                         <table className="w-full text-left">
                           <thead>
-                            <tr className="bg-[#fbfaf7] border-b border-[#eee9df]">
+                            <tr className="bg-gray-50 border-b border-gray-100">
                               {["Ticker","Name","Current","Change","Suggested"].map(h => (
-                                <th key={h} className={`px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-[#999] ${h === "Change" || h === "Suggested" || h === "Current" ? "text-right" : ""}`}>{h}</th>
+                                <th key={h} className={`px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 ${h === "Change" || h === "Suggested" || h === "Current" ? "text-right" : ""}`}>{h}</th>
                               ))}
                             </tr>
                           </thead>
@@ -2445,10 +2449,10 @@ export default function StrategyLabPage() {
                                 const isUp      = diff > 0.003;
                                 const isDn      = diff < -0.003;
                                 return (
-                                  <tr key={h.ticker} className="border-b border-[#f1eee8] last:border-0 hover:bg-[#fbfaf7]">
+                                  <tr key={h.ticker} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
                                     <td className="px-3 py-2 text-[11.5px] font-bold text-[#0c1b38] w-16">{h.ticker}</td>
-                                    <td className="px-3 py-2 text-[11px] text-[#555]">{h.name ?? h.ticker}</td>
-                                    <td className="px-3 py-2 text-[11px] tabular-nums text-[#999] text-right">{(current * 100).toFixed(1)}%</td>
+                                    <td className="px-3 py-2 text-[11px] text-gray-600">{h.name ?? h.ticker}</td>
+                                    <td className="px-3 py-2 text-[11px] tabular-nums text-gray-400 text-right">{(current * 100).toFixed(1)}%</td>
                                     <td className="px-3 py-2 text-[11.5px] font-semibold tabular-nums text-right"
                                       style={{ color: isUp ? "#147a4f" : isDn ? "#b42318" : "#bbb" }}>
                                       {diff >= 0 ? "+" : ""}{(diff * 100).toFixed(1)}%
@@ -2462,7 +2466,7 @@ export default function StrategyLabPage() {
                           </tbody>
                         </table>
                       </div>
-                      <p className="text-[9.5px] text-[#bbb]">
+                      <p className="text-[9.5px] text-gray-400">
                         Weights are computed using {currentRegime} factor allocations. Cash position preserved. After applying, re-run "Analyze Portfolio" to update factor exposures.
                       </p>
                     </>
@@ -2473,9 +2477,9 @@ export default function StrategyLabPage() {
 
             {/* ── Empty state when no scores yet ───────────────────────────── */}
             {!factorScores && !computingScores && (
-              <div className="border border-[#eee9df] bg-[#fbfaf7] px-6 py-8 text-center">
+              <div className="border border-gray-100 bg-gray-50 px-6 py-8 text-center">
                 <p className="text-[12px] font-semibold text-[#0c1b38] mb-1">Ready to analyze</p>
-                <p className="text-[11px] text-[#999]">
+                <p className="text-[11px] text-gray-400">
                   Edit your holdings above, then click "Analyze Portfolio" to compute live factor scores from Yahoo Finance + FMP data.
                 </p>
               </div>
@@ -2500,7 +2504,7 @@ export default function StrategyLabPage() {
                     ))}
                   </div>
                 ))}
-                <p className="text-[10px] text-[#bbb] text-center pt-1">
+                <p className="text-[10px] text-gray-400 text-center pt-1">
                   Fetching 2Y price history + fundamentals for {holdings.length} stocks…
                 </p>
               </Card>
@@ -2527,7 +2531,7 @@ export default function StrategyLabPage() {
                   <Skeleton className="h-3 w-32 mb-2" />
                   <Skeleton className="h-[100px] w-full" />
                 </Card>
-                <p className="text-[10px] text-[#bbb] text-center">
+                <p className="text-[10px] text-gray-400 text-center">
                   Fetching ETF price history from Yahoo Finance — MTUM · USMV · VLUE · QUAL · IJR · SPY
                 </p>
               </div>
@@ -2569,14 +2573,14 @@ export default function StrategyLabPage() {
                     <div className="flex items-center justify-between mb-4">
                       <div>
                         <SectionLabel>Regime-Rotation Backtest</SectionLabel>
-                        <p className="mt-1 text-[10.5px] text-[#777]">
+                        <p className="mt-1 text-[10.5px] text-gray-500">
                           Holds iShares factor ETFs weighted by macro regime · monthly rebalance · {months.length} months of real data
                         </p>
                       </div>
                       <div className="flex items-center gap-3">
                         {bt.isDemo && <DemoBadge />}
                         <button onClick={() => fetchBacktest()} disabled={backtestLoading}
-                          className="flex items-center gap-1.5 border border-[#e8e3da] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
+                          className="flex items-center gap-1.5 border border-gray-100 px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.12em] text-gray-500 hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors disabled:opacity-40">
                           <span className={backtestLoading ? "inline-block animate-spin" : ""}>↻</span>
                           Refresh
                         </button>
@@ -2593,10 +2597,10 @@ export default function StrategyLabPage() {
                             { label: "Sharpe Ratio", val: s.sharpe.toFixed(2), sub: "rf = 4%", color: s.sharpe >= 0.5 ? POSITIVE : s.sharpe >= 0 ? NAVY : NEGATIVE },
                             { label: "Sortino Ratio", val: s.sortino != null ? s.sortino.toFixed(2) : "—", sub: "downside dev", color: (s.sortino ?? 0) >= 0.7 ? POSITIVE : (s.sortino ?? 0) >= 0 ? NAVY : NEGATIVE },
                           ].map(({ label, val, sub, color }) => (
-                            <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                            <div key={label} className="border border-gray-100 bg-gray-50 px-3 py-3 text-center">
                               <MiniLabel>{label}</MiniLabel>
                               <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
-                              <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                              <p className="text-[9px] text-gray-400 mt-1">{sub}</p>
                             </div>
                           ))}
                         </div>
@@ -2607,10 +2611,10 @@ export default function StrategyLabPage() {
                             { label: "Info. Ratio",   val: s.ir.toFixed(2), sub: `t=${s.irTStat != null ? s.irTStat.toFixed(1) : "—"} vs SPX`, color: s.ir > 0 ? POSITIVE : NEGATIVE },
                             { label: "Up/Down Cap.",  val: s.upCapture != null ? `${(s.upCapture * 100).toFixed(0)}/${(s.downCapture * 100).toFixed(0)}` : "—", sub: "up% / down%", color: (s.upCapture ?? 1) > 1 || (s.downCapture ?? 1) < 1 ? POSITIVE : NAVY },
                           ].map(({ label, val, sub, color }) => (
-                            <div key={label} className="border border-[#eee9df] bg-[#fbfaf7] px-3 py-3 text-center">
+                            <div key={label} className="border border-gray-100 bg-gray-50 px-3 py-3 text-center">
                               <MiniLabel>{label}</MiniLabel>
                               <p className="mt-1 text-[20px] font-bold tabular-nums leading-none" style={{ color }}>{val}</p>
-                              <p className="text-[9px] text-[#bbb] mt-1">{sub}</p>
+                              <p className="text-[9px] text-gray-400 mt-1">{sub}</p>
                             </div>
                           ))}
                         </div>
@@ -2621,7 +2625,7 @@ export default function StrategyLabPage() {
                     <div className="mb-1">
                       <div className="flex items-center justify-between mb-2">
                         <MiniLabel>Cumulative performance — NAV starting at 100</MiniLabel>
-                        <div className="flex items-center gap-4 text-[9.5px] text-[#999]">
+                        <div className="flex items-center gap-4 text-[9.5px] text-gray-400">
                           <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-[#0c1b38] inline-block" /> Regime Strategy</span>
                           <span className="flex items-center gap-1.5"><span className="w-5 h-0.5 bg-[#147a4f] inline-block" style={{ borderTop: "2px dashed #147a4f" }} /> S&P 500 (SPY)</span>
                         </div>
@@ -2660,14 +2664,14 @@ export default function StrategyLabPage() {
                       </div>
                       <div className="flex items-center gap-4 mt-2 flex-wrap">
                         {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(r => (
-                          <span key={r} className="flex items-center gap-1 text-[9px] text-[#999]">
+                          <span key={r} className="flex items-center gap-1 text-[9px] text-gray-400">
                             <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: { Expansion:"#d1fae5", Recovery:"#dbeafe", Slowdown:"#fef3c7", Contraction:"#fee2e2" }[r] }} />
                             {r}
                           </span>
                         ))}
                       </div>
                     </div>
-                    <p className="text-[9.5px] text-[#bbb] mt-1">
+                    <p className="text-[9.5px] text-gray-400 mt-1">
                       {bt.dataNote} · Factor ETF prices: Yahoo Finance (split/dividend-adjusted). 10bps transaction cost deducted on regime switches.
                     </p>
                   </Card>
@@ -2676,7 +2680,7 @@ export default function StrategyLabPage() {
                   {bt.drawdownSeries && bt.drawdownSeries.length > 0 && (
                     <Card className="p-5">
                       <SectionLabel>Drawdown Profile</SectionLabel>
-                      <p className="mt-1 mb-3 text-[10.5px] text-[#bbb]">Peak-to-trough underwater curve — strategy NAV vs rolling maximum</p>
+                      <p className="mt-1 mb-3 text-[10.5px] text-gray-400">Peak-to-trough underwater curve — strategy NAV vs rolling maximum</p>
                       <div className="h-[140px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <AreaChart data={bt.drawdownSeries} margin={{ top: 4, right: 8, bottom: 0, left: -5 }}>
@@ -2709,7 +2713,7 @@ export default function StrategyLabPage() {
                   {bt.rolling12M && bt.rolling12M.length > 0 && (
                     <Card className="p-5">
                       <SectionLabel>Rolling 12-Month Returns</SectionLabel>
-                      <p className="mt-1 mb-3 text-[10.5px] text-[#bbb]">Trailing 1-year return each month — strategy vs S&P 500</p>
+                      <p className="mt-1 mb-3 text-[10.5px] text-gray-400">Trailing 1-year return each month — strategy vs S&P 500</p>
                       <div className="h-[140px]">
                         <ResponsiveContainer width="100%" height="100%">
                           <LineChart data={bt.rolling12M} margin={{ top: 4, right: 8, bottom: 0, left: -5 }}>
@@ -2741,25 +2745,25 @@ export default function StrategyLabPage() {
                     return (
                       <Card className="p-5">
                         <SectionLabel>Calendar Year Returns</SectionLabel>
-                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Full-year performance — strategy vs S&P 500 (SPY) · partial year shown for current year</p>
+                        <p className="mt-1 mb-4 text-[10.5px] text-gray-400">Full-year performance — strategy vs S&P 500 (SPY) · partial year shown for current year</p>
                         <div className="overflow-x-auto">
                           <table className="w-full text-[11px] border-collapse">
                             <thead>
-                              <tr className="border-b border-[#eee9df]">
-                                <th className="text-left py-2 pr-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Year</th>
-                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Strategy</th>
-                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">S&P 500</th>
-                                <th className="text-right py-2 pl-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Alpha</th>
+                              <tr className="border-b border-gray-100">
+                                <th className="text-left py-2 pr-4 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">Year</th>
+                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">Strategy</th>
+                                <th className="text-right py-2 px-4 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">S&P 500</th>
+                                <th className="text-right py-2 pl-4 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">Alpha</th>
                               </tr>
                             </thead>
                             <tbody>
                               {rows.map(r => (
-                                <tr key={r.year} className="border-b border-[#f4f1ec] hover:bg-[#fbfaf7] transition-colors">
+                                <tr key={r.year} className="border-b border-[#f4f1ec] hover:bg-gray-50 transition-colors">
                                   <td className="py-2 pr-4 font-semibold text-[#444]">{r.year}</td>
                                   <td className="py-2 px-4 text-right tabular-nums font-bold" style={{ color: r.strat >= 0 ? POSITIVE : NEGATIVE }}>
                                     {r.strat >= 0 ? "+" : ""}{(r.strat * 100).toFixed(1)}%
                                   </td>
-                                  <td className="py-2 px-4 text-right tabular-nums text-[#555]">
+                                  <td className="py-2 px-4 text-right tabular-nums text-gray-600">
                                     {r.bench >= 0 ? "+" : ""}{(r.bench * 100).toFixed(1)}%
                                   </td>
                                   <td className="py-2 pl-4 text-right tabular-nums font-semibold" style={{ color: r.alpha >= 0 ? POSITIVE : NEGATIVE }}>
@@ -2769,12 +2773,12 @@ export default function StrategyLabPage() {
                               ))}
                             </tbody>
                             <tfoot>
-                              <tr className="border-t-2 border-[#ddd]">
-                                <td className="py-2 pr-4 text-[9.5px] font-semibold text-[#999] uppercase tracking-[0.1em]">Full Period</td>
+                              <tr className="border-t-2 border-gray-200">
+                                <td className="py-2 pr-4 text-[9.5px] font-semibold text-gray-400 uppercase tracking-[0.1em]">Full Period</td>
                                 <td className="py-2 px-4 text-right tabular-nums font-bold" style={{ color: bt.stats && bt.stats.annStrat >= 0 ? POSITIVE : NEGATIVE }}>
                                   {bt.stats ? `${bt.stats.annStrat >= 0 ? "+" : ""}${(bt.stats.annStrat * 100).toFixed(1)}% ann.` : "—"}
                                 </td>
-                                <td className="py-2 px-4 text-right tabular-nums text-[#555]">
+                                <td className="py-2 px-4 text-right tabular-nums text-gray-600">
                                   {bt.stats ? `${bt.stats.annBench >= 0 ? "+" : ""}${(bt.stats.annBench * 100).toFixed(1)}% ann.` : "—"}
                                 </td>
                                 <td className="py-2 pl-4 text-right tabular-nums font-semibold" style={{ color: bt.stats && bt.stats.ir > 0 ? POSITIVE : NEGATIVE }}>
@@ -2791,7 +2795,7 @@ export default function StrategyLabPage() {
                   {/* ── Regime performance attribution ── */}
                   <Card className="p-5">
                     <SectionLabel>Regime Performance Attribution</SectionLabel>
-                    <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Average monthly return by regime — strategy vs S&P 500</p>
+                    <p className="mt-1 mb-4 text-[10.5px] text-gray-400">Average monthly return by regime — strategy vs S&P 500</p>
                     <div className="grid grid-cols-4 gap-3 mb-5">
                       {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(regime => {
                         const perf = bt.regimePerf?.[regime];
@@ -2804,29 +2808,29 @@ export default function StrategyLabPage() {
                           .map(([etf, w]) => `${etf} ${Math.round(w*100)}%`)
                           .join(" · ");
                         return (
-                          <div key={regime} className="border border-[#eee9df] p-4">
+                          <div key={regime} className="border border-gray-100 p-4">
                             <div className="flex items-center gap-2 mb-3">
                               <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: color }} />
                               <p className="text-[11px] font-bold" style={{ color }}>{regime}</p>
-                              <span className="ml-auto text-[9px] text-[#bbb]">{count}mo</span>
+                              <span className="ml-auto text-[9px] text-gray-400">{count}mo</span>
                             </div>
                             {perf ? (
                               <>
                                 <div className="space-y-1.5 mb-3">
                                   <div className="flex justify-between items-center">
-                                    <span className="text-[9.5px] text-[#777]">Strategy avg/mo</span>
+                                    <span className="text-[9.5px] text-gray-500">Strategy avg/mo</span>
                                     <span className="text-[12px] font-bold tabular-nums" style={{ color: perf.stratAvg >= 0 ? POSITIVE : NEGATIVE }}>
                                       {perf.stratAvg >= 0 ? "+" : ""}{(perf.stratAvg * 100).toFixed(2)}%
                                     </span>
                                   </div>
                                   <div className="flex justify-between items-center">
-                                    <span className="text-[9.5px] text-[#777]">SPY avg/mo</span>
-                                    <span className="text-[12px] font-bold tabular-nums text-[#555]">
+                                    <span className="text-[9.5px] text-gray-500">SPY avg/mo</span>
+                                    <span className="text-[12px] font-bold tabular-nums text-gray-600">
                                       {perf.benchAvg >= 0 ? "+" : ""}{(perf.benchAvg * 100).toFixed(2)}%
                                     </span>
                                   </div>
-                                  <div className="flex justify-between items-center border-t border-[#eee9df] pt-1.5">
-                                    <span className="text-[9.5px] text-[#777]">Edge vs SPY</span>
+                                  <div className="flex justify-between items-center border-t border-gray-100 pt-1.5">
+                                    <span className="text-[9.5px] text-gray-500">Edge vs SPY</span>
                                     <span className="text-[11px] font-bold tabular-nums" style={{ color: perf.stratAvg > perf.benchAvg ? POSITIVE : NEGATIVE }}>
                                       {(perf.stratAvg - perf.benchAvg) >= 0 ? "+" : ""}{((perf.stratAvg - perf.benchAvg) * 100).toFixed(2)}%
                                     </span>
@@ -2834,10 +2838,10 @@ export default function StrategyLabPage() {
                                 </div>
                               </>
                             ) : (
-                              <p className="text-[10px] text-[#bbb]">No months in sample</p>
+                              <p className="text-[10px] text-gray-400">No months in sample</p>
                             )}
-                            <div className="border-t border-[#eee9df] pt-2">
-                              <p className="text-[8.5px] text-[#bbb] leading-relaxed">{activeETFs || "—"}</p>
+                            <div className="border-t border-gray-100 pt-2">
+                              <p className="text-[8.5px] text-gray-400 leading-relaxed">{activeETFs || "—"}</p>
                             </div>
                           </div>
                         );
@@ -2849,18 +2853,18 @@ export default function StrategyLabPage() {
                   {bt.transitionMatrix && (
                     <Card className="p-5">
                       <SectionLabel>Regime Transition Matrix</SectionLabel>
-                      <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                      <p className="mt-1 mb-4 text-[10.5px] text-gray-400">
                         Empirical probability of transitioning from one regime to another the following month
                       </p>
                       <div className="overflow-x-auto">
                         <table className="text-center text-[10px]">
                           <thead>
-                            <tr className="border-b border-[#eee9df]">
-                              <th className="px-3 py-2 text-left text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb] w-28">From ↓ / To →</th>
+                            <tr className="border-b border-gray-100">
+                              <th className="px-3 py-2 text-left text-[8.5px] font-bold uppercase tracking-[0.1em] text-gray-400 w-28">From ↓ / To →</th>
                               {(["Recovery","Expansion","Slowdown","Contraction"] as const).map(r => (
                                 <th key={r} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em]" style={{ color: { Recovery:"#b7791f", Expansion:"#147a4f", Slowdown:"#d97706", Contraction:"#b42318" }[r] }}>{r}</th>
                               ))}
-                              <th className="px-3 py-2 text-[8.5px] text-[#bbb]">Avg dur.</th>
+                              <th className="px-3 py-2 text-[8.5px] text-gray-400">Avg dur.</th>
                             </tr>
                           </thead>
                           <tbody>
@@ -2870,7 +2874,7 @@ export default function StrategyLabPage() {
                               const allVals = (["Recovery","Expansion","Slowdown","Contraction"] as const).map(r2 => row[r2] ?? 0);
                               const maxVal = Math.max(...allVals);
                               return (
-                                <tr key={fromR} className="border-b border-[#f5f2ed] last:border-0">
+                                <tr key={fromR} className="border-b border-gray-100 last:border-0">
                                   <td className="px-3 py-2 text-left font-bold text-[9.5px]" style={{ color: COLOR[fromR] }}>{fromR}</td>
                                   {(["Recovery","Expansion","Slowdown","Contraction"] as const).map(toR => {
                                     const p = row[toR] ?? 0;
@@ -2881,7 +2885,7 @@ export default function StrategyLabPage() {
                                       </td>
                                     );
                                   })}
-                                  <td className="px-3 py-2 text-[9px] text-[#bbb]">
+                                  <td className="px-3 py-2 text-[9px] text-gray-400">
                                     {(bt.avgDurationByRegime as Record<string, number>)?.[fromR] != null ? `${(bt.avgDurationByRegime as Record<string, number>)[fromR]}mo` : "—"}
                                   </td>
                                 </tr>
@@ -2890,20 +2894,20 @@ export default function StrategyLabPage() {
                           </tbody>
                         </table>
                       </div>
-                      <p className="mt-2 text-[9.5px] text-[#bbb]">Bold = most likely next state · Diagonal = regime persistence probability</p>
+                      <p className="mt-2 text-[9.5px] text-gray-400">Bold = most likely next state · Diagonal = regime persistence probability</p>
                     </Card>
                   )}
 
                   {/* ── Monthly returns table ── */}
                   <Card className="p-5">
                     <SectionLabel>Monthly Returns</SectionLabel>
-                    <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">Regime assigned from prior month · {months.length} months total</p>
+                    <p className="mt-1 mb-4 text-[10.5px] text-gray-400">Regime assigned from prior month · {months.length} months total</p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-left min-w-[560px]">
                         <thead>
-                          <tr className="border-b border-[#eee9df] bg-[#fbfaf7]">
+                          <tr className="border-b border-gray-100 bg-gray-50">
                             {["Month","Regime","Strategy","S&P 500","Edge","NAV"].map(h => (
-                              <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb] whitespace-nowrap">{h}</th>
+                              <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-gray-400 whitespace-nowrap">{h}</th>
                             ))}
                           </tr>
                         </thead>
@@ -2916,28 +2920,28 @@ export default function StrategyLabPage() {
                             const edge = m.stratReturn - m.benchReturn;
                             const rColor = REGIME_COLORS_MAP[m.regime] ?? "#999";
                             return (
-                              <tr key={m.date} className="border-b border-[#f5f2ed] last:border-0 hover:bg-[#fbfaf7]">
-                                <td className="px-3 py-2 text-[10px] font-mono text-[#555]">{m.date}</td>
+                              <tr key={m.date} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                                <td className="px-3 py-2 text-[10px] font-mono text-gray-600">{m.date}</td>
                                 <td className="px-3 py-2">
                                   <span className="text-[9px] font-bold" style={{ color: rColor }}>{m.regime}</span>
                                 </td>
                                 <td className="px-3 py-2 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: m.stratReturn >= 0 ? POSITIVE : NEGATIVE }}>
                                   {m.stratReturn >= 0 ? "+" : ""}{(m.stratReturn * 100).toFixed(2)}%
                                 </td>
-                                <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono text-[#555]">
+                                <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono text-gray-600">
                                   {m.benchReturn >= 0 ? "+" : ""}{(m.benchReturn * 100).toFixed(2)}%
                                 </td>
                                 <td className="px-3 py-2 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: edge >= 0 ? POSITIVE : NEGATIVE }}>
                                   {edge >= 0 ? "+" : ""}{(edge * 100).toFixed(2)}%
                                 </td>
-                                <td className="px-3 py-2 text-[10px] tabular-nums text-[#555]">{m.stratNav.toFixed(1)}</td>
+                                <td className="px-3 py-2 text-[10px] tabular-nums text-gray-600">{m.stratNav.toFixed(1)}</td>
                               </tr>
                             );
                           })}
                         </tbody>
                       </table>
                       {months.length > 24 && (
-                        <p className="mt-2 text-[9.5px] text-[#bbb]">Showing most recent 24 of {months.length} months.</p>
+                        <p className="mt-2 text-[9.5px] text-gray-400">Showing most recent 24 of {months.length} months.</p>
                       )}
                     </div>
                   </Card>
@@ -2963,22 +2967,22 @@ export default function StrategyLabPage() {
                     return (
                       <Card className="p-5">
                         <SectionLabel>Walk-Forward Validation</SectionLabel>
-                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                        <p className="mt-1 mb-4 text-[10.5px] text-gray-400">
                           Dataset split at {wf.splitDate ?? "midpoint"} — in-sample used to frame the strategy, out-of-sample is blind performance
                         </p>
                         <div className="overflow-x-auto">
                           <table className="w-full text-left">
                             <thead>
-                              <tr className="border-b border-[#eee9df] bg-[#fbfaf7]">
+                              <tr className="border-b border-gray-100 bg-gray-50">
                                 {["Metric", "In-Sample", "Out-of-Sample"].map(h => (
-                                  <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-[#bbb]">{h}</th>
+                                  <th key={h} className="px-3 py-2 text-[8.5px] font-bold uppercase tracking-[0.1em] text-gray-400">{h}</th>
                                 ))}
                               </tr>
                             </thead>
                             <tbody>
                               {rows.map(row => (
-                                <tr key={row.label} className="border-b border-[#f5f2ed] last:border-0 hover:bg-[#fbfaf7]">
-                                  <td className="px-3 py-2 text-[10px] font-bold text-[#555]">{row.label}</td>
+                                <tr key={row.label} className="border-b border-gray-100 last:border-0 hover:bg-gray-50">
+                                  <td className="px-3 py-2 text-[10px] font-bold text-gray-600">{row.label}</td>
                                   <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono text-[#0c1b38]">{row.is}</td>
                                   <td className="px-3 py-2 text-[10.5px] tabular-nums font-mono font-bold" style={{
                                     color: row.oos === "—" ? "#bbb" : NAVY
@@ -2988,7 +2992,7 @@ export default function StrategyLabPage() {
                             </tbody>
                           </table>
                         </div>
-                        <p className="mt-2 text-[9.5px] text-[#bbb]">
+                        <p className="mt-2 text-[9.5px] text-gray-400">
                           {wf.startDate} → {wf.splitDate} in-sample &nbsp;·&nbsp; {wf.splitDate} → {wf.endDate} out-of-sample
                         </p>
                       </Card>
@@ -3003,7 +3007,7 @@ export default function StrategyLabPage() {
                     return (
                       <Card className="p-5">
                         <SectionLabel>Factor Attribution</SectionLabel>
-                        <p className="mt-1 mb-4 text-[10.5px] text-[#bbb]">
+                        <p className="mt-1 mb-4 text-[10.5px] text-gray-400">
                           Each factor ETF's contribution to strategy outperformance vs SPY — avgWeight × (ETF return − SPY return)
                         </p>
                         <div className="space-y-3">
@@ -3016,11 +3020,11 @@ export default function StrategyLabPage() {
                                 <div className="flex items-center justify-between mb-1">
                                   <div className="flex items-center gap-2">
                                     <span className="text-[10.5px] font-bold text-[#333] w-28">{f.factor}</span>
-                                    <span className="text-[9px] text-[#bbb] font-mono">{f.etf}</span>
-                                    <span className="text-[9px] text-[#bbb]">avg {(f.avgWeight * 100).toFixed(0)}% weight</span>
+                                    <span className="text-[9px] text-gray-400 font-mono">{f.etf}</span>
+                                    <span className="text-[9px] text-gray-400">avg {(f.avgWeight * 100).toFixed(0)}% weight</span>
                                   </div>
                                   <div className="flex items-center gap-3 text-right">
-                                    <span className="text-[9.5px] text-[#777]">
+                                    <span className="text-[9.5px] text-gray-500">
                                       ETF ret: {f.etfTotalRet != null ? `${f.etfTotalRet >= 0 ? "+" : ""}${(f.etfTotalRet * 100).toFixed(1)}%` : "—"}
                                     </span>
                                     <span className="text-[11px] font-bold tabular-nums w-16 text-right font-mono" style={{ color: isPos ? POSITIVE : NEGATIVE }}>
@@ -3032,7 +3036,7 @@ export default function StrategyLabPage() {
                                   {isPos ? (
                                     <>
                                       <div className="w-1/2 flex justify-end">
-                                        <div className="h-3 bg-[#f5f2ed]" style={{ width: "100%" }} />
+                                        <div className="h-3 bg-gray-100" style={{ width: "100%" }} />
                                       </div>
                                       <div className="w-1/2">
                                         <div className="h-3 rounded-sm" style={{ width: `${barWidth}%`, backgroundColor: POSITIVE }} />
@@ -3044,7 +3048,7 @@ export default function StrategyLabPage() {
                                         <div className="h-3 rounded-sm" style={{ width: `${barWidth}%`, backgroundColor: NEGATIVE }} />
                                       </div>
                                       <div className="w-1/2">
-                                        <div className="h-3 bg-[#f5f2ed]" style={{ width: "100%" }} />
+                                        <div className="h-3 bg-gray-100" style={{ width: "100%" }} />
                                       </div>
                                     </>
                                   )}
@@ -3053,7 +3057,7 @@ export default function StrategyLabPage() {
                             );
                           })}
                         </div>
-                        <p className="mt-3 text-[9.5px] text-[#bbb]">
+                        <p className="mt-3 text-[9.5px] text-gray-400">
                           Positive bar = factor ETF outperformed SPY at that average weight · full backtest period
                         </p>
                       </Card>
@@ -3065,14 +3069,14 @@ export default function StrategyLabPage() {
                     <SectionLabel>How the Strategy Works</SectionLabel>
                     <div className="mt-3 grid grid-cols-2 gap-5">
                       <div className="space-y-2">
-                        <p className="text-[10.5px] text-[#555] leading-relaxed">
+                        <p className="text-[10.5px] text-gray-600 leading-relaxed">
                           Each month, the strategy holds the iShares factor ETF portfolio prescribed by the macro regime from the <strong>prior month</strong> (1-month implementation lag). The regime is determined by the FRED growth composite.
                         </p>
-                        <p className="text-[10.5px] text-[#555] leading-relaxed">
+                        <p className="text-[10.5px] text-gray-600 leading-relaxed">
                           Using ETF proxies eliminates survivorship bias and look-ahead bias in factor construction — MTUM, USMV, VLUE, QUAL, and IJR have published daily prices from inception.
                         </p>
                       </div>
-                      <div className="border border-[#eee9df] bg-[#fbfaf7] p-4">
+                      <div className="border border-gray-100 bg-gray-50 p-4">
                         <MiniLabel>ETF portfolio by regime</MiniLabel>
                         <div className="mt-2 space-y-2">
                           {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(regime => {
@@ -3088,7 +3092,7 @@ export default function StrategyLabPage() {
                                 <span className="w-1.5 h-1.5 rounded-full mt-1.5 shrink-0" style={{ backgroundColor: color }} />
                                 <div>
                                   <span className="text-[9.5px] font-bold" style={{ color }}>{regime}:</span>
-                                  <span className="text-[9.5px] text-[#555] ml-1.5 font-mono">{parts}</span>
+                                  <span className="text-[9.5px] text-gray-600 ml-1.5 font-mono">{parts}</span>
                                 </div>
                               </div>
                             );
@@ -3110,7 +3114,7 @@ export default function StrategyLabPage() {
           <div className="space-y-5">
             <Card className="p-5">
               <SectionLabel>Research Integrity Checklist</SectionLabel>
-              <p className="mt-1 mb-5 text-[10.5px] text-[#bbb]">
+              <p className="mt-1 mb-5 text-[10.5px] text-gray-400">
                 Every item must be addressed before this model can be used for investment decisions.
                 Items marked in red represent active look-ahead bias risks.
               </p>
@@ -3132,7 +3136,7 @@ export default function StrategyLabPage() {
                   { cat: "Factor",        item: "Factor crowding / crash risk",               status: "pending",  note: "Phase 4: AQR-style crowding score from pairwise factor beta across universe stock positions." },
                   { cat: "Regime",        item: "Regime circularity (risk appetite composite)",status: "complete", note: "Documented and warned in Regime Engine tab. Risk appetite composite uses VIX, HY spreads, and equity momentum — all inputs to regime classifier, not outputs." },
                 ].map(({ cat, item, status, note }) => (
-                  <div key={item} className={`flex items-start gap-3 border border-[#eee9df] px-4 py-3 ${status === "blocked" ? "bg-[#fff9f9]" : status === "complete" ? "bg-[#f9fdf9]" : "bg-[#fbfaf7]"}`}>
+                  <div key={item} className={`flex items-start gap-3 border border-gray-100 px-4 py-3 ${status === "blocked" ? "bg-[#fff9f9]" : status === "complete" ? "bg-[#f9fdf9]" : "bg-gray-50"}`}>
                     <StatusDot status={status as ReadinessGate["status"]} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
@@ -3140,7 +3144,7 @@ export default function StrategyLabPage() {
                           style={{ color: "#999", borderColor: "#e8e3da" }}>{cat}</span>
                         <p className="text-[11.5px] font-semibold text-[#0a0a0a]">{item}</p>
                       </div>
-                      <p className="text-[10.5px] text-[#777] leading-snug">{note}</p>
+                      <p className="text-[10.5px] text-gray-500 leading-snug">{note}</p>
                     </div>
                     <span className="shrink-0 text-[9px] font-bold uppercase tracking-[0.1em]" style={{
                       color: status === "complete" ? POSITIVE : status === "blocked" ? NEGATIVE : status === "partial" ? AMBER : "#bbb"
@@ -3161,13 +3165,13 @@ export default function StrategyLabPage() {
                   { name: "FMP Fundamentals", status: false, detail: "Financial Modeling Prep — Required for Value, Quality, Size factors. Configure FMP_API_KEY to unlock fundamental scoring.", key: "FMP_API_KEY (not set)" },
                   { name: "Historical Universe", status: false, detail: "CRSP / Compustat required for survivorship-free backtest. Current universe: S&P 500 live constituents only (Phase 3).", key: "Not configured (Phase 3)" },
                 ].map(({ name, status, detail, key }) => (
-                  <div key={name} className="border border-[#eee9df] px-4 py-4">
+                  <div key={name} className="border border-gray-100 px-4 py-4">
                     <div className="flex items-center gap-2 mb-2">
                       <span className={`w-2 h-2 rounded-full ${status ? "bg-[#147a4f]" : "bg-[#b42318]"}`} />
                       <p className="text-[12px] font-bold text-[#0a0a0a]">{name}</p>
                     </div>
-                    <p className="text-[10.5px] text-[#777] leading-relaxed mb-2">{detail}</p>
-                    <p className="text-[9.5px] font-mono text-[#bbb]">{key}</p>
+                    <p className="text-[10.5px] text-gray-500 leading-relaxed mb-2">{detail}</p>
+                    <p className="text-[9.5px] font-mono text-gray-400">{key}</p>
                   </div>
                 ))}
               </div>
@@ -3202,7 +3206,7 @@ export default function StrategyLabPage() {
                       a.href = url; a.download = "crossasset_strategy_methodology.json"; a.click();
                       URL.revokeObjectURL(url);
                     }}
-                    className="border border-[#e8e3da] px-3 py-1.5 text-[10px] font-bold uppercase tracking-[0.12em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors">
+                    className="rounded-lg border border-gray-200 px-3 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors">
                     Export JSON
                   </button>
                 </div>
@@ -3288,12 +3292,12 @@ export default function StrategyLabPage() {
                       { phase: "Phase 3 — Valid Backtest", items: ["PIT vintage macro data", "Survivorship-free universe", "Earnings lag enforcement", "Attribution engine", "Walk-forward testing", "Robustness/sensitivity"] },
                       { phase: "Phase 4 — Paper Portfolio", items: ["Saved model versions", "Monthly rebalance alerts", "Trade preview & cost estimate", "Decision journal", "Performance monitoring", "Transition to live process"] },
                     ].map(({ phase, items }) => (
-                      <div key={phase} className="border border-[#eee9df] px-3 py-4">
+                      <div key={phase} className="border border-gray-100 px-3 py-4">
                         <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-3">{phase}</p>
                         <ul className="space-y-1">
                           {items.map(item => (
-                            <li key={item} className="text-[10.5px] text-[#555] flex items-start gap-1.5">
-                              <span className="text-[#bbb] mt-0.5 shrink-0">·</span>
+                            <li key={item} className="text-[10.5px] text-gray-600 flex items-start gap-1.5">
+                              <span className="text-gray-400 mt-0.5 shrink-0">·</span>
                               {item}
                             </li>
                           ))}
@@ -3303,7 +3307,7 @@ export default function StrategyLabPage() {
                   </div>
                 </div>
 
-                <div className="border border-[#eee9df] bg-[#fbfaf7] px-5 py-4 text-[10.5px] text-[#777]">
+                <div className="border border-gray-100 bg-gray-50 px-5 py-4 text-[10.5px] text-gray-500">
                   <p className="font-bold text-[#0a0a0a] mb-1">Legal and Disclosure</p>
                   <p>
                     This tool is a research prototype for educational and exploratory purposes only.

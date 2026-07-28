@@ -307,7 +307,7 @@ export default function TearsheetDownloadButton({
       {({ loading: pdfLoading }) => (
         <button
           disabled={pdfLoading}
-          className="flex items-center gap-2 border border-[#e8e3da] bg-[#fbfaf7] px-3.5 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] hover:bg-[#f0ede8] transition-colors disabled:opacity-50"
+          className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-3.5 py-1.5 text-[11px] font-medium text-gray-500 hover:border-gray-400 hover:text-gray-700 transition-colors disabled:opacity-50"
         >
           {pdfLoading ? "Building PDF…" : "↓ Export PDF"}
         </button>
