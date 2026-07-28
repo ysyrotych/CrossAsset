@@ -3,7 +3,7 @@ import { CheckCircle2, XCircle, AlertCircle } from "lucide-react";
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
-    <p className="text-[11px] font-bold tracking-[0.18em] uppercase text-[#0c1b38]">{children}</p>
+    <p className="text-[11px] font-bold tracking-[0.18em] uppercase" style={{ color: "var(--ca-text-2)" }}>{children}</p>
   );
 }
 
@@ -44,10 +44,10 @@ export default function SettingsPage() {
 
   return (
     <AppShell>
-      <div className="mb-10 pb-8 border-b border-[#ebebeb]">
-        <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-[#0c1b38] mb-3">Configuration</p>
-        <h1 className="text-[34px] font-light text-[#0a0a0a] tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>Settings</h1>
-        <p className="text-[13px] text-[#9ca3af] mt-1">API keys, data sources, and preferences.</p>
+      <div className="mb-10 pb-8" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+        <p className="text-[10px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Configuration</p>
+        <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Settings</h1>
+        <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>API keys, data sources, and preferences.</p>
       </div>
 
       <div className="max-w-2xl space-y-6">

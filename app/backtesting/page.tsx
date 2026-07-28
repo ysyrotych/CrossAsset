@@ -287,8 +287,8 @@ function StepAssumptions({ config, onApprove, onBack }: { config: BacktestConfig
         })}
       </div>
       <div className="flex items-center gap-3">
-        <button onClick={onBack} className="px-5 py-2.5 border border-[#e8e8e8] text-[12px] font-semibold text-[#555] hover:border-[#0c1b38] transition-colors">← Edit description</button>
-        <button onClick={() => onApprove({ ...config, assumptions })} className="px-7 py-2.5 bg-[#0c1b38] text-white text-[12px] font-semibold tracking-[0.08em] uppercase hover:bg-[#1a2f5e] transition-colors">
+        <button onClick={onBack} className="px-5 py-2.5 text-[12px] font-semibold rounded-lg transition-colors" style={{ border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>← Edit description</button>
+        <button onClick={() => onApprove({ ...config, assumptions })} className="px-7 py-2.5 text-[12px] font-semibold tracking-[0.08em] uppercase rounded-lg transition-colors" style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}>
           Approve & Run Backtest →
         </button>
       </div>
@@ -314,10 +314,10 @@ function StepRunning() {
   const pct = Math.round(((idx + 1) / RUN_STAGES.length) * 100);
   return (
     <div className="flex flex-col items-center justify-center py-36 text-center max-w-sm mx-auto">
-      <div className="w-8 h-8 border-2 border-[#0c1b38] border-t-transparent rounded-full animate-spin mb-7" />
-      <p className="text-[13px] font-semibold text-[#0c1b38] mb-5">{RUN_STAGES[idx]}</p>
-      <div className="w-full bg-gray-100 h-[4px] mb-3">
-        <div className="h-full bg-[#0c1b38] transition-all duration-700" style={{ width: `${pct}%` }} />
+      <div className="w-8 h-8 border-2 border-t-transparent rounded-full animate-spin mb-7" style={{ borderColor: "var(--ca-accent)", borderTopColor: "transparent" }} />
+      <p className="text-[13px] font-semibold mb-5" style={{ color: "var(--ca-text)" }}>{RUN_STAGES[idx]}</p>
+      <div className="w-full h-[4px] mb-3 rounded-full" style={{ background: "var(--ca-surface-2)" }}>
+        <div className="h-full rounded-full transition-all duration-700" style={{ width: `${pct}%`, background: "var(--ca-accent)" }} />
       </div>
       <p className="text-[11px] text-[#bbb]">{pct}% complete</p>
     </div>
@@ -1081,11 +1081,11 @@ function MDReport({ result, onReset }: { result: BacktestResult; onReset: () => 
       </Card>
       <Card className="p-6 mb-5">
         <div className="flex items-start gap-4 mb-6">
-          <div className="w-10 h-10 bg-[#0c1b38] flex items-center justify-center shrink-0"><span className="text-white text-[13px] font-bold">MD</span></div>
-          <div><p className="text-[13px] font-bold text-[#0a0a0a]">Trading Desk Assessment</p><p className="text-[11px] text-[#888] mt-0.5">Managing Director, Global Macro — {new Date().toLocaleDateString("en-US",{month:"long",year:"numeric"})}</p></div>
+          <div className="w-10 h-10 flex items-center justify-center rounded-lg shrink-0" style={{ background: "var(--ca-accent)" }}><span className="text-[13px] font-bold" style={{ color: "var(--ca-accent-text)" }}>MD</span></div>
+          <div><p className="text-[13px] font-bold" style={{ color: "var(--ca-text)" }}>Trading Desk Assessment</p><p className="text-[11px] mt-0.5" style={{ color: "var(--ca-text-2)" }}>Managing Director, Global Macro — {new Date().toLocaleDateString("en-US",{month:"long",year:"numeric"})}</p></div>
         </div>
-        <div className="border-l-2 border-[#0c1b38] pl-5 space-y-4">
-          {paragraphs.map((para, i) => <p key={i} className="text-[13px] font-medium leading-[1.85] text-[#333]">{para}</p>)}
+        <div className="pl-5 space-y-4" style={{ borderLeft: "2px solid var(--ca-accent)" }}>
+          {paragraphs.map((para, i) => <p key={i} className="text-[13px] font-medium leading-[1.85]" style={{ color: "var(--ca-text-2)" }}>{para}</p>)}
         </div>
       </Card>
       <Card className="p-6 mb-5">
@@ -1104,10 +1104,10 @@ function MDReport({ result, onReset }: { result: BacktestResult; onReset: () => 
       <Card className="p-6">
         <SectionLabel>Export</SectionLabel>
         <div className="mt-4 flex flex-wrap gap-3">
-          <button onClick={exportJSON} className="px-5 py-2.5 border border-[#0c1b38] text-[12px] font-semibold text-[#0c1b38] hover:bg-[#0c1b38] hover:text-white transition-colors">Full Report (JSON) ↓</button>
-          <button onClick={exportTrades} className="px-5 py-2.5 border border-[#e8e8e8] text-[12px] font-semibold text-[#555] hover:border-[#0c1b38] transition-colors">Trade Log (CSV) ↓</button>
-          <button onClick={() => window.print()} className="px-5 py-2.5 border border-[#e8e8e8] text-[12px] font-semibold text-[#555] hover:border-[#0c1b38] transition-colors">Print Report ⎙</button>
-          <button onClick={onReset} className="ml-auto text-[12px] font-semibold text-[#888] hover:text-[#0c1b38] transition-colors">← New strategy</button>
+          <button onClick={exportJSON} className="px-5 py-2.5 text-[12px] font-semibold rounded-lg transition-colors" style={{ border: "1px solid var(--ca-accent)", color: "var(--ca-accent)" }}>Full Report (JSON) ↓</button>
+          <button onClick={exportTrades} className="px-5 py-2.5 text-[12px] font-semibold rounded-lg transition-colors" style={{ border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>Trade Log (CSV) ↓</button>
+          <button onClick={() => window.print()} className="px-5 py-2.5 text-[12px] font-semibold rounded-lg transition-colors" style={{ border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>Print Report ⎙</button>
+          <button onClick={onReset} className="ml-auto text-[12px] font-semibold transition-colors" style={{ color: "var(--ca-text-2)" }}>← New strategy</button>
         </div>
       </Card>
     </div>
@@ -1132,21 +1132,22 @@ function StepResults({ result, onReset }: { result: BacktestResult; onReset: () 
 
   return (
     <div>
-      <div className="flex items-start justify-between gap-6 mb-6 pb-6 border-b border-[#ebebeb]">
+      <div className="flex items-start justify-between gap-6 mb-6 pb-6" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         <div>
-          <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38] mb-2">Backtest Results</p>
-          <h2 className="text-[28px] font-light tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>{result.config.strategyName}</h2>
-          <p className="text-[12px] text-[#888] mt-1.5">{result.config.startDate} → {result.config.endDate} · {result.config.assetClass}</p>
+          <p className="text-[10px] font-bold uppercase tracking-[0.24em] mb-2" style={{ color: "var(--ca-accent)" }}>Backtest Results</p>
+          <h2 className="text-[28px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>{result.config.strategyName}</h2>
+          <p className="text-[12px] mt-1.5" style={{ color: "var(--ca-text-2)" }}>{result.config.startDate} → {result.config.endDate} · {result.config.assetClass}</p>
         </div>
-        <button onClick={onReset} className="text-[11px] font-semibold text-[#888] hover:text-[#0c1b38] transition-colors shrink-0">← New strategy</button>
+        <button onClick={onReset} className="text-[11px] font-semibold transition-colors shrink-0" style={{ color: "var(--ca-text-2)" }}>← New strategy</button>
       </div>
-      <div className="mb-6 flex items-center gap-6 py-3 px-5 border border-gray-100 bg-gray-50">
-        <p className="text-[11px] font-medium text-[#555] leading-relaxed flex-1">{result.summary}</p>
+      <div className="mb-6 flex items-center gap-6 py-3 px-5 rounded-lg border border-gray-100 bg-gray-50">
+        <p className="text-[11px] font-medium leading-relaxed flex-1" style={{ color: "var(--ca-text-2)" }}>{result.summary}</p>
       </div>
-      <div className="flex gap-0 border-b border-[#e8e8e8] mb-6">
+      <div className="flex gap-0 mb-6" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         {TABS.map(t => (
           <button key={t.key} onClick={() => setTab(t.key)}
-            className={`px-5 py-3 text-[11.5px] font-semibold tracking-[0.06em] transition-colors border-b-2 -mb-px ${tab===t.key ? "border-[#0c1b38] text-[#0c1b38]" : "border-transparent text-[#888] hover:text-[#555]"}`}>
+            className="px-5 py-3 text-[11.5px] font-semibold tracking-[0.06em] transition-colors border-b-2 -mb-px"
+            style={tab===t.key ? { borderColor: "var(--ca-accent)", color: "var(--ca-accent)" } : { borderColor: "transparent", color: "var(--ca-text-2)" }}>
             {t.label}
           </button>
         ))}
@@ -1238,22 +1239,26 @@ export default function BacktestingPage() {
 
   return (
     <AppShell>
-      <div className="mb-8 pb-7 border-b border-[#ebebeb]">
-        <p className="text-[10px] font-bold tracking-[0.24em] uppercase text-[#0c1b38] mb-3">Backtesting</p>
-        <h1 className="text-[34px] font-light tracking-tight text-[#0a0a0a]" style={{ fontFamily: "var(--font-serif)" }}>Strategy Backtester</h1>
-        <p className="text-[13px] text-[#9ca3af] mt-1.5">Describe any strategy in plain English → structured assumptions → full quantitative analysis with walk-forward validation.</p>
+      <div className="mb-8 pb-7" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+        <p className="text-[10px] font-bold tracking-[0.24em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Backtesting</p>
+        <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Strategy Backtester</h1>
+        <p className="text-[13px] mt-1.5" style={{ color: "var(--ca-text-3)" }}>Describe any strategy in plain English → structured assumptions → full quantitative analysis with walk-forward validation.</p>
       </div>
 
       <div className="flex items-center gap-0 mb-10">
         {STEP_LABELS.map((label, i) => (
           <div key={i} className="flex items-center">
             <div className="flex items-center gap-2">
-              <span className={`w-6 h-6 flex items-center justify-center text-[10px] font-bold border ${stepIdx===i ? "bg-[#0c1b38] text-white border-[#0c1b38]" : stepIdx>i ? "bg-[#0c1b38]/10 text-[#0c1b38] border-[#0c1b38]/30" : "text-[#ccc] border-[#ddd]"}`}>
+              <span className="w-6 h-6 flex items-center justify-center text-[10px] font-bold rounded"
+                style={stepIdx===i ? { background: "var(--ca-accent)", color: "var(--ca-accent-text)", border: "1px solid var(--ca-accent)" }
+                  : stepIdx>i ? { background: "var(--ca-surface-2)", color: "var(--ca-text-2)", border: "1px solid var(--ca-border)" }
+                  : { color: "var(--ca-text-3)", border: "1px solid var(--ca-border)" }}>
                 {stepIdx > i ? "✓" : i+1}
               </span>
-              <span className={`text-[11px] font-semibold tracking-[0.08em] uppercase ${stepIdx===i ? "text-[#0c1b38]" : stepIdx>i ? "text-[#0c1b38]/50" : "text-[#ccc]"}`}>{label}</span>
+              <span className="text-[11px] font-semibold tracking-[0.08em] uppercase"
+                style={{ color: stepIdx>=i ? "var(--ca-text)" : "var(--ca-text-3)" }}>{label}</span>
             </div>
-            {i < 2 && <span className="mx-4 text-[#e0e0e0] text-[10px]">────</span>}
+            {i < 2 && <span className="mx-4 text-[10px]" style={{ color: "var(--ca-border)" }}>────</span>}
           </div>
         ))}
       </div>

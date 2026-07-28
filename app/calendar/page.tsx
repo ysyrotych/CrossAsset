@@ -402,7 +402,7 @@ export default function CalendarPage() {
       <div className="pb-16">
 
         {/* ── Banner ─────────────────────────────────────────────────────── */}
-        <div className="-mx-10 -mt-10 mb-8 bg-[#0c1b38] px-10 py-7">
+        <div className="-mx-10 -mt-10 mb-8 px-10 py-7" style={{ background: "var(--ca-header-bg)" }}>
           <div className="flex items-center justify-between">
             <div>
               <p className="text-[9px] font-bold uppercase tracking-[0.3em] text-white/40">CrossAsset</p>
@@ -429,8 +429,8 @@ export default function CalendarPage() {
           <div className="flex gap-1">
             {(["upcoming", "calendar"] as const).map((v) => (
               <button key={v} onClick={() => setView(v)}
-                className={`border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] transition-colors
-                  ${view === v ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38]"}`}>
+                className="border px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-lg transition-colors"
+                style={view === v ? { borderColor: "var(--ca-accent)", background: "var(--ca-accent)", color: "var(--ca-accent-text)" } : { borderColor: "var(--ca-border)", color: "var(--ca-text-2)" }}>
                 {v === "upcoming" ? "Agenda" : "Calendar"}
               </button>
             ))}
@@ -439,8 +439,8 @@ export default function CalendarPage() {
           {/* Category filter */}
           <div className="flex flex-wrap gap-1">
             <button onClick={() => setFilter("all")}
-              className={`border px-3 py-1.5 text-[9.5px] font-bold uppercase tracking-[0.12em] transition-colors
-                ${filter === "all" ? "border-[#0c1b38] bg-[#0c1b38] text-white" : "border-[#e8e3da] text-[#777] hover:border-[#0c1b38]"}`}>
+              className="border px-3 py-1.5 text-[9.5px] font-bold uppercase tracking-[0.12em] rounded-lg transition-colors"
+              style={filter === "all" ? { borderColor: "var(--ca-accent)", background: "var(--ca-accent)", color: "var(--ca-accent-text)" } : { borderColor: "var(--ca-border)", color: "var(--ca-text-2)" }}>
               All
             </button>
             {Object.entries(CAT_CONFIG).map(([k, v]) => (
@@ -454,7 +454,8 @@ export default function CalendarPage() {
           </div>
 
           <button onClick={load} disabled={loading}
-            className="border border-[#e8e3da] px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] disabled:opacity-40">
+            className="px-4 py-2 text-[10px] font-bold uppercase tracking-[0.14em] rounded-lg disabled:opacity-40 transition-colors"
+            style={{ border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
             {loading ? "Loading…" : "↻ Refresh"}
           </button>
         </div>
@@ -600,7 +601,7 @@ export default function CalendarPage() {
                 if (!nextFomc) return null;
                 const d = daysFromNow(nextFomc.date);
                 return (
-                  <div className="border border-[#0c1b38] bg-[#0c1b38] p-5 text-white">
+                  <div className="p-5 text-white" style={{ border: "1px solid var(--ca-accent)", background: "var(--ca-sidebar-bg)" }}>
                     <p className="mb-1 text-[9px] font-bold uppercase tracking-[0.25em] text-white/40">Next FOMC</p>
                     <p className="text-[14px] font-bold">{nextFomc.label}</p>
                     <p className="mt-0.5 text-[10.5px] text-white/50">

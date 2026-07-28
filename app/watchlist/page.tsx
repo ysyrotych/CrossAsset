@@ -43,21 +43,21 @@ export default function WatchlistPage() {
 
   return (
     <AppShell>
-      <div className="mb-10 pb-8 border-b border-[#ebebeb] flex items-end justify-between">
+      <div className="mb-10 pb-8 flex items-end justify-between" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-[#0f2044] mb-3">Watchlist</p>
-          <h1 className="text-[34px] font-light text-[#0a0a0a] tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>Coverage</h1>
-          <p className="text-[13px] text-[#9ca3af] mt-1">Tracked equities and macro sensitivity.</p>
+          <p className="text-[10px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Watchlist</p>
+          <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Coverage</h1>
+          <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>Tracked equities and macro sensitivity.</p>
         </div>
-        <button onClick={() => setAdding(true)} className="flex items-center gap-2 text-[12px] font-medium text-white bg-[#0f2044] hover:bg-[#1a3361] px-4 py-2 rounded-md transition-colors">
+        <button onClick={() => setAdding(true)} className="flex items-center gap-2 text-[12px] font-medium px-4 py-2 rounded-lg transition-colors" style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}>
           <Plus size={13} /> Add Ticker
         </button>
       </div>
 
       {adding && (
-        <div className="mb-8 border border-[#e0e7ff] rounded-md p-6 bg-[#f8f9ff]">
+        <div className="mb-8 rounded-xl p-6" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
           <div className="flex justify-between items-center mb-5">
-            <p className="text-[11px] font-semibold uppercase tracking-widest text-[#0f2044]">Add Ticker</p>
+            <p className="text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--ca-text)" }}>Add Ticker</p>
             <button onClick={() => setAdding(false)}><X size={14} className="text-[#9ca3af] hover:text-[#374151]" /></button>
           </div>
           <div className="grid grid-cols-3 gap-4 mb-4">
@@ -78,8 +78,8 @@ export default function WatchlistPage() {
             </div>
           </div>
           <div className="flex gap-3">
-            <button onClick={add} className="text-[12px] font-medium text-white bg-[#0f2044] hover:bg-[#1a3361] px-4 py-2 rounded-md transition-colors">Add to Watchlist</button>
-            <button onClick={() => setAdding(false)} className="text-[12px] text-[#9ca3af] hover:text-[#374151] px-4 py-2">Cancel</button>
+            <button onClick={add} className="text-[12px] font-medium px-4 py-2 rounded-lg transition-colors" style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}>Add to Watchlist</button>
+            <button onClick={() => setAdding(false)} className="text-[12px] px-4 py-2 transition-colors" style={{ color: "var(--ca-text-3)" }}>Cancel</button>
           </div>
         </div>
       )}

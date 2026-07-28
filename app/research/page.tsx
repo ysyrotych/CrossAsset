@@ -28,13 +28,13 @@ const STATUS_COLORS: Record<ResearchStatus, { bg: string; border: string; text: 
 };
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[10px] font-bold uppercase tracking-[0.24em] text-[#0c1b38]">{children}</p>;
+  return <p className="text-[10px] font-bold uppercase tracking-[0.24em]" style={{ color: "var(--ca-text-2)" }}>{children}</p>;
 }
 function MiniLabel({ children }: { children: React.ReactNode }) {
-  return <p className="text-[9px] font-bold uppercase tracking-[0.18em] text-[#999]">{children}</p>;
+  return <p className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--ca-text-3)" }}>{children}</p>;
 }
 function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  return <section className={`border border-[#e8e3da] bg-white ${className}`}>{children}</section>;
+  return <section className={`${className}`} style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface)" }}>{children}</section>;
 }
 
 const DEMO_ITEMS: ResearchItem[] = [
@@ -128,7 +128,7 @@ export default function ResearchPage() {
       <main className="pb-20">
 
         {/* Header */}
-        <div className="-mx-10 -mt-10 mb-0 bg-[#0c1b38] px-10 py-6">
+        <div className="-mx-10 -mt-10 mb-0 px-10 py-6" style={{ background: "var(--ca-header-bg)" }}>
           <div className="flex items-start justify-between gap-6">
             <div>
               <div className="flex items-center gap-3 mb-2">
@@ -163,13 +163,12 @@ export default function ResearchPage() {
         </div>
 
         {/* Tab filter */}
-        <div className="-mx-10 mb-8 border-b border-[#e8e3da] bg-[#fbfaf7] px-10">
+        <div className="-mx-10 mb-8 px-10" style={{ borderBottom: "1px solid var(--ca-border)", background: "var(--ca-surface)" }}>
           <div className="flex gap-0">
             {FILTER_LABELS.map(f => (
               <button key={f} onClick={() => setFilter(f)}
-                className={`px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] border-b-2 -mb-px transition-colors ${
-                  filter === f ? "border-[#0c1b38] text-[#0c1b38]" : "border-transparent text-[#999] hover:text-[#555]"
-                }`}>
+                className="px-4 py-3.5 text-[10.5px] font-bold uppercase tracking-[0.16em] border-b-2 -mb-px transition-colors"
+                style={filter === f ? { borderColor: "var(--ca-accent)", color: "var(--ca-accent)" } : { borderColor: "transparent", color: "var(--ca-text-3)" }}>
                 {f}
                 {f !== "All" && (
                   <span className="ml-1.5 text-[9px] font-bold tabular-nums text-[#bbb]">
@@ -237,13 +236,15 @@ export default function ResearchPage() {
                 <button
                   onClick={handleSave}
                   disabled={!formTitle.trim()}
-                  className="bg-[#0c1b38] text-white px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#162d5c] transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  className="px-5 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] rounded-lg transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                  style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}
                 >
                   {editingId ? "Save Changes" : "Add Research"}
                 </button>
                 <button
                   onClick={() => setShowForm(false)}
-                  className="border border-[#e8e3da] px-4 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#777] hover:border-[#0c1b38] hover:text-[#0c1b38] transition-colors"
+                  className="px-4 py-2 text-[10.5px] font-bold uppercase tracking-[0.14em] rounded-lg transition-colors"
+                  style={{ border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}
                 >
                   Cancel
                 </button>
@@ -266,7 +267,8 @@ export default function ResearchPage() {
             {filter === "All" && (
               <button
                 onClick={openNew}
-                className="bg-[#0c1b38] text-white px-5 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] hover:bg-[#162d5c] transition-colors"
+                className="px-5 py-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] rounded-lg transition-colors"
+                style={{ background: "var(--ca-accent)", color: "var(--ca-accent-text)" }}
               >
                 + New Research
               </button>

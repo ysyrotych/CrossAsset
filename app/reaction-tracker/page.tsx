@@ -40,13 +40,13 @@ export default function ReactionTrackerPage() {
 
   return (
     <AppShell>
-      <div className="mb-10 pb-8 border-b border-[#ebebeb] flex items-end justify-between">
+      <div className="mb-10 pb-8 flex items-end justify-between" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-[#0f2044] mb-3">Reaction Tracker</p>
-          <h1 className="text-[34px] font-light text-[#0a0a0a] tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>Market Reactions</h1>
-          <p className="text-[13px] text-[#9ca3af] mt-1">Prediction vs. actual for every macro event.</p>
+          <p className="text-[10px] font-semibold tracking-[0.12em] uppercase mb-3" style={{ color: "var(--ca-text-2)" }}>Reaction Tracker</p>
+          <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Market Reactions</h1>
+          <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>Prediction vs. actual for every macro event.</p>
         </div>
-        <button onClick={() => setAdding(true)} className="flex items-center gap-2 text-[12px] font-medium text-white bg-[#0f2044] hover:bg-[#1a3361] px-4 py-2 rounded-md transition-colors">
+        <button onClick={() => setAdding(true)} className="flex items-center gap-2 text-[12px] font-medium text-white px-4 py-2 rounded-md transition-colors" style={{ background: "var(--ca-accent)" }}>
           <Plus size={13} /> Add Entry
         </button>
       </div>

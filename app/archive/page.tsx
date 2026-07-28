@@ -40,13 +40,13 @@ export default function ArchivePage() {
 
   return (
     <AppShell>
-      <div className="mb-10 pb-8 border-b border-[#ebebeb] flex items-end justify-between">
+      <div className="mb-10 pb-8 flex items-end justify-between" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         <div>
-          <p className="text-[10px] font-semibold tracking-[0.2em] uppercase text-[#0c1b38] mb-3">Archive</p>
-          <h1 className="text-[34px] font-light text-[#0a0a0a] tracking-tight" style={{ fontFamily: "var(--font-serif)" }}>Past Issues</h1>
-          <p className="text-[13px] text-[#9ca3af] mt-1">Every generated macro brief, saved automatically.</p>
+          <p className="text-[10px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Archive</p>
+          <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Past Issues</h1>
+          <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>Every generated macro brief, saved automatically.</p>
         </div>
-        <p className="text-[11px] text-[#bbb]">{entries.length} issue{entries.length !== 1 ? "s" : ""}</p>
+        <p className="text-[11px]" style={{ color: "var(--ca-text-3)" }}>{entries.length} issue{entries.length !== 1 ? "s" : ""}</p>
       </div>
 
       {entries.length === 0 ? (
