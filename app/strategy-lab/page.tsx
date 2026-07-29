@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import dynamic from "next/dynamic";
 import AppShell from "@/components/layout/AppShell";
+import { useTheme } from "@/components/ThemeProvider";
 import {
   Area, AreaChart, Bar, BarChart, CartesianGrid, Cell,
   Line, LineChart, ReferenceArea, ReferenceLine, ResponsiveContainer,
@@ -206,13 +207,19 @@ function RegimeQuadrant({
     { label: "Slowdown",    x: CX + CX / 2, y: CY + CY / 2 },
   ];
 
+  const { theme } = useTheme();
+  const dark = theme === "dark";
+  const qFills = dark
+    ? ["rgba(80,120,255,0.08)", "rgba(34,197,94,0.09)", "rgba(239,68,68,0.09)", "rgba(251,191,36,0.08)"]
+    : ["#f0f4ff", "#f0faf4", "#fff5f4", "#fffbf0"];
+
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[260px] mx-auto">
       {/* Quadrant fills */}
-      <rect x={0}  y={0}  width={CX} height={CY} fill="#f0f4ff" opacity={0.7} />
-      <rect x={CX} y={0}  width={CX} height={CY} fill="#f0faf4" opacity={0.7} />
-      <rect x={0}  y={CY} width={CX} height={CY} fill="#fff5f4" opacity={0.7} />
-      <rect x={CX} y={CY} width={CX} height={CY} fill="#fffbf0" opacity={0.7} />
+      <rect x={0}  y={0}  width={CX} height={CY} fill={qFills[0]} opacity={0.9} />
+      <rect x={CX} y={0}  width={CX} height={CY} fill={qFills[1]} opacity={0.9} />
+      <rect x={0}  y={CY} width={CX} height={CY} fill={qFills[2]} opacity={0.9} />
+      <rect x={CX} y={CY} width={CX} height={CY} fill={qFills[3]} opacity={0.9} />
 
       {/* Dividers */}
       <line x1={CX} y1={PAD} x2={CX} y2={H - PAD} stroke={BORDER} strokeWidth={1} />
