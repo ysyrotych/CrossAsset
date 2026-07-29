@@ -626,12 +626,12 @@ ${earningsCtx}
         {/* ── AI Morning Brief ──────────────────────────────────────────── */}
         <div className="mb-5">
           <Card className="overflow-hidden">
-            <div className="px-6 py-4 flex items-center justify-between" style={{ background: "var(--ca-accent)" }}>
+            <div className="px-6 py-4 flex items-center justify-between" style={{ background: "var(--ca-brand-bg)", borderBottom: "2px solid var(--ca-brand-border)" }}>
               <div>
-                <p className="text-[10px] font-bold tracking-[0.2em] uppercase text-white/50 mb-1">AI Morning Brief</p>
-                <p className="text-[13px] font-medium text-white">Powered by Claude · synthesizes all live market data below</p>
+                <p className="text-[10px] font-bold tracking-[0.2em] uppercase mb-1" style={{ color: "var(--ca-brand-label)" }}>AI Morning Brief</p>
+                <p className="text-[13px] font-medium" style={{ color: "var(--ca-brand-text)" }}>Powered by Claude · synthesizes all live market data below</p>
               </div>
-              <Newspaper size={18} className="text-white/30" />
+              <Newspaper size={18} style={{ color: "var(--ca-brand-label)", opacity: 0.5 }} />
             </div>
             <div className="p-6">
               <div className="flex items-center gap-3 mb-5 flex-wrap">

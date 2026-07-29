@@ -43,6 +43,11 @@
   --ca-amber-bg:    #fffbeb;
   --ca-sidebar-bg:  #0c1b38;
   --ca-header-bg:   #0c1b38;
+  /* Brand card header tokens */
+  --ca-brand-bg:        #0c1b38;
+  --ca-brand-border:    transparent;
+  --ca-brand-label:     rgba(255,255,255,0.5);
+  --ca-brand-text:      #ffffff;
 }
 
 .dark {
@@ -50,25 +55,30 @@
   --background: #0c0c0c;
   --foreground: #f0f0f0;
 
-  /* CrossAsset tokens (dark — premium charcoal, Bloomberg-grade) */
-  --ca-bg:          #0c0c0c;
-  --ca-surface:     #161616;
-  --ca-surface-2:   #222222;
-  --ca-border:      #2a2a2a;
-  --ca-border-2:    #383838;
+  /* CrossAsset tokens (dark — pure black, Bloomberg-grade, gold accents) */
+  --ca-bg:          #070707;
+  --ca-surface:     #111111;
+  --ca-surface-2:   #1c1c1c;
+  --ca-border:      #252525;
+  --ca-border-2:    #353535;
   --ca-text:        #f0f0f0;
-  --ca-text-2:      #888888;
-  --ca-text-3:      #555555;
-  --ca-accent:      #c9a84c;
-  --ca-accent-text: #0c0c0c;
+  --ca-text-2:      #808080;
+  --ca-text-3:      #505050;
+  --ca-accent:      #d4a843;
+  --ca-accent-text: #080808;
   --ca-green:       #22c55e;
-  --ca-green-bg:    #0a1a10;
+  --ca-green-bg:    #081510;
   --ca-red:         #ef4444;
-  --ca-red-bg:      #1a0808;
+  --ca-red-bg:      #160606;
   --ca-amber:       #fbbf24;
-  --ca-amber-bg:    #1a1200;
-  --ca-sidebar-bg:  #080808;
-  --ca-header-bg:   #0c0c0c;
+  --ca-amber-bg:    #150f00;
+  --ca-sidebar-bg:  #040404;
+  --ca-header-bg:   #080808;
+  /* Brand card header tokens */
+  --ca-brand-bg:        #0c0c0c;
+  --ca-brand-border:    #d4a843;
+  --ca-brand-label:     #d4a843;
+  --ca-brand-text:      #c0c0c0;
 }
 
 @layer base {
@@ -290,6 +300,13 @@
 
 /* Scrollbar in dark mode */
 .dark ::-webkit-scrollbar-thumb { background: var(--ca-border-2); }
+
+/* Section labels (SectionLabel component — all pages use inline style with --ca-text-2) */
+.dark p[style*="--ca-text-2"]  { color: var(--ca-accent) !important; }
+/* News source labels — bold uppercase text-[#999] elements */
+.dark .text-\[\#999\].font-bold.uppercase { color: var(--ca-accent) !important; }
+/* Bold uppercase text-[#bbb] labels (brief output label etc.) */
+.dark .text-\[\#bbb\].font-bold.uppercase { color: var(--ca-accent) !important; }
 
 /* ── Semantic Tailwind color overrides ───────────────────────────────────── */
 /* Green status badges */
