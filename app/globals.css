@@ -303,10 +303,18 @@
 
 /* Section labels — p elements with uppercase + --ca-text-2 (SectionLabel across all pages) */
 .dark p.uppercase[style*="--ca-text-2"]  { color: var(--ca-accent) !important; }
-/* News source labels — bold uppercase text-[#999] elements */
-.dark .text-\[\#999\].font-bold.uppercase { color: var(--ca-accent) !important; }
+/* All uppercase text-[#999] labels (news sources, tile labels, identifiers) */
+.dark .text-\[\#999\].uppercase { color: var(--ca-accent) !important; }
 /* Bold uppercase text-[#bbb] labels (brief output label etc.) */
-.dark .text-\[\#bbb\].font-bold.uppercase { color: var(--ca-accent) !important; }
+.dark .text-\[\#bbb\].uppercase { color: var(--ca-accent) !important; }
+
+/* Portfolio/futures tile inline backgroundColor — gb() returns hardcoded hex via style attr */
+.dark [style*="background-color: rgb(240, 250, 244)"],
+.dark [style*="background-color: #f0faf4"] { background-color: var(--ca-green-bg) !important; }
+.dark [style*="background-color: rgb(255, 245, 245)"],
+.dark [style*="background-color: #fff5f5"] { background-color: var(--ca-red-bg) !important; }
+.dark [style*="background-color: rgb(250, 250, 250)"],
+.dark [style*="background-color: #fafafa"]  { background-color: var(--ca-surface-2) !important; }
 
 /* ── Semantic Tailwind color overrides ───────────────────────────────────── */
 /* Green status badges */
