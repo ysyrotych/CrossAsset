@@ -34,10 +34,10 @@ const LGRAY   = "#f9fafb";
 const DGRAY   = "#4b5563";
 
 const REGIME_COLORS: Record<RegimeLabel, { bg: string; border: string; text: string; dot: string }> = {
-  Recovery:    { bg: "#f0f4ff", border: "#c8d0e8", text: "#1e3a8a", dot: "#3b82f6" },
-  Expansion:   { bg: "#f0faf4", border: "#b8e6ce", text: "#147a4f", dot: "#16a34a" },
-  Slowdown:    { bg: "#fffbf0", border: "#f0d89a", text: "#b7791f", dot: "#d97706" },
-  Contraction: { bg: "#fff5f4", border: "#f5c6c0", text: "#b42318", dot: "#dc2626" },
+  Recovery:    { bg: "rgba(59,130,246,0.07)",  border: "rgba(59,130,246,0.30)",  text: "#3b82f6", dot: "#3b82f6" },
+  Expansion:   { bg: "rgba(34,197,94,0.07)",   border: "rgba(34,197,94,0.30)",   text: "#22c55e", dot: "#22c55e" },
+  Slowdown:    { bg: "rgba(245,158,11,0.07)",  border: "rgba(245,158,11,0.30)",  text: "#f59e0b", dot: "#f59e0b" },
+  Contraction: { bg: "rgba(239,68,68,0.07)",   border: "rgba(239,68,68,0.30)",   text: "#ef4444", dot: "#ef4444" },
 };
 
 // ── Static baseline data ──────────────────────────────────────────────────────
@@ -194,11 +194,28 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function MiniLabel({ children }: { children: React.ReactNode }) {
   return <p className="text-[10px] font-medium uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-3)" }}>{children}</p>;
 }
-function Card({ children, className = "" }: { children: React.ReactNode; className?: string }) {
+function Card({ children, className = "", glass = false, style: extraStyle }: {
+  children: React.ReactNode;
+  className?: string;
+  glass?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const glassStyle: React.CSSProperties = glass ? {
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    background: "var(--ca-surface)",
+    border: "1px solid var(--ca-border)",
+    boxShadow: "0 8px 32px rgba(0,0,0,0.12), inset 0 1px 0 rgba(255,255,255,0.06)",
+  } : {
+    background: "var(--ca-surface)",
+    border: "1px solid var(--ca-border)",
+    boxShadow: "0 2px 12px rgba(0,0,0,0.06)",
+  };
+
   return (
     <section
-      className={`rounded-xl shadow-sm ${className}`}
-      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}
+      className={`rounded-xl ${className}`}
+      style={{ ...glassStyle, ...extraStyle }}
     >
       {children}
     </section>
@@ -442,7 +459,7 @@ const TearsheetDownloadButton = dynamic(
   { ssr: false, loading: () => <span className="text-[10px] text-gray-400">Loading…</span> }
 );
 
-// ── Regime four-quadrant diagram ──────────────────────────────────────────────
+// ── Regime four-quadrant diagram — Bloomberg dark style ───────────────────────
 function RegimeQuadrant({
   regime, probs, levelScore, directionScore, mode,
 }: {
@@ -452,46 +469,68 @@ function RegimeQuadrant({
   directionScore: number | null;
   mode: StrategyMode;
 }) {
-  const W = 240; const H = 220;
+  const W = 240; const H = 210;
   const CX = W / 2; const CY = H / 2;
-  const PAD = 28;
+  const PAD = 20;
 
-  // Dot position: levelScore (-1 to +1) → X, directionScore → Y (inverted)
   const raw_x = levelScore ?? 0;
   const raw_y = directionScore ?? 0;
-  const dotX = CX + raw_x * (CX - PAD - 10);
-  const dotY = CY - raw_y * (CY - PAD - 10);
-
-  // For enhanced mode: probability-weighted centroid
-  const eX = probs
-    ? CX + (((probs.Expansion + probs.Recovery) - (probs.Slowdown + probs.Contraction)) === 0 ? 0
-        : ((probs.Expansion - probs.Slowdown) * 0.6 + (probs.Recovery - probs.Contraction) * 0.6) * (CX - PAD - 10) / 1.2)
-    : dotX;
+  const dotX = CX + raw_x * (CX - PAD - 8);
+  const dotY = CY - raw_y * (CY - PAD - 8);
 
   const quadrants: { label: RegimeLabel; x: number; y: number }[] = [
-    { label: "Recovery",    x: CX / 2, y: CY / 2 },
-    { label: "Expansion",   x: CX + CX / 2, y: CY / 2 },
-    { label: "Contraction", x: CX / 2, y: CY + CY / 2 },
-    { label: "Slowdown",    x: CX + CX / 2, y: CY + CY / 2 },
+    { label: "Recovery",    x: CX / 2,       y: CY / 2 + 4 },
+    { label: "Expansion",   x: CX + CX / 2,  y: CY / 2 + 4 },
+    { label: "Contraction", x: CX / 2,       y: CY + CY / 2 + 4 },
+    { label: "Slowdown",    x: CX + CX / 2,  y: CY + CY / 2 + 4 },
   ];
 
   const { theme } = useTheme();
   const dark = theme === "dark";
-  const qFills = dark
-    ? ["rgba(80,120,255,0.08)", "rgba(34,197,94,0.09)", "rgba(239,68,68,0.09)", "rgba(251,191,36,0.08)"]
-    : ["#f0f4ff", "#f0faf4", "#fff5f4", "#fffbf0"];
+
+  const bgColor   = dark ? "#0e0e0e" : "#0c1b38";
+  const gridLine  = dark ? "rgba(255,255,255,0.08)" : "rgba(255,255,255,0.15)";
+  const dimLabel  = dark ? "rgba(255,255,255,0.18)" : "rgba(255,255,255,0.30)";
+  const axisLabel = dark ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.35)";
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[260px] mx-auto">
-      {/* Quadrant fills */}
-      <rect x={0}  y={0}  width={CX} height={CY} fill={qFills[0]} opacity={0.9} />
-      <rect x={CX} y={0}  width={CX} height={CY} fill={qFills[1]} opacity={0.9} />
-      <rect x={0}  y={CY} width={CX} height={CY} fill={qFills[2]} opacity={0.9} />
-      <rect x={CX} y={CY} width={CX} height={CY} fill={qFills[3]} opacity={0.9} />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full max-w-[260px] mx-auto rounded-sm overflow-hidden">
+      <defs>
+        <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+          <feGaussianBlur stdDeviation="4" result="blur" />
+          <feMerge>
+            <feMergeNode in="blur" />
+            <feMergeNode in="SourceGraphic" />
+          </feMerge>
+        </filter>
+        <radialGradient id="dotGlow" cx="50%" cy="50%" r="50%">
+          <stop offset="0%" stopColor={regime ? REGIME_COLORS[regime].dot : "#fff"} stopOpacity="0.4" />
+          <stop offset="100%" stopColor={regime ? REGIME_COLORS[regime].dot : "#fff"} stopOpacity="0" />
+        </radialGradient>
+      </defs>
 
-      {/* Dividers */}
-      <line x1={CX} y1={PAD} x2={CX} y2={H - PAD} stroke={dark ? "#353535" : BORDER} strokeWidth={1} />
-      <line x1={PAD} y1={CY} x2={W - PAD} y2={CY} stroke={dark ? "#353535" : BORDER} strokeWidth={1} />
+      {/* Dark background */}
+      <rect x={0} y={0} width={W} height={H} fill={bgColor} />
+
+      {/* Subtle quadrant tints */}
+      <rect x={0}  y={0}  width={CX} height={CY} fill={REGIME_COLORS.Recovery.dot}    opacity={0.04} />
+      <rect x={CX} y={0}  width={CX} height={CY} fill={REGIME_COLORS.Expansion.dot}   opacity={0.04} />
+      <rect x={0}  y={CY} width={CX} height={CY} fill={REGIME_COLORS.Contraction.dot} opacity={0.04} />
+      <rect x={CX} y={CY} width={CX} height={CY} fill={REGIME_COLORS.Slowdown.dot}    opacity={0.04} />
+
+      {/* Active quadrant highlight */}
+      {regime && (
+        <rect
+          x={regime === "Recovery" || regime === "Contraction" ? 0 : CX}
+          y={regime === "Recovery" || regime === "Expansion" ? 0 : CY}
+          width={CX} height={CY}
+          fill={REGIME_COLORS[regime].dot} opacity={0.08}
+        />
+      )}
+
+      {/* Grid lines */}
+      <line x1={CX} y1={PAD} x2={CX} y2={H - PAD} stroke={gridLine} strokeWidth={1} />
+      <line x1={PAD} y1={CY} x2={W - PAD} y2={CY} stroke={gridLine} strokeWidth={1} />
 
       {/* Quadrant labels */}
       {quadrants.map(q => {
@@ -500,15 +539,14 @@ function RegimeQuadrant({
         const prob = probs ? probs[q.label] : null;
         return (
           <g key={q.label}>
-            <text x={q.x} y={q.y - 4} textAnchor="middle" fontSize={8}
-              fontWeight={isActive ? "700" : "500"}
-              fill={isActive ? c.text : dark ? "#505050" : "#aaa"}
-              letterSpacing="0.08em">
+            <text x={q.x} y={q.y - 5} textAnchor="middle" fontSize={7.5}
+              fontWeight="700" letterSpacing="0.12em"
+              fill={isActive ? c.dot : dimLabel}>
               {q.label.toUpperCase()}
             </text>
             {prob != null && (
-              <text x={q.x} y={q.y + 10} textAnchor="middle" fontSize={9.5}
-                fontWeight="600" fill={c.text} opacity={0.85}>
+              <text x={q.x} y={q.y + 9} textAnchor="middle" fontSize={10}
+                fontWeight="700" fill={isActive ? c.dot : "rgba(255,255,255,0.25)"}>
                 {Math.round(prob * 100)}%
               </text>
             )}
@@ -517,34 +555,30 @@ function RegimeQuadrant({
       })}
 
       {/* Axis labels */}
-      <text x={PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">BELOW</text>
-      <text x={W - PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">ABOVE</text>
-      <text x={CX} y={PAD - 6} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">ACCEL.</text>
-      <text x={CX} y={H - PAD + 12} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">DECEL.</text>
+      <text x={PAD + 4} y={CY - 4} textAnchor="start" fontSize={6.5} fill={axisLabel} letterSpacing="0.08em">BELOW</text>
+      <text x={W - PAD - 4} y={CY - 4} textAnchor="end" fontSize={6.5} fill={axisLabel} letterSpacing="0.08em">ABOVE</text>
+      <text x={CX} y={PAD - 5} textAnchor="middle" fontSize={6.5} fill={axisLabel} letterSpacing="0.08em">ACCEL.</text>
+      <text x={CX} y={H - PAD + 11} textAnchor="middle" fontSize={6.5} fill={axisLabel} letterSpacing="0.08em">DECEL.</text>
 
-      {/* Enhanced mode: probability halo for each quadrant */}
+      {/* Probability halos (enhanced mode) */}
       {mode === "enhanced" && probs && quadrants.map(q => {
         const p = probs[q.label];
-        const c = REGIME_COLORS[q.label];
         return p > 0.15 ? (
-          <circle key={`h-${q.label}`} cx={q.x} cy={q.y + 3} r={p * 35}
-            fill={c.dot} opacity={0.10} />
+          <circle key={`h-${q.label}`} cx={q.x} cy={q.y + 3} r={p * 32}
+            fill={REGIME_COLORS[q.label].dot} opacity={0.08} />
         ) : null;
       })}
 
-      {/* Current position dot */}
+      {/* Position dot — glow ring + solid center */}
       {regime && (
         <>
-          <circle cx={dotX} cy={dotY} r={10}
-            fill={REGIME_COLORS[regime].dot} opacity={0.15} />
-          <circle cx={dotX} cy={dotY} r={5}
-            fill={REGIME_COLORS[regime].dot} opacity={0.9} />
+          <circle cx={dotX} cy={dotY} r={18} fill="url(#dotGlow)" />
+          <circle cx={dotX} cy={dotY} r={9} fill={REGIME_COLORS[regime].dot} opacity={0.18} />
+          <circle cx={dotX} cy={dotY} r={5} fill={REGIME_COLORS[regime].dot} filter="url(#glow)" />
+          <circle cx={dotX} cy={dotY} r={3.5} fill={REGIME_COLORS[regime].dot} />
+          <circle cx={dotX} cy={dotY} r={1.5} fill="white" opacity={0.85} />
         </>
       )}
-
-      {/* Zero reference crosshair ticks */}
-      <line x1={CX - 4} y1={CY} x2={CX + 4} y2={CY} stroke="#bbb" strokeWidth={1} />
-      <line x1={CX} y1={CY - 4} x2={CX} y2={CY + 4} stroke="#bbb" strokeWidth={1} />
     </svg>
   );
 }
@@ -1214,11 +1248,19 @@ export default function StrategyLabPage() {
         {/* TAB: OVERVIEW  — Citadel-Grade Macro Environment                    */}
         {/* ─────────────────────────────────────────────────────────────────── */}
         {activeTab === "Overview" && (
-          <div className="space-y-5">
+          <div className="space-y-5" style={{
+            background: currentRegime
+              ? `radial-gradient(ellipse 800px 400px at 70% -10%, ${REGIME_COLORS[currentRegime].bg} 0%, transparent 70%)`
+              : undefined,
+          }}>
 
             {/* Macro Pulse Header */}
             {regimeData && !loading && (
-              <div className="flex items-center gap-4 px-4 py-3 rounded-lg" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
+              <div className="flex items-center gap-4 px-4 py-3 rounded-lg" style={{
+                background: "var(--ca-surface)",
+                border: "1px solid var(--ca-border)",
+                boxShadow: "0 2px 16px rgba(0,0,0,0.10)",
+              }}>
                 <div className="flex items-center gap-2 shrink-0">
                   <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: isDemo ? "var(--ca-amber)" : "var(--ca-green)" }} />
                   <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--ca-text-3)" }}>
@@ -1280,47 +1322,54 @@ export default function StrategyLabPage() {
             <div className="grid grid-cols-[260px_1fr_270px] gap-5">
 
               {/* ═══ LEFT: Current Regime ═══ */}
-              <Card className="p-5 flex flex-col">
-                <div className="flex items-center justify-between mb-3">
-                  <SectionLabel>Current Regime</SectionLabel>
-                  {confidence != null && (
-                    <span className="text-[10px] font-bold tabular-nums" style={{
-                      color: confidence >= 70 ? "var(--ca-green)" : confidence >= 50 ? "var(--ca-amber)" : "var(--ca-red)"
-                    }}>
-                      {confidence}% conf.
+              <Card glass className="flex flex-col overflow-hidden" style={{ padding: 0 }}>
+                {/* Regime identity — dark header */}
+                <div className="px-5 pt-4 pb-3" style={{
+                  background: currentRegime ? REGIME_COLORS[currentRegime].bg : "var(--ca-surface-2)",
+                  borderBottom: `2px solid ${currentRegime ? REGIME_COLORS[currentRegime].dot : "var(--ca-border)"}`,
+                }}>
+                  <div className="flex items-start justify-between mb-1">
+                    <span className="text-[8.5px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--ca-text-3)" }}>
+                      Current Regime
                     </span>
+                    {confidence != null && (
+                      <span className="text-[9px] font-bold tabular-nums font-mono" style={{
+                        color: confidence >= 70 ? "var(--ca-green)" : confidence >= 50 ? "var(--ca-amber)" : "var(--ca-red)"
+                      }}>
+                        {confidence}% conf.
+                      </span>
+                    )}
+                  </div>
+                  {currentRegime ? (
+                    <>
+                      <p className="text-[30px] font-black tracking-tight leading-none mt-1" style={{ color: REGIME_COLORS[currentRegime].dot }}>
+                        {currentRegime.toUpperCase()}
+                      </p>
+                      <div className="flex items-center gap-2 mt-2.5 flex-wrap">
+                        <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-1" style={{
+                          background: "rgba(0,0,0,0.15)",
+                          color: regimeData?.growthLevel === "above" ? "var(--ca-green)" : "var(--ca-red)",
+                          border: `1px solid ${regimeData?.growthLevel === "above" ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+                          borderRadius: 2,
+                        }}>
+                          {regimeData?.growthLevel === "above" ? "▲ Above Trend" : "▼ Below Trend"}
+                        </span>
+                        <span className="text-[9px] font-bold uppercase tracking-[0.08em] px-2 py-1" style={{
+                          background: "rgba(0,0,0,0.15)",
+                          color: regimeData?.growthDirection === "accelerating" ? "var(--ca-green)" : "var(--ca-red)",
+                          border: `1px solid ${regimeData?.growthDirection === "accelerating" ? "rgba(34,197,94,0.3)" : "rgba(239,68,68,0.3)"}`,
+                          borderRadius: 2,
+                        }}>
+                          {regimeData?.growthDirection === "accelerating" ? "↑ Accel." : "↓ Decel."}
+                        </span>
+                      </div>
+                    </>
+                  ) : (
+                    <p className="text-[18px] font-bold mt-1" style={{ color: "var(--ca-text-3)" }}>{loading ? "Loading…" : "—"}</p>
                   )}
                 </div>
 
-                {currentRegime && regimeColors ? (
-                  <div className="mb-4 px-3 py-3 text-center border" style={{
-                    borderColor: regimeColors.border, backgroundColor: regimeColors.bg
-                  }}>
-                    <p className="text-[22px] font-bold tracking-wide" style={{ color: regimeColors.text }}>
-                      {currentRegime.toUpperCase()}
-                    </p>
-                    <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
-                      <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded" style={{
-                        background: regimeData?.growthLevel === "above" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)",
-                        color: regimeData?.growthLevel === "above" ? "var(--ca-green)" : "var(--ca-red)",
-                      }}>
-                        {regimeData?.growthLevel === "above" ? "Above Trend" : "Below Trend"}
-                      </span>
-                      <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded" style={{
-                        background: regimeData?.growthDirection === "accelerating" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)",
-                        color: regimeData?.growthDirection === "accelerating" ? "var(--ca-green)" : "var(--ca-red)",
-                      }}>
-                        {regimeData?.growthDirection === "accelerating" ? "↑ Accelerating" : "↓ Decelerating"}
-                      </span>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="mb-4 px-3 py-3 text-center" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
-                    <p className="text-[14px]" style={{ color: "var(--ca-text-3)" }}>{loading ? "Loading…" : "—"}</p>
-                  </div>
-                )}
-
-                <div className="mb-3">
+                <div className="px-4 pt-3 pb-2">
                   <RegimeQuadrant
                     regime={currentRegime}
                     probs={mode === "enhanced" ? probs : null}
@@ -1331,7 +1380,7 @@ export default function StrategyLabPage() {
                 </div>
 
                 {mode === "enhanced" && probs && (
-                  <div className="space-y-1.5 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                  <div className="px-5 pb-4 space-y-1.5 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
                     <MiniLabel>Regime Probabilities</MiniLabel>
                     {(["Expansion", "Slowdown", "Recovery", "Contraction"] as RegimeLabel[]).map(r => {
                       const p = probs[r];
@@ -1339,10 +1388,10 @@ export default function StrategyLabPage() {
                       return (
                         <div key={r} className="flex items-center gap-2">
                           <span className="text-[10px] w-20 shrink-0" style={{ color: "var(--ca-text-2)" }}>{r}</span>
-                          <div className="flex-1 h-[3px] rounded-full" style={{ background: "var(--ca-surface-2)" }}>
-                            <div className="h-full rounded-full" style={{ width: `${p * 100}%`, backgroundColor: c.dot }} />
+                          <div className="flex-1 h-[3px]" style={{ background: "var(--ca-surface-2)" }}>
+                            <div className="h-full" style={{ width: `${p * 100}%`, backgroundColor: c.dot }} />
                           </div>
-                          <span className="text-[10px] font-bold tabular-nums w-8 text-right" style={{ color: c.dot }}>
+                          <span className="text-[10px] font-bold tabular-nums w-8 text-right font-mono" style={{ color: c.dot }}>
                             {Math.round(p * 100)}%
                           </span>
                         </div>
@@ -1352,14 +1401,14 @@ export default function StrategyLabPage() {
                 )}
 
                 {prevRegime && prevRegime !== currentRegime && (
-                  <p className="mt-3 text-[10px] pt-3" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
+                  <p className="px-5 pb-4 text-[10px] pt-3" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
                     Previous: <span className="font-semibold" style={{ color: "var(--ca-text-2)" }}>{prevRegime}</span>
                   </p>
                 )}
               </Card>
 
               {/* ═══ CENTER: 5-Factor Macro Dashboard ═══ */}
-              <Card className="p-5">
+              <Card glass className="p-5">
                 <div className="flex items-center justify-between mb-4">
                   <SectionLabel>Macro Factor Dashboard</SectionLabel>
                   <div className="flex items-center gap-2">
@@ -1461,7 +1510,7 @@ export default function StrategyLabPage() {
               </Card>
 
               {/* ═══ RIGHT: Regime Playbook ═══ */}
-              <Card className="p-5">
+              <Card glass className="p-5">
                 <div className="mb-3">
                   <SectionLabel>Regime Playbook</SectionLabel>
                   <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>
