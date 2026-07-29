@@ -24,7 +24,7 @@ import {
 } from "@/lib/strategy-lab/portfolio";
 import type { PortfolioPosition, FactorScoreResult, PortfolioExposure } from "@/lib/strategy-lab/portfolio";
 
-// ── Design tokens ────────────────────────────────────────────────────────────
+// ── Design tokens (CSS vars preferred; these kept for Recharts + other tabs) ──
 const NAVY    = "#0c1b38";
 const POSITIVE= "#147a4f";
 const NEGATIVE= "#b42318";
@@ -47,6 +47,59 @@ const FACTOR_LABELS: Record<FactorName, { short: string; color: string }> = {
   Momentum:      { short: "Mom", color: AMBER },
   Quality:       { short: "Qlty", color: POSITIVE },
   LowVolatility: { short: "LVol", color: NAVY },
+};
+
+// ── Regime playbook (Citadel-grade asset class signals per regime) ────────────
+type PlaybookSignal = { asset: string; signal: "↑ OW" | "↓ UW" | "→ N"; desc: string };
+const REGIME_PLAYBOOK: Record<RegimeLabel, {
+  asset_signals: PlaybookSignal[];
+  equity_factors: string;
+  key_risk: string;
+}> = {
+  Expansion: {
+    asset_signals: [
+      { asset: "Equities",   signal: "↑ OW", desc: "Momentum & Growth cyclicals outperform; avoid defensives" },
+      { asset: "Duration",   signal: "↓ UW", desc: "Steepener bias; front-end and real rates at risk" },
+      { asset: "Credit",     signal: "↑ OW", desc: "HY spread compression supported; OW vs IG" },
+      { asset: "USD",        signal: "→ N",  desc: "Neutral to weak; EM FX and carry supported" },
+      { asset: "Commodities",signal: "↑ OW", desc: "Energy, industrial metals; pro-cyclical demand" },
+    ],
+    equity_factors: "↑↑ Momentum  ·  → Size  ·  ↓ Low Vol",
+    key_risk: "Overheating triggers policy surprise; yield spike hits duration and growth equities",
+  },
+  Recovery: {
+    asset_signals: [
+      { asset: "Equities",   signal: "↑ OW", desc: "Value and Size lead; rotate away from defensives" },
+      { asset: "Duration",   signal: "↑ OW", desc: "Long duration; curve steepening into recovery" },
+      { asset: "Credit",     signal: "↑ OW", desc: "HY risk premium compressing; OW credit broadly" },
+      { asset: "USD",        signal: "↓ UW", desc: "USD weakening as risk appetite recovers; EM FX bid" },
+      { asset: "Commodities",signal: "→ N",  desc: "Cyclical recovery emerging; base metals first mover" },
+    ],
+    equity_factors: "↑↑ Value  ·  ↑↑ Size  ·  ↓ Low Vol  ·  ↓ Quality",
+    key_risk: "False dawn — growth stalls and re-enters Contraction; watch credit spreads for signal",
+  },
+  Slowdown: {
+    asset_signals: [
+      { asset: "Equities",   signal: "→ N",  desc: "Rotate to Quality and Low Vol; reduce cyclical exposure" },
+      { asset: "Duration",   signal: "↑ OW", desc: "Add duration aggressively; flight-to-quality bid" },
+      { asset: "Credit",     signal: "↓ UW", desc: "Widen HY; rotate IG; reduce spread duration" },
+      { asset: "USD",        signal: "→ N",  desc: "Safe-haven USD bid emerging; DM > EM FX" },
+      { asset: "Commodities",signal: "↓ UW", desc: "Demand concerns weigh; energy and EM commodities first" },
+    ],
+    equity_factors: "↑↑ Quality  ·  ↑↑ Low Vol  ·  ↓ Momentum  ·  ↓ Size",
+    key_risk: "Contraction imminent faster than expected; policy response speed is critical variable",
+  },
+  Contraction: {
+    asset_signals: [
+      { asset: "Equities",   signal: "↓ UW", desc: "Maximum defensiveness; Low Vol and Quality only" },
+      { asset: "Duration",   signal: "↑ OW", desc: "Long duration aggressively; real yields compress sharply" },
+      { asset: "Credit",     signal: "↓ UW", desc: "Exit HY; reduce all spread risk; hold only IG/sovereign" },
+      { asset: "USD",        signal: "↑ OW", desc: "USD strength; CHF and JPY as safe havens" },
+      { asset: "Commodities",signal: "↓ UW", desc: "Demand destruction across the complex; avoid broadly" },
+    ],
+    equity_factors: "↑↑ Low Vol  ·  ↑↑ Quality  ·  ↓↓ Momentum  ·  ↓↓ Size",
+    key_risk: "Policy pivot (aggressive rate cuts) triggers sharp risk-on reversal; speed matters",
+  },
 };
 
 const FACTOR_DEFINITIONS: FactorDefinition[] = [
@@ -166,6 +219,130 @@ function StatusDot({ status }: { status: ReadinessGate["status"] }) {
 }
 function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg ${className}`} style={{ background: "var(--ca-surface-2)" }} />;
+}
+
+// ── 5-Factor Macro Dashboard row ──────────────────────────────────────────────
+function MacroFactorRow({
+  label, value, loading, getLabel, invertColor = false,
+}: {
+  label: string;
+  value: number | null;
+  loading: boolean;
+  getLabel: (v: number) => string;
+  invertColor?: boolean;
+}) {
+  const abs = value != null ? Math.min(Math.abs(value) / 2.5, 1) : 0;
+  const pct = value != null ? ((value + 2.5) / 5) * 100 : 50;
+  const isPos = (value ?? 0) >= 0;
+  const barColor = value == null ? "var(--ca-border)"
+    : invertColor
+      ? (isPos ? "var(--ca-amber)" : "var(--ca-green)")
+      : (Math.abs(value) < 0.35 ? "var(--ca-amber)" : isPos ? "var(--ca-green)" : "var(--ca-red)");
+
+  return (
+    <div className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+      <span className="text-[9px] font-bold uppercase tracking-[0.15em] w-24 shrink-0" style={{ color: "var(--ca-text-2)" }}>
+        {label}
+      </span>
+      {/* Gauge bar — centered zero line */}
+      <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: "var(--ca-surface-2)" }}>
+        <div className="absolute inset-y-0 left-1/2 w-px opacity-40" style={{ background: "var(--ca-border-2)" }} />
+        {value != null && (
+          <div className="absolute top-0 h-full rounded-full" style={{
+            left:  value >= 0 ? "50%" : `${Math.max(0, Math.min(100, pct))}%`,
+            width: `${abs * 50}%`,
+            background: barColor,
+          }} />
+        )}
+      </div>
+      <span className="text-[10.5px] font-bold tabular-nums font-mono w-14 text-right" style={{ color: barColor }}>
+        {value != null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}σ` : loading ? "…" : "—"}
+      </span>
+      <span className="text-[9.5px] w-28 shrink-0" style={{ color: "var(--ca-text-3)" }}>
+        {value != null ? getLabel(value) : ""}
+      </span>
+    </div>
+  );
+}
+
+// ── Individual indicator z-score bar ─────────────────────────────────────────
+function IndicatorBar({ indicator }: { indicator: import("@/lib/strategy-lab/types").IndicatorReading }) {
+  const z = indicator.zscore;
+  const directed = z != null ? z * indicator.direction : null;
+  const barPct = directed != null ? Math.min(Math.abs(directed) / 2.5, 1) * 50 : 0;
+  const isPos = (directed ?? 0) >= 0;
+  const barColor = directed == null ? "var(--ca-border)"
+    : Math.abs(directed) < 0.3 ? "var(--ca-amber)"
+    : isPos ? "var(--ca-green)" : "var(--ca-red)";
+  const contribution = indicator.contribution;
+
+  return (
+    <div className="flex items-center gap-2.5 py-2" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+      <div className="w-36 shrink-0">
+        <p className="text-[10px] font-medium leading-snug" style={{ color: "var(--ca-text)" }}>
+          {indicator.name}
+        </p>
+        <p className="text-[9px] tabular-nums font-mono" style={{ color: "var(--ca-text-3)" }}>
+          {indicator.latestValue != null ? indicator.latestValue.toFixed(2) : "—"}
+        </p>
+      </div>
+      {/* Centered bar */}
+      <div className="flex-1 relative h-2 rounded-full overflow-hidden" style={{ background: "var(--ca-surface-2)" }}>
+        <div className="absolute inset-y-0 left-1/2 w-px opacity-30" style={{ background: "var(--ca-border-2)" }} />
+        {directed != null && (
+          <div className="absolute top-0 h-full rounded-full" style={{
+            left:  isPos ? "50%" : `${50 - barPct}%`,
+            width: `${barPct}%`,
+            background: barColor,
+          }} />
+        )}
+      </div>
+      <span className="text-[9.5px] font-bold font-mono tabular-nums w-14 text-right" style={{ color: barColor }}>
+        {z != null ? `${z >= 0 ? "+" : ""}${z.toFixed(2)}σ` : "—"}
+      </span>
+      <span className="text-[9px] font-mono tabular-nums w-14 text-right" style={{
+        color: contribution == null ? "var(--ca-text-3)" : contribution >= 0 ? "var(--ca-green)" : "var(--ca-red)"
+      }}>
+        {contribution != null ? `${contribution >= 0 ? "+" : ""}${contribution.toFixed(3)}` : ""}
+      </span>
+    </div>
+  );
+}
+
+// ── Cross-asset metric row ────────────────────────────────────────────────────
+function CrossAssetRow({
+  label, value, unit, zscore: z, decimals = 2, invertZ = false,
+}: {
+  label: string;
+  value: number | null;
+  unit?: string;
+  zscore: number | null;
+  decimals?: number;
+  invertZ?: boolean;
+}) {
+  const displayZ = invertZ && z != null ? -z : z;
+  const zColor = displayZ == null ? "var(--ca-text-3)"
+    : Math.abs(displayZ) >= 2 ? (displayZ > 0 ? "var(--ca-green)" : "var(--ca-red)")
+    : Math.abs(displayZ) >= 1 ? (displayZ > 0 ? "var(--ca-accent)" : "var(--ca-amber)")
+    : "var(--ca-text-3)";
+
+  return (
+    <div className="flex items-center justify-between py-1.5" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+      <span className="text-[10px]" style={{ color: "var(--ca-text-2)" }}>{label}</span>
+      <div className="flex items-center gap-3">
+        <span className="text-[11px] font-bold tabular-nums font-mono" style={{ color: "var(--ca-text)" }}>
+          {value != null ? `${value.toFixed(decimals)}${unit ? unit : ""}` : "—"}
+        </span>
+        {z != null ? (
+          <span className="text-[9.5px] font-mono tabular-nums w-16 text-right" style={{ color: zColor }}>
+            {displayZ! >= 0 ? "+" : ""}{displayZ!.toFixed(1)}σ
+          </span>
+        ) : (
+          <span className="w-16" />
+        )}
+      </div>
+    </div>
+  );
 }
 
 // PDF tearsheet — loaded dynamically to avoid SSR issues with @react-pdf/renderer
@@ -592,15 +769,25 @@ export default function StrategyLabPage() {
     return computeFactorTargets(probs, regime, mode);
   }, [regimeData, mode]);
 
-  const currentRegime    = regimeData?.regime ?? null;
-  const probs            = regimeData?.probabilities ?? null;
-  const confidence       = regimeData?.confidence ?? null;
-  const levelScore       = regimeData?.growthLevelScore ?? null;
-  const directionScore   = regimeData?.growthDirectionScore ?? null;
-  const history          = regimeData?.history ?? [];
-  const indicators       = regimeData?.indicators ?? [];
-  const isDemo           = regimeData?.isDemo ?? true;
-  const asOf             = regimeData?.asOf ?? "—";
+  const currentRegime       = regimeData?.regime ?? null;
+  const probs               = regimeData?.probabilities ?? null;
+  const confidence          = regimeData?.confidence ?? null;
+  const levelScore          = regimeData?.growthLevelScore ?? null;
+  const directionScore      = regimeData?.growthDirectionScore ?? null;
+  const history             = regimeData?.history ?? [];
+  const indicators          = regimeData?.indicators ?? [];
+  const isDemo              = regimeData?.isDemo ?? true;
+  const asOf                = regimeData?.asOf ?? "—";
+  const crossAsset          = regimeData?.crossAsset ?? null;
+  const inflationComposite  = regimeData?.inflationComposite ?? null;
+  const policySignal        = regimeData?.policySignal ?? null;
+  // Credit composite: -(HY OAS raw z) * 0.65 + -(IG OAS z) * 0.35
+  // Positive = tight spreads = benign credit environment
+  const hyOasRawZ = indicators.find(i => i.id === "hysprd")?.zscore ?? null;
+  const igOasZ    = crossAsset?.igOasZ ?? null;
+  const creditComposite = hyOasRawZ !== null
+    ? Math.round((-(hyOasRawZ * 0.65) + -(igOasZ ?? hyOasRawZ) * 0.35) * 100) / 100
+    : null;
 
   // Handler: update indicator weight
   const updateGrowthWeight = useCallback((id: string, w: number) => {
@@ -891,47 +1078,56 @@ export default function StrategyLabPage() {
         )}
 
         {/* ─────────────────────────────────────────────────────────────────── */}
-        {/* TAB: OVERVIEW                                                        */}
+        {/* TAB: OVERVIEW  — Citadel-Grade Macro Environment                    */}
         {/* ─────────────────────────────────────────────────────────────────── */}
         {activeTab === "Overview" && (
           <div className="space-y-5">
 
-            {/* Row 1: Regime panel | Signal chart | Factor targets */}
-            <div className="grid grid-cols-[280px_1fr_280px] gap-5">
+            {/* Row 1: Regime Panel | 5-Factor Dashboard | Regime Playbook */}
+            <div className="grid grid-cols-[260px_1fr_270px] gap-5">
 
-              {/* Regime panel */}
-              <Card className="p-5">
+              {/* ═══ LEFT: Current Regime ═══ */}
+              <Card className="p-5 flex flex-col">
                 <div className="flex items-center justify-between mb-3">
                   <SectionLabel>Current Regime</SectionLabel>
                   {confidence != null && (
                     <span className="text-[10px] font-bold tabular-nums" style={{
-                      color: confidence >= 70 ? POSITIVE : confidence >= 50 ? AMBER : NEGATIVE
+                      color: confidence >= 70 ? "var(--ca-green)" : confidence >= 50 ? "var(--ca-amber)" : "var(--ca-red)"
                     }}>
-                      {confidence}% confident
+                      {confidence}% conf.
                     </span>
                   )}
                 </div>
 
-                {/* Regime label */}
                 {currentRegime && regimeColors ? (
-                  <div className="mb-4 border px-3 py-2.5 text-center"
-                    style={{ borderColor: regimeColors.border, backgroundColor: regimeColors.bg }}>
-                    <p className="text-[18px] font-bold tracking-wide" style={{ color: regimeColors.text }}>
+                  <div className="mb-4 px-3 py-3 text-center border" style={{
+                    borderColor: regimeColors.border, backgroundColor: regimeColors.bg
+                  }}>
+                    <p className="text-[22px] font-bold tracking-wide" style={{ color: regimeColors.text }}>
                       {currentRegime.toUpperCase()}
                     </p>
-                    <p className="text-[10px] font-semibold mt-0.5" style={{ color: regimeColors.text, opacity: 0.7 }}>
-                      {regimeData?.growthLevel === "above" ? "Above" : "Below"} trend ·{" "}
-                      {regimeData?.growthDirection === "accelerating" ? "Accelerating" : "Decelerating"}
-                    </p>
+                    <div className="flex items-center justify-center gap-2 mt-1.5 flex-wrap">
+                      <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded" style={{
+                        background: regimeData?.growthLevel === "above" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)",
+                        color: regimeData?.growthLevel === "above" ? "var(--ca-green)" : "var(--ca-red)",
+                      }}>
+                        {regimeData?.growthLevel === "above" ? "Above Trend" : "Below Trend"}
+                      </span>
+                      <span className="text-[9.5px] font-semibold px-2 py-0.5 rounded" style={{
+                        background: regimeData?.growthDirection === "accelerating" ? "rgba(22,163,74,0.12)" : "rgba(220,38,38,0.12)",
+                        color: regimeData?.growthDirection === "accelerating" ? "var(--ca-green)" : "var(--ca-red)",
+                      }}>
+                        {regimeData?.growthDirection === "accelerating" ? "↑ Accelerating" : "↓ Decelerating"}
+                      </span>
+                    </div>
                   </div>
                 ) : (
-                  <div className="mb-4 border border-gray-100 px-3 py-2.5 text-center bg-gray-50">
-                    <p className="text-[14px] text-gray-400">{loading ? "Loading…" : "—"}</p>
+                  <div className="mb-4 px-3 py-3 text-center" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
+                    <p className="text-[14px]" style={{ color: "var(--ca-text-3)" }}>{loading ? "Loading…" : "—"}</p>
                   </div>
                 )}
 
-                {/* 4-quadrant diagram */}
-                <div className="mb-4">
+                <div className="mb-3">
                   <RegimeQuadrant
                     regime={currentRegime}
                     probs={mode === "enhanced" ? probs : null}
@@ -941,20 +1137,19 @@ export default function StrategyLabPage() {
                   />
                 </div>
 
-                {/* Probabilities (enhanced mode) */}
                 {mode === "enhanced" && probs && (
-                  <div className="space-y-1.5 border-t border-gray-100 pt-3">
+                  <div className="space-y-1.5 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
                     <MiniLabel>Regime Probabilities</MiniLabel>
                     {(["Expansion", "Slowdown", "Recovery", "Contraction"] as RegimeLabel[]).map(r => {
-                      const p  = probs[r];
-                      const c  = REGIME_COLORS[r];
+                      const p = probs[r];
+                      const c = REGIME_COLORS[r];
                       return (
                         <div key={r} className="flex items-center gap-2">
-                          <span className="text-[10.5px] text-gray-600 w-20 shrink-0">{r}</span>
-                          <div className="flex-1 h-[4px] bg-gray-100">
-                            <div className="h-full" style={{ width: `${p * 100}%`, backgroundColor: c.dot }} />
+                          <span className="text-[10px] w-20 shrink-0" style={{ color: "var(--ca-text-2)" }}>{r}</span>
+                          <div className="flex-1 h-[3px] rounded-full" style={{ background: "var(--ca-surface-2)" }}>
+                            <div className="h-full rounded-full" style={{ width: `${p * 100}%`, backgroundColor: c.dot }} />
                           </div>
-                          <span className="text-[10.5px] font-bold tabular-nums w-8 text-right" style={{ color: c.dot }}>
+                          <span className="text-[10px] font-bold tabular-nums w-8 text-right" style={{ color: c.dot }}>
                             {Math.round(p * 100)}%
                           </span>
                         </div>
@@ -963,269 +1158,369 @@ export default function StrategyLabPage() {
                   </div>
                 )}
 
-                {/* Previous regime */}
                 {prevRegime && prevRegime !== currentRegime && (
-                  <p className="mt-3 text-[10px] text-gray-400 border-t border-gray-100 pt-3">
-                    Previous: <span className="font-semibold">{prevRegime}</span>
+                  <p className="mt-3 text-[10px] pt-3" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
+                    Previous: <span className="font-semibold" style={{ color: "var(--ca-text-2)" }}>{prevRegime}</span>
                   </p>
                 )}
               </Card>
 
-              {/* Signal history chart */}
+              {/* ═══ CENTER: 5-Factor Macro Dashboard ═══ */}
               <Card className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <SectionLabel>Composite Signal History</SectionLabel>
-                  <div className="flex items-center gap-4">
-                    <span className="flex items-center gap-1.5 text-[9.5px] text-gray-400">
-                      <span className="w-4 h-0.5 bg-[#0c1b38] inline-block" /> Growth
-                    </span>
-                    <span className="flex items-center gap-1.5 text-[9.5px] text-gray-400">
-                      <span className="w-4 h-0.5 bg-[#147a4f] inline-block border-dashed border-t border-[#147a4f]" style={{ borderTopStyle: "dashed" }} /> Risk Appetite
-                    </span>
+                <div className="flex items-center justify-between mb-4">
+                  <SectionLabel>Macro Factor Dashboard</SectionLabel>
+                  <div className="flex items-center gap-2">
                     {isDemo && <DemoBadge />}
+                    <span className="text-[9px]" style={{ color: "var(--ca-text-3)" }}>FRED · as of {asOf}</span>
                   </div>
                 </div>
-                <SignalChart history={history} />
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  <p className="text-[10px] text-gray-400 leading-relaxed">
-                    Growth composite: weighted z-score of {growthInds.filter(i => i.enabled).length} macro indicators.
-                    Background shading = classified regime. Zero line = long-run trend.
-                    {isDemo ? " Illustrative demo data shown." : " 24-month history from FRED."}
-                  </p>
+
+                {/* Column headers */}
+                <div className="flex items-center gap-3 mb-1 pb-1.5" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-24 shrink-0" style={{ color: "var(--ca-text-3)" }}>Factor</span>
+                  <span className="flex-1 text-[8px] uppercase tracking-[0.14em] text-center" style={{ color: "var(--ca-text-3)" }}>Signal Strength</span>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-14 text-right" style={{ color: "var(--ca-text-3)" }}>z-score</span>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-28" style={{ color: "var(--ca-text-3)" }}>Reading</span>
                 </div>
 
-                {/* Regime explanation */}
+                <MacroFactorRow
+                  label="GROWTH"
+                  value={regimeData?.growthComposite ?? null}
+                  loading={loading}
+                  getLabel={v => v > 0.5 ? "Expanding" : v < -0.5 ? "Contracting" : "Near Trend"}
+                />
+                <MacroFactorRow
+                  label="INFLATION"
+                  value={inflationComposite}
+                  loading={loading}
+                  getLabel={v => v > 0.75 ? "Elevated" : v > 0.3 ? "Rising" : v < -0.5 ? "Deflation Risk" : "Moderate"}
+                  invertColor
+                />
+                <MacroFactorRow
+                  label="CREDIT"
+                  value={creditComposite}
+                  loading={loading}
+                  getLabel={v => v > 0.4 ? "Benign" : v < -0.4 ? "Stressed" : "Neutral"}
+                />
+                <MacroFactorRow
+                  label="POLICY"
+                  value={policySignal}
+                  loading={loading}
+                  getLabel={v => v > 0.4 ? "Accommodative" : v < -0.4 ? "Restrictive" : "Neutral"}
+                />
+                <MacroFactorRow
+                  label="RISK APP."
+                  value={regimeData?.riskAppetiteComposite ?? null}
+                  loading={loading}
+                  getLabel={v => v > 0.4 ? "Risk-On" : v < -0.4 ? "Risk-Off" : "Neutral"}
+                />
+
                 {regimeData?.explanation && (
-                  <div className="mt-3 border border-gray-100 bg-gray-50 px-4 py-3">
-                    <MiniLabel>Why this regime?</MiniLabel>
-                    <p className="mt-1.5 text-[11.5px] text-[#333] leading-relaxed">
+                  <div className="mt-4 px-3 py-2.5 rounded" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
+                    <p className="text-[10.5px] leading-relaxed" style={{ color: "var(--ca-text-2)" }}>
                       {regimeData.explanation}
                     </p>
                   </div>
                 )}
 
-                {/* Calculation walkthrough */}
-                {regimeData && (
-                  <details className="mt-3 border border-gray-100" open={isDemo}>
-                    <summary className="px-4 py-3 cursor-pointer text-[10px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] flex items-center justify-between select-none hover:bg-gray-50 [&::-webkit-details-marker]:hidden">
-                      <span>Step-by-Step Calculation</span>
-                      <span className="text-gray-400 text-[11px]">▾</span>
-                    </summary>
-                    <div className="px-4 pb-4 pt-3 space-y-4 border-t border-gray-100 bg-white">
-
-                      {/* Step 1 */}
-                      <div>
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 1 — Z-score each indicator</p>
-                        <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">zᵢ = (xᵢ − μᵢ) / σᵢ&nbsp;&nbsp;&nbsp;contribution = zᵢ × dᵢ × wᵢ</p>
-                        <div className="overflow-x-auto -mx-1">
-                          <table className="w-full text-left">
-                            <thead>
-                              <tr className="border-b border-gray-100 bg-gray-50">
-                                {["Indicator","Value","μ","σ","z-score","Dir.","Weight","Contribution"].map(h => (
-                                  <th key={h} className="px-2 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.1em] text-gray-400 whitespace-nowrap">{h}</th>
-                                ))}
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {indicators.filter(r => r.enabled).map(r => {
-                                const z = r.zscore;
-                                const c = r.contribution;
-                                const zColor = z == null ? "#bbb" : z > 0.5 ? POSITIVE : z < -0.5 ? NEGATIVE : AMBER;
-                                return (
-                                  <tr key={r.id} className="border-b border-gray-100 last:border-0">
-                                    <td className="px-2 py-1.5 text-[10px] font-medium text-[#333] whitespace-nowrap">{r.name}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-600">{r.latestValue != null ? r.latestValue.toFixed(2) : "—"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-400">{r.mean != null ? r.mean.toFixed(2) : "—"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums text-gray-400">{r.stdDev != null ? r.stdDev.toFixed(2) : "—"}</td>
-                                    <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: zColor }}>
-                                      {z != null ? `${z >= 0 ? "+" : ""}${z.toFixed(2)}σ` : "—"}
-                                    </td>
-                                    <td className="px-2 py-1.5 text-[10px] text-gray-400">{r.direction === 1 ? "+1" : "−1"}</td>
-                                    <td className="px-2 py-1.5 text-[10px] tabular-nums text-gray-600">{(r.weight * 100).toFixed(0)}%</td>
-                                    <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: c == null ? "#bbb" : c >= 0 ? POSITIVE : NEGATIVE }}>
-                                      {c != null ? `${c >= 0 ? "+" : ""}${c.toFixed(3)}` : "—"}
-                                    </td>
-                                  </tr>
-                                );
-                              })}
-                            </tbody>
-                          </table>
-                        </div>
-                        <p className="mt-1.5 text-[9px] text-gray-400 italic leading-relaxed">
-                          * VALUE shows the raw series level. For transformed series (3M change / YoY change), μ and σ are computed on the transformed values — the z-score uses the transformed reading, not the raw level directly.
-                        </p>
-                      </div>
-
-                      {/* Step 2 */}
-                      <div className="border-t border-gray-100 pt-3">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 2 — Growth Composite</p>
-                        <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">G = Σ(zᵢ × dᵢ × wᵢ) / Σwᵢ</p>
-                        <div className="flex items-start gap-4">
-                          <div className="border border-gray-100 bg-gray-50 px-4 py-2.5 text-center shrink-0">
-                            <p className="text-[8.5px] text-gray-400 mb-0.5">Growth Composite G</p>
-                            <p className="text-[18px] font-bold tabular-nums" style={{
-                              color: regimeData.growthComposite == null ? "#bbb"
-                                : (regimeData.growthComposite ?? 0) >= 0.2 ? POSITIVE
-                                : (regimeData.growthComposite ?? 0) <= -0.2 ? NEGATIVE : AMBER
-                            }}>
-                              {regimeData.growthComposite != null ? `${regimeData.growthComposite >= 0 ? "+" : ""}${regimeData.growthComposite.toFixed(2)}σ` : "—"}
-                            </p>
-                          </div>
-                          <div className="text-[10.5px] text-gray-600 space-y-1">
-                            <p><span className="font-semibold">Level:</span> {regimeData.growthLevel === "above" ? "Above trend (G ≥ 0)" : regimeData.growthLevel === "below" ? "Below trend (G < 0)" : "—"}</p>
-                            <p><span className="font-semibold">Direction Δ:</span> G[now] − G[3 months ago] = <span className="font-mono font-bold">{directionScore != null ? `${directionScore >= 0 ? "+" : ""}${directionScore.toFixed(2)}` : "—"}</span></p>
-                            <p><span className="font-semibold">Direction:</span> {regimeData.growthDirection === "accelerating" ? "Accelerating (Δ ≥ 0)" : regimeData.growthDirection === "decelerating" ? "Decelerating (Δ < 0)" : "—"}</p>
-                          </div>
-                        </div>
-                      </div>
-
-                      {/* Step 3 */}
-                      <div className="border-t border-gray-100 pt-3">
-                        <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 3 — Regime Classification</p>
-                        <div className="grid grid-cols-2 gap-1.5">
-                          {([
-                            { label: "Recovery",    cond: "G < 0  and  Δ ≥ 0" },
-                            { label: "Expansion",   cond: "G ≥ 0  and  Δ ≥ 0" },
-                            { label: "Contraction", cond: "G < 0  and  Δ < 0"  },
-                            { label: "Slowdown",    cond: "G ≥ 0  and  Δ < 0"  },
-                          ] as const).map(({ label, cond }) => {
-                            const active = currentRegime === label;
-                            const c = REGIME_COLORS[label];
-                            return (
-                              <div key={label}
-                                className="flex items-center gap-2.5 border px-3 py-2"
-                                style={active ? { borderColor: c.border, backgroundColor: c.bg } : { borderColor: "#eee9df" }}>
-                                <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: active ? c.dot : "#ddd" }} />
-                                <div className="flex-1">
-                                  <p className="text-[10.5px] font-bold" style={{ color: active ? c.text : "#aaa" }}>{label}</p>
-                                  <p className="text-[9px] font-mono" style={{ color: active ? c.text : "#ccc" }}>{cond}</p>
-                                </div>
-                                {active && <span className="text-[8px] font-bold uppercase" style={{ color: c.text }}>← Now</span>}
-                              </div>
-                            );
-                          })}
-                        </div>
-                      </div>
-
-                      {/* Step 4: Enhanced probabilities */}
-                      {mode === "enhanced" && probs && (
-                        <div className="border-t border-gray-100 pt-3">
-                          <p className="text-[9px] font-bold uppercase tracking-[0.16em] text-[#0c1b38] mb-1.5">Step 4 — Regime Probabilities (Enhanced Mode)</p>
-                          <p className="text-[10px] text-gray-400 mb-2 font-mono bg-gray-100 px-2 py-1 inline-block">P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)&nbsp;&nbsp;τ = 0.8</p>
-                          <div className="grid grid-cols-4 gap-1.5 mb-2">
-                            {(["Expansion","Recovery","Slowdown","Contraction"] as RegimeLabel[]).map(r => {
-                              const p = probs[r];
-                              const c = REGIME_COLORS[r];
-                              const centroid = r === "Recovery" ? "(−0.6,+0.6)" : r === "Expansion" ? "(+0.6,+0.6)" : r === "Slowdown" ? "(+0.6,−0.6)" : "(−0.6,−0.6)";
-                              return (
-                                <div key={r} className="border border-gray-100 bg-gray-50 px-2 py-2 text-center">
-                                  <p className="text-[9px] font-bold mb-0.5" style={{ color: c.text }}>{r}</p>
-                                  <p className="text-[16px] font-bold tabular-nums" style={{ color: c.dot }}>{Math.round(p * 100)}%</p>
-                                  <p className="text-[8px] font-mono text-gray-400 mt-0.5">{centroid}</p>
-                                </div>
-                              );
-                            })}
-                          </div>
-                          <p className="text-[9.5px] text-gray-400">
-                            Current position s = (level={levelScore?.toFixed(2) ?? "—"}, dir={directionScore?.toFixed(2) ?? "—"}) clamped to ±1.
-                            Factor targets = Σ P(r) × baseline[r] − 1
-                          </p>
-                        </div>
-                      )}
-
-                      {isDemo && (
-                        <div className="border border-amber-200 bg-amber-50 px-3 py-2 text-[10px] text-amber-700">
-                          Demo data shown — all values are illustrative. Configure <span className="font-mono font-bold">FRED_API_KEY</span> on Vercel for live calculations.
-                        </div>
-                      )}
-                    </div>
-                  </details>
-                )}
+                {/* Factor methodology note */}
+                <div className="mt-3 grid grid-cols-2 gap-2 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                  <div>
+                    <MiniLabel>Growth (8 FRED series)</MiniLabel>
+                    <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>Claims, permits, payrolls, INDPRO, 2s10s, UMich, HY spreads</p>
+                  </div>
+                  <div>
+                    <MiniLabel>Inflation (3 FRED series)</MiniLabel>
+                    <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>CPI yoy, Core CPI yoy, 5Y breakeven inflation rate</p>
+                  </div>
+                  <div>
+                    <MiniLabel>Credit (HY + IG OAS z)</MiniLabel>
+                    <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>ICE BofA HY / IG OAS z-scores inverted (tight = bullish)</p>
+                  </div>
+                  <div>
+                    <MiniLabel>Policy (Fed Funds + 3M10Y)</MiniLabel>
+                    <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>Effective FFR inverted + 10Y-3M slope z-score</p>
+                  </div>
+                </div>
               </Card>
 
-              {/* Factor targets */}
+              {/* ═══ RIGHT: Regime Playbook ═══ */}
               <Card className="p-5">
-                <div className="flex items-center justify-between mb-3">
-                  <SectionLabel>Factor Targets</SectionLabel>
-                  <span className="text-[9.5px] text-gray-400">Active vs. benchmark</span>
+                <div className="mb-3">
+                  <SectionLabel>Regime Playbook</SectionLabel>
+                  <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>
+                    {currentRegime ? `${currentRegime} regime signals` : "Awaiting regime classification"}
+                  </p>
                 </div>
 
-                {/* Active weight scale labels */}
-                <div className="flex justify-between mb-1 px-[88px]">
-                  <span className="text-[8.5px] text-gray-400">−1</span>
-                  <span className="text-[8.5px] text-gray-400">0</span>
-                  <span className="text-[8.5px] text-gray-400">+1</span>
-                </div>
+                {currentRegime ? (
+                  <>
+                    <div>
+                      {REGIME_PLAYBOOK[currentRegime].asset_signals.map(s => (
+                        <div key={s.asset} className="flex items-start gap-2 py-2" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+                          <span className="text-[9px] font-bold px-1.5 py-0.5 rounded-sm shrink-0 mt-0.5 font-mono" style={{
+                            background: s.signal.startsWith("↑") ? "rgba(34,197,94,0.12)" : s.signal.startsWith("↓") ? "rgba(239,68,68,0.12)" : "rgba(251,191,36,0.12)",
+                            color: s.signal.startsWith("↑") ? "var(--ca-green)" : s.signal.startsWith("↓") ? "var(--ca-red)" : "var(--ca-amber)",
+                          }}>
+                            {s.signal}
+                          </span>
+                          <div className="flex-1 min-w-0">
+                            <p className="text-[10px] font-bold" style={{ color: "var(--ca-text)" }}>{s.asset}</p>
+                            <p className="text-[9.5px] leading-snug mt-0.5" style={{ color: "var(--ca-text-3)" }}>{s.desc}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
 
-                <div>
-                  {factorTargets.map(t => (
-                    <FactorBar key={t.factor} target={t} mode={mode} />
-                  ))}
-                </div>
+                    <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                      <MiniLabel>Equity Factor Tilts</MiniLabel>
+                      <p className="mt-1.5 text-[10.5px] font-mono leading-relaxed" style={{ color: "var(--ca-accent)" }}>
+                        {REGIME_PLAYBOOK[currentRegime].equity_factors}
+                      </p>
+                    </div>
 
-                {mode === "enhanced" && (
-                  <div className="mt-3 border-t border-gray-100 pt-3 space-y-1">
-                    <MiniLabel>Enhanced decomposition</MiniLabel>
-                    {factorTargets.filter(t => Math.abs(t.enhancedActive) > 0.05).slice(0, 2).map(t => (
-                      <div key={t.factor} className="text-[10px] text-gray-400">
-                        <span className="font-semibold text-gray-600">{t.factor === "LowVolatility" ? "LowVol" : t.factor}</span>
-                        : regime {t.regimeContribution >= 0 ? "+" : ""}{t.regimeContribution.toFixed(2)}
-                        {t.valuationContribution !== 0 && <> + val {t.valuationContribution >= 0 ? "+" : ""}{t.valuationContribution.toFixed(2)}</>}
-                        {t.crowdingPenalty !== 0 && <> − crowd {Math.abs(t.crowdingPenalty).toFixed(2)}</>}
-                        <span className="text-gray-400 ml-1">(val/momentum/crowding: Phase 2)</span>
-                      </div>
-                    ))}
+                    <div className="mt-3 pt-3 rounded px-3 py-2.5" style={{ borderTop: "1px solid var(--ca-border)", background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)" }}>
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: "var(--ca-amber)" }}>Key Risk</p>
+                      <p className="text-[10px] leading-snug" style={{ color: "var(--ca-text-2)" }}>
+                        {REGIME_PLAYBOOK[currentRegime].key_risk}
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <div className="h-40 flex items-center justify-center">
+                    <p className="text-[11px]" style={{ color: "var(--ca-text-3)" }}>
+                      {loading ? "Loading signals…" : "No regime data"}
+                    </p>
                   </div>
                 )}
-
-                {/* Current regime allocation reference */}
-                <div className="mt-3 border-t border-gray-100 pt-3">
-                  <MiniLabel>Published baseline ({currentRegime ?? "—"})</MiniLabel>
-                  <div className="mt-1.5 grid grid-cols-5 gap-1 text-center">
-                    {(["LowVolatility","Size","Value","Momentum","Quality"] as FactorName[]).map(f => {
-                      const val = currentRegime ? PUBLISHED_BASELINE[currentRegime][f] : 1;
-                      const color = val === 2 ? POSITIVE : val === 0 ? NEGATIVE : "#999";
-                      return (
-                        <div key={f} className="border border-gray-100 bg-gray-50 px-1 py-1.5">
-                          <p className="text-[8px] font-bold text-gray-400 mb-0.5">{FACTOR_LABELS[f].short}</p>
-                          <p className="text-[13px] font-bold tabular-nums" style={{ color }}>
-                            {val === 2 ? "↑↑" : val === 1 ? "→" : "↓↓"}
-                          </p>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
               </Card>
             </div>
 
-            {/* Row 2: Model readiness checklist */}
+            {/* Row 2: Signal History Chart (full-width) */}
+            <Card className="p-5">
+              <div className="flex items-center justify-between mb-3">
+                <SectionLabel>Composite Signal History (24M)</SectionLabel>
+                <div className="flex items-center gap-4">
+                  <span className="flex items-center gap-1.5 text-[9.5px]" style={{ color: "var(--ca-text-3)" }}>
+                    <span className="w-5 h-0.5 inline-block" style={{ background: "var(--ca-text)" }} /> Growth
+                  </span>
+                  <span className="flex items-center gap-1.5 text-[9.5px]" style={{ color: "var(--ca-text-3)" }}>
+                    <span className="w-5 h-0.5 inline-block" style={{ background: "var(--ca-green)", borderTopStyle: "dashed" }} /> Risk Appetite
+                  </span>
+                  {isDemo && <DemoBadge />}
+                </div>
+              </div>
+              <SignalChart history={history} />
+              <p className="mt-3 text-[10px] leading-relaxed pt-3" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
+                Growth composite: weighted z-score of {growthInds.filter(i => i.enabled).length} macro indicators (FRED).
+                Background shading = hard-classified regime. Zero line = long-run sample mean.
+                {isDemo ? " Illustrative demo data — configure FRED_API_KEY for live." : " 24-month expanding-window z-scores with publication lags."}
+              </p>
+            </Card>
+
+            {/* Row 3: Indicator Breakdown | Cross-Asset Pulse */}
+            <div className="grid grid-cols-2 gap-5">
+
+              {/* ═══ Indicator Breakdown ═══ */}
+              <Card className="p-5">
+                <div className="mb-3">
+                  <SectionLabel>Growth Indicator Breakdown</SectionLabel>
+                  <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>
+                    Z-scores contributing to growth composite · sorted by |z|
+                  </p>
+                </div>
+
+                {/* Column headers */}
+                <div className="flex items-center gap-2.5 pb-1.5 mb-0.5" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-36 shrink-0" style={{ color: "var(--ca-text-3)" }}>Indicator</span>
+                  <span className="flex-1 text-[8px] uppercase tracking-[0.14em] text-center" style={{ color: "var(--ca-text-3)" }}>Directed Z</span>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-14 text-right" style={{ color: "var(--ca-text-3)" }}>Raw Z</span>
+                  <span className="text-[8px] uppercase tracking-[0.14em] w-14 text-right" style={{ color: "var(--ca-text-3)" }}>Contrib.</span>
+                </div>
+
+                {indicators.length > 0 ? (
+                  [...indicators]
+                    .sort((a, b) => Math.abs((b.zscore ?? 0) * b.direction) - Math.abs((a.zscore ?? 0) * a.direction))
+                    .map(ind => <IndicatorBar key={ind.id} indicator={ind} />)
+                ) : (
+                  <div className="space-y-2 mt-2">
+                    {[1,2,3,4,5,6,7,8].map(i => <Skeleton key={i} className="h-9" />)}
+                  </div>
+                )}
+
+                <div className="mt-3 pt-3 flex items-center gap-4" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-2 rounded-sm" style={{ background: "var(--ca-green)" }} />
+                    <span className="text-[9px]" style={{ color: "var(--ca-text-3)" }}>Bullish contribution</span>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <div className="w-3 h-2 rounded-sm" style={{ background: "var(--ca-red)" }} />
+                    <span className="text-[9px]" style={{ color: "var(--ca-text-3)" }}>Bearish contribution</span>
+                  </div>
+                  <span className="text-[9px] ml-auto" style={{ color: "var(--ca-text-3)" }}>
+                    Direction × z-score × weight
+                  </span>
+                </div>
+              </Card>
+
+              {/* ═══ Cross-Asset Pulse ═══ */}
+              <Card className="p-5">
+                <div className="mb-3">
+                  <SectionLabel>Cross-Asset Pulse</SectionLabel>
+                  <p className="text-[9.5px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>
+                    Live FRED levels · z-score vs 60M history
+                    {crossAsset ? ` · as of ${crossAsset.asOf}` : ""}
+                  </p>
+                </div>
+
+                {crossAsset ? (
+                  <div className="space-y-4">
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--ca-accent)" }}>Rates Complex</p>
+                      <CrossAssetRow label="10Y Treasury" value={crossAsset.t10y} unit="%" zscore={crossAsset.t10yZ} />
+                      <CrossAssetRow label="2Y Treasury" value={crossAsset.t2y} unit="%" zscore={crossAsset.t2yZ} />
+                      <CrossAssetRow label="2s10s Spread" value={crossAsset.spread2s10s} unit="%" zscore={crossAsset.spread2s10sZ} />
+                      <CrossAssetRow label="10Y-3M Spread" value={crossAsset.t10y3m} unit="%" zscore={crossAsset.t10y3mZ} />
+                      <CrossAssetRow label="Real Yield (10Y TIPS)" value={crossAsset.realYield10y} unit="%" zscore={crossAsset.realYield10yZ} />
+                      <CrossAssetRow label="5Y Breakeven" value={crossAsset.breakeven5y} unit="%" zscore={null} />
+                    </div>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--ca-accent)" }}>Credit Complex</p>
+                      <CrossAssetRow label="HY OAS (ICE BofA)" value={crossAsset.hyOas} unit="%" zscore={crossAsset.hyOasZ} invertZ />
+                      <CrossAssetRow label="IG OAS (ICE BofA)" value={crossAsset.igOas} unit="%" zscore={crossAsset.igOasZ} invertZ />
+                    </div>
+                    <div>
+                      <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--ca-accent)" }}>Vol / Policy / FX</p>
+                      <CrossAssetRow label="VIX" value={crossAsset.vix} unit="" zscore={crossAsset.vixZ} decimals={1} invertZ />
+                      <CrossAssetRow label="Fed Funds Rate" value={crossAsset.fedFunds} unit="%" zscore={crossAsset.fedFundsZ} />
+                      <CrossAssetRow label="Trade-Weighted USD" value={crossAsset.dxy} unit="" zscore={crossAsset.dxyZ} decimals={1} />
+                    </div>
+                  </div>
+                ) : (
+                  <div className="space-y-2">
+                    {Array.from({ length: 12 }).map((_, i) => <Skeleton key={i} className="h-6" />)}
+                  </div>
+                )}
+
+                {crossAsset && (
+                  <p className="mt-4 pt-3 text-[9px] leading-relaxed" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
+                    For z-scores: positive = above 60M average. Credit z-scores inverted (tight spreads → green).
+                    HY/IG OAS: ICE BofA indices via FRED. USD: DTWEXBGS broad trade-weighted index.
+                  </p>
+                )}
+              </Card>
+            </div>
+
+            {/* Row 4: Calculation Detail + Model Readiness */}
+            {regimeData && (
+              <Card>
+                <details>
+                  <summary className="px-5 py-4 cursor-pointer flex items-center justify-between select-none [&::-webkit-details-marker]:hidden"
+                    style={{ borderBottom: "1px solid var(--ca-border)" }}>
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em]" style={{ color: "var(--ca-text-2)" }}>
+                      Step-by-Step Growth Composite Calculation
+                    </span>
+                    <span className="text-[11px]" style={{ color: "var(--ca-text-3)" }}>▾</span>
+                  </summary>
+                  <div className="px-5 pb-5 pt-4 space-y-4">
+                    <div>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] mb-1.5" style={{ color: "var(--ca-text-2)" }}>
+                        Step 1 — Z-score each indicator  ·  zᵢ = (xᵢ − μᵢ) / σᵢ
+                      </p>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-left">
+                          <thead>
+                            <tr style={{ borderBottom: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
+                              {["Indicator","Value","μ","σ","z-score","Dir.","Weight","Contribution"].map(h => (
+                                <th key={h} className="px-2 py-1.5 text-[8.5px] font-bold uppercase tracking-[0.1em] whitespace-nowrap" style={{ color: "var(--ca-text-3)" }}>{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {indicators.filter(r => r.enabled).map(r => {
+                              const z = r.zscore;
+                              const c = r.contribution;
+                              const zColor = z == null ? "var(--ca-text-3)" : z > 0.5 ? POSITIVE : z < -0.5 ? NEGATIVE : AMBER;
+                              return (
+                                <tr key={r.id} style={{ borderBottom: "1px solid var(--ca-border)" }}>
+                                  <td className="px-2 py-1.5 text-[10px] font-medium whitespace-nowrap" style={{ color: "var(--ca-text)" }}>{r.name}</td>
+                                  <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums" style={{ color: "var(--ca-text-2)" }}>{r.latestValue != null ? r.latestValue.toFixed(2) : "—"}</td>
+                                  <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums" style={{ color: "var(--ca-text-3)" }}>{r.mean != null ? r.mean.toFixed(2) : "—"}</td>
+                                  <td className="px-2 py-1.5 text-[10px] font-mono tabular-nums" style={{ color: "var(--ca-text-3)" }}>{r.stdDev != null ? r.stdDev.toFixed(2) : "—"}</td>
+                                  <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: zColor }}>
+                                    {z != null ? `${z >= 0 ? "+" : ""}${z.toFixed(2)}σ` : "—"}
+                                  </td>
+                                  <td className="px-2 py-1.5 text-[10px]" style={{ color: "var(--ca-text-3)" }}>{r.direction === 1 ? "+1" : "−1"}</td>
+                                  <td className="px-2 py-1.5 text-[10px] tabular-nums" style={{ color: "var(--ca-text-2)" }}>{(r.weight * 100).toFixed(0)}%</td>
+                                  <td className="px-2 py-1.5 text-[10.5px] font-bold tabular-nums font-mono" style={{ color: c == null ? "var(--ca-text-3)" : c >= 0 ? POSITIVE : NEGATIVE }}>
+                                    {c != null ? `${c >= 0 ? "+" : ""}${c.toFixed(3)}` : "—"}
+                                  </td>
+                                </tr>
+                              );
+                            })}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    <div className="pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: "var(--ca-text-2)" }}>Step 2 — Growth Composite  ·  G = Σ(zᵢ × dᵢ × wᵢ) / Σwᵢ</p>
+                      <div className="flex items-start gap-4">
+                        <div className="px-4 py-2.5 text-center shrink-0" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
+                          <p className="text-[8.5px] mb-0.5" style={{ color: "var(--ca-text-3)" }}>Growth Composite G</p>
+                          <p className="text-[18px] font-bold tabular-nums" style={{
+                            color: regimeData.growthComposite == null ? "var(--ca-text-3)"
+                              : (regimeData.growthComposite ?? 0) >= 0.2 ? POSITIVE
+                              : (regimeData.growthComposite ?? 0) <= -0.2 ? NEGATIVE : AMBER
+                          }}>
+                            {regimeData.growthComposite != null ? `${regimeData.growthComposite >= 0 ? "+" : ""}${regimeData.growthComposite.toFixed(2)}σ` : "—"}
+                          </p>
+                        </div>
+                        <div className="text-[10.5px] space-y-1" style={{ color: "var(--ca-text-2)" }}>
+                          <p><span className="font-semibold">Level:</span> {regimeData.growthLevel === "above" ? "Above trend (G ≥ 0)" : regimeData.growthLevel === "below" ? "Below trend (G < 0)" : "—"}</p>
+                          <p><span className="font-semibold">Direction Δ:</span> G[now] − G[−3M] = <span className="font-mono font-bold">{directionScore != null ? `${directionScore >= 0 ? "+" : ""}${directionScore.toFixed(2)}` : "—"}</span></p>
+                          <p><span className="font-semibold">Regime:</span> {regimeData.growthDirection === "accelerating" ? "Accelerating → " : "Decelerating → "}<strong>{currentRegime ?? "—"}</strong></p>
+                        </div>
+                      </div>
+                    </div>
+
+                    {isDemo && (
+                      <div className="px-3 py-2 text-[10px]" style={{ border: "1px solid var(--ca-amber)", background: "rgba(251,191,36,0.06)", color: "var(--ca-amber)" }}>
+                        Demo data — all values illustrative. Configure <span className="font-mono font-bold">FRED_API_KEY</span> on Vercel for live data.
+                      </div>
+                    )}
+                  </div>
+                </details>
+              </Card>
+            )}
+
+            {/* Model Readiness */}
             <Card className="p-5">
               <div className="flex items-center justify-between mb-4">
                 <SectionLabel>Model Readiness</SectionLabel>
-                <span className="text-[10px] text-gray-400">
-                  {READINESS_GATES.filter(g => g.status === "complete").length} / {READINESS_GATES.length} gates passed
+                <span className="text-[10px]" style={{ color: "var(--ca-text-3)" }}>
+                  {READINESS_GATES.filter(g => g.status === "complete").length} / {READINESS_GATES.length} gates
                 </span>
               </div>
               <div className="grid grid-cols-4 gap-3">
                 {READINESS_GATES.map(gate => (
-                  <div key={gate.id} className="border border-gray-100 px-3 py-3">
+                  <div key={gate.id} className="px-3 py-3" style={{ border: "1px solid var(--ca-border)" }}>
                     <div className="flex items-start gap-2 mb-1.5">
                       <StatusDot status={gate.status} />
-                      <p className="text-[11px] font-semibold text-[#0a0a0a] leading-snug">{gate.label}</p>
+                      <p className="text-[11px] font-semibold leading-snug" style={{ color: "var(--ca-text)" }}>{gate.label}</p>
                     </div>
-                    <p className="text-[10px] text-gray-400 leading-relaxed">{gate.note}</p>
+                    <p className="text-[10px] leading-relaxed" style={{ color: "var(--ca-text-3)" }}>{gate.note}</p>
                     <p className="mt-1.5 text-[9px] font-bold uppercase tracking-[0.1em]" style={{
-                      color: gate.status === "complete" ? POSITIVE : gate.status === "blocked" ? NEGATIVE : AMBER
+                      color: gate.status === "complete" ? "var(--ca-green)" : gate.status === "blocked" ? "var(--ca-red)" : "var(--ca-amber)"
                     }}>
                       {gate.status === "complete" ? "✓ Complete" : gate.status === "partial" ? "◐ Partial" : gate.status === "blocked" ? "✕ Blocked" : "○ Pending"}
                     </p>
                   </div>
                 ))}
               </div>
-              <p className="mt-3 text-[10px] text-gray-400">
-                Strategy must not be labeled "live" until all 8 required gates pass.
-                Current status: <span className="font-semibold text-amber-600">Research workbench — Phase 1 complete.</span>
+              <p className="mt-3 text-[10px]" style={{ color: "var(--ca-text-3)" }}>
+                Strategy must not be labeled &ldquo;live&rdquo; until all 8 required gates pass.
+                Status: <span className="font-semibold" style={{ color: "var(--ca-amber)" }}>Research workbench — Phase 1 complete.</span>
               </p>
             </Card>
 

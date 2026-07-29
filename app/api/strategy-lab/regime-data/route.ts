@@ -14,7 +14,7 @@ import {
   computeComposite, classifyRegimeHard, computeRegimeProbabilities,
   computeConfidence, computeFactorTargets, buildExplanation,
 } from "@/lib/strategy-lab/regime";
-import type { RegimeData, IndicatorReading, CompositePoint, RegimeLabel } from "@/lib/strategy-lab/types";
+import type { RegimeData, IndicatorReading, CompositePoint, RegimeLabel, CrossAssetSnapshot } from "@/lib/strategy-lab/types";
 
 export const dynamic = "force-dynamic";
 
@@ -103,6 +103,85 @@ function buildReading(
     stdDev:       Math.round(sig * 1000) / 1000,
     mean:         Math.round(mu * 1000) / 1000,
   };
+}
+
+// Extract latest value + z-score from a monthly series
+function latestWithZ(series: { date: string; value: number }[]): { val: number | null; z: number | null } {
+  if (series.length < 4) return { val: null, z: null };
+  const vals = series.map(p => p.value);
+  const mu  = mean(vals);
+  const sig = stdDev(vals, mu);
+  const latest = vals[vals.length - 1];
+  return {
+    val: Math.round(latest * 100) / 100,
+    z:   Math.round(zscore(latest, mu, sig) * 100) / 100,
+  };
+}
+
+// Build inflation composite from CPI yoy, Core CPI yoy, 5Y breakeven level
+function buildInflationComposite(
+  cpiSeries: { date: string; value: number }[],
+  coreCpiSeries: { date: string; value: number }[],
+  breakeven5ySeries: { date: string; value: number }[],
+): number | null {
+  let composite = 0;
+  let wsum = 0;
+
+  // CPI yoy change
+  if (cpiSeries.length >= 14) {
+    const yoy = cpiSeries.slice(12).map((p, i) => ((p.value / cpiSeries[i].value) - 1) * 100);
+    if (yoy.length >= 3) {
+      const w = winsorize(yoy, 0.02);
+      const mu = mean(w); const sig = stdDev(w, mu);
+      composite += zscore(yoy[yoy.length - 1], mu, sig) * 0.40;
+      wsum += 0.40;
+    }
+  }
+  // Core CPI yoy change
+  if (coreCpiSeries.length >= 14) {
+    const yoy = coreCpiSeries.slice(12).map((p, i) => ((p.value / coreCpiSeries[i].value) - 1) * 100);
+    if (yoy.length >= 3) {
+      const w = winsorize(yoy, 0.02);
+      const mu = mean(w); const sig = stdDev(w, mu);
+      composite += zscore(yoy[yoy.length - 1], mu, sig) * 0.40;
+      wsum += 0.40;
+    }
+  }
+  // 5Y breakeven inflation level
+  if (breakeven5ySeries.length >= 4) {
+    const vals = breakeven5ySeries.map(p => p.value);
+    const mu = mean(vals); const sig = stdDev(vals, mu);
+    composite += zscore(vals[vals.length - 1], mu, sig) * 0.20;
+    wsum += 0.20;
+  }
+
+  return wsum > 0 ? Math.round((composite / wsum) * 100) / 100 : null;
+}
+
+// Build policy accommodation signal (positive = accommodative, negative = restrictive)
+function buildPolicySignal(
+  fedFundsSeries: { date: string; value: number }[],
+  t10y3mSeries: { date: string; value: number }[],
+): number | null {
+  let composite = 0;
+  let wsum = 0;
+
+  if (fedFundsSeries.length >= 4) {
+    const vals = fedFundsSeries.map(p => p.value);
+    const mu = mean(vals); const sig = stdDev(vals, mu);
+    // Inverted: higher fed funds = tighter = negative policy signal
+    composite += -zscore(vals[vals.length - 1], mu, sig) * 0.60;
+    wsum += 0.60;
+  }
+  if (t10y3mSeries.length >= 4) {
+    const vals = t10y3mSeries.map(p => p.value);
+    const mu = mean(vals); const sig = stdDev(vals, mu);
+    // Positive 10Y-3M = normal/steep = accommodative = positive
+    composite += zscore(vals[vals.length - 1], mu, sig) * 0.40;
+    wsum += 0.40;
+  }
+
+  return wsum > 0 ? Math.round((composite / wsum) * 100) / 100 : null;
 }
 
 // Demo data returned when FRED key is not configured
@@ -206,6 +285,9 @@ function demoRegimeData(): RegimeData {
     isDemo:                true,
     asOf,
     dataVintageWarning:    "DEMO MODE: No FRED API key configured. All values are illustrative only.",
+    inflationComposite:    null,
+    policySignal:          null,
+    crossAsset:            null,
   };
 }
 
@@ -214,10 +296,22 @@ export async function GET() {
     return NextResponse.json(demoRegimeData());
   }
 
-  // Fetch all series in parallel (36 monthly observations each)
+  // Fetch all series in parallel (60 monthly observations each)
+  const EXTRA_SERIES = [
+    "CPIAUCSL",   // CPI All Urban (for inflation composite)
+    "CPILFESL",   // Core CPI ex-food & energy
+    "T5YIE",      // 5Y inflation breakeven
+    "FEDFUNDS",   // Effective Fed Funds Rate
+    "T10Y3M",     // 10Y-3M yield spread
+    "DGS10",      // 10Y nominal Treasury yield
+    "DGS2",       // 2Y nominal Treasury yield
+    "DFII10",     // 10Y TIPS real yield
+    "BAMLC0A0CM", // IG OAS (ICE BofA)
+  ];
   const seriesIds = [
     ...DEFAULT_GROWTH_INDICATORS.map(i => i.fredSeries),
     ...DEFAULT_RISK_INDICATORS.map(i => i.fredSeries),
+    ...EXTRA_SERIES,
   ];
   const uniqueIds = [...new Set(seriesIds)];
 
@@ -338,6 +432,72 @@ export async function GET() {
 
   const explanation = buildExplanation(regime, clampedLevel, clampedDirection, probs, "enhanced");
 
+  // ── Extended macro composites ─────────────────────────────────────────────
+  const inflationComposite = buildInflationComposite(
+    seriesMap["CPIAUCSL"] ?? [],
+    seriesMap["CPILFESL"] ?? [],
+    seriesMap["T5YIE"]    ?? [],
+  );
+
+  const policySignal = buildPolicySignal(
+    seriesMap["FEDFUNDS"] ?? [],
+    seriesMap["T10Y3M"]   ?? [],
+  );
+
+  // ── Cross-asset snapshot ──────────────────────────────────────────────────
+  const t10yData  = latestWithZ(seriesMap["DGS10"]        ?? []);
+  const t2yData   = latestWithZ(seriesMap["DGS2"]         ?? []);
+  const t10y3mData= latestWithZ(seriesMap["T10Y3M"]       ?? []);
+  const dfii10Data= latestWithZ(seriesMap["DFII10"]       ?? []);
+  const t5yData   = latestWithZ(seriesMap["T5YIE"]        ?? []);
+  const hyData    = latestWithZ(seriesMap["BAMLH0A0HYM2"] ?? []);
+  const igData    = latestWithZ(seriesMap["BAMLC0A0CM"]   ?? []);
+  const vixData   = latestWithZ(seriesMap["VIXCLS"]       ?? []);
+  const dxyData   = latestWithZ(seriesMap["DTWEXBGS"]     ?? []);
+  const ffData    = latestWithZ(seriesMap["FEDFUNDS"]      ?? []);
+
+  // 2s10s spread derived from DGS10 - DGS2 (align by date)
+  let spread2s10s: number | null = null;
+  let spread2s10sZ: number | null = null;
+  {
+    const t10s = seriesMap["DGS10"] ?? [];
+    const t2s  = seriesMap["DGS2"]  ?? [];
+    if (t10s.length >= 4 && t2s.length >= 4) {
+      const minLen = Math.min(t10s.length, t2s.length);
+      const spreads = Array.from({ length: minLen }, (_, i) =>
+        t10s[t10s.length - minLen + i].value - t2s[t2s.length - minLen + i].value
+      );
+      const mu = mean(spreads); const sig = stdDev(spreads, mu);
+      spread2s10s  = Math.round(spreads[spreads.length - 1] * 100) / 100;
+      spread2s10sZ = Math.round(zscore(spread2s10s, mu, sig) * 100) / 100;
+    }
+  }
+
+  const crossAsset: CrossAssetSnapshot = {
+    t10y:          t10yData.val,
+    t2y:           t2yData.val,
+    spread2s10s,
+    t10y3m:        t10y3mData.val,
+    realYield10y:  dfii10Data.val,
+    breakeven5y:   t5yData.val,
+    hyOas:         hyData.val,
+    igOas:         igData.val,
+    vix:           vixData.val,
+    dxy:           dxyData.val,
+    fedFunds:      ffData.val,
+    t10yZ:         t10yData.z,
+    t2yZ:          t2yData.z,
+    spread2s10sZ,
+    t10y3mZ:       t10y3mData.z,
+    realYield10yZ: dfii10Data.z,
+    hyOasZ:        hyData.z,
+    igOasZ:        igData.z,
+    vixZ:          vixData.z,
+    dxyZ:          dxyData.z,
+    fedFundsZ:     ffData.z,
+    asOf:          new Date().toISOString().slice(0, 7),
+  };
+
   return NextResponse.json({
     growthComposite:       growthComposite != null ? Math.round(growthComposite * 100) / 100 : null,
     riskAppetiteComposite: riskAppetiteComposite != null ? Math.round(riskAppetiteComposite * 100) / 100 : null,
@@ -354,5 +514,8 @@ export async function GET() {
     isDemo:      false,
     asOf:        new Date().toISOString().slice(0, 7),
     dataVintageWarning: "LIVE SIGNAL: Current z-scores use full 60-month sample for normalization. Historical composite chart uses expanding-window z-scores with publication lags — consistent with backtest methodology.",
+    inflationComposite,
+    policySignal,
+    crossAsset,
   } satisfies RegimeData);
 }

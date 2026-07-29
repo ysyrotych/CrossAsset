@@ -60,23 +60,52 @@ export type CompositePoint = {
   regime:       RegimeLabel | null;
 };
 
+// ── Live cross-asset snapshot ─────────────────────────────────────────────────
+export type CrossAssetSnapshot = {
+  t10y:          number | null;
+  t2y:           number | null;
+  spread2s10s:   number | null;
+  t10y3m:        number | null;
+  realYield10y:  number | null;
+  breakeven5y:   number | null;
+  hyOas:         number | null;
+  igOas:         number | null;
+  vix:           number | null;
+  dxy:           number | null;
+  fedFunds:      number | null;
+  t10yZ:         number | null;
+  t2yZ:          number | null;
+  spread2s10sZ:  number | null;
+  t10y3mZ:       number | null;
+  realYield10yZ: number | null;
+  hyOasZ:        number | null;
+  igOasZ:        number | null;
+  vixZ:          number | null;
+  dxyZ:          number | null;
+  fedFundsZ:     number | null;
+  asOf:          string;
+};
+
 // ── Full regime reading returned by the API ───────────────────────────────────
 export type RegimeData = {
   growthComposite:       number | null;
   riskAppetiteComposite: number | null;
   growthLevel:           "above" | "below" | null;
   growthDirection:       "accelerating" | "decelerating" | null;
-  growthLevelScore:      number | null;  // -1 to +1 for diagram positioning
-  growthDirectionScore:  number | null;  // -1 to +1
+  growthLevelScore:      number | null;
+  growthDirectionScore:  number | null;
   regime:                RegimeLabel | null;
   probabilities:         RegimeProbabilities | null;
-  confidence:            number | null;  // 0–100
+  confidence:            number | null;
   explanation:           string;
   indicators:            IndicatorReading[];
   history:               CompositePoint[];
   isDemo:                boolean;
   asOf:                  string;
   dataVintageWarning:    string;
+  inflationComposite:    number | null;
+  policySignal:          number | null;
+  crossAsset:            CrossAssetSnapshot | null;
 };
 
 // ── Factor target computed from regime ───────────────────────────────────────
