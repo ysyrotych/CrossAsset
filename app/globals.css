@@ -221,6 +221,8 @@
 .dark .bg-\[\#faf8f3\]  { background-color: var(--ca-surface-2) !important; }
 .dark .bg-\[\#fff7f5\]  { background-color: var(--ca-red-bg) !important; }
 .dark .bg-\[\#f4fbf7\]  { background-color: var(--ca-green-bg) !important; }
+.dark .bg-\[\#f4fbf6\]  { background-color: var(--ca-green-bg) !important; }
+.dark .border-\[\#c3e6cd\] { border-color: var(--ca-border) !important; }
 .dark .bg-\[\#f0faf4\]  { background-color: var(--ca-green-bg) !important; }
 .dark .bg-\[\#fff5f5\]  { background-color: var(--ca-red-bg) !important; }
 .dark .bg-\[\#fff5f4\]  { background-color: var(--ca-red-bg) !important; }
