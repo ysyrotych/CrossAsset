@@ -666,8 +666,8 @@ function SignalChart({ history }: { history: { date: string; growth: number; ris
           <CartesianGrid stroke={gridColor} vertical={false} />
           {bands.map((b, i) => (
             <ReferenceArea key={i} x1={b.x1} x2={b.x2}
-              fill={REGIME_COLORS[b.regime].dot} fillOpacity={dark ? 0.09 : 0.06}
-              label={{ value: b.regime, position: "insideTop", fontSize: 7, fill: REGIME_COLORS[b.regime].dot, opacity: dark ? 0.65 : 0.55 }} />
+              fill={REGIME_COLORS[b.regime].dot} fillOpacity={dark ? 0.13 : 0.10}
+              label={{ value: b.regime, position: "insideTop", fontSize: 7.5, fill: REGIME_COLORS[b.regime].dot, opacity: dark ? 0.85 : 0.75, fontWeight: "700" }} />
           ))}
           <ReferenceLine y={0} stroke={refLine} strokeDasharray="3 3" strokeWidth={1} />
           <XAxis dataKey="date" axisLine={false} tickLine={false}
@@ -1905,11 +1905,11 @@ export default function StrategyLabPage() {
                     <p className="text-[9.5px] text-gray-400 mt-1">3-month change in composite · positive = accelerating growth</p>
                   </div>
                   {mode === "enhanced" && (
-                    <div className="border border-blue-100 bg-blue-50 px-4 py-3">
-                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] text-[#0c1b38] mb-2">Enhanced Probabilities</p>
-                      <p className="font-mono text-[12px] text-[#333]">P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)  · τ = 0.8</p>
-                      <p className="text-[9.5px] text-gray-600 mt-1">s = (G, Δ) clamped to ±1 · centroids cᵣ at (±0.6, ±0.6)</p>
-                      <p className="font-mono text-[11px] text-[#333] mt-1">Target(f) = Σᵣ P(r) × baseline[r][f] − 1</p>
+                    <div className="px-4 py-3" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border-2)" }}>
+                      <p className="text-[9px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: "var(--ca-accent)" }}>Enhanced Probabilities</p>
+                      <p className="font-mono text-[12px]" style={{ color: "var(--ca-text)" }}>P(r) = exp(−‖s − cᵣ‖² / τ) / Σ exp(...)  · τ = 0.8</p>
+                      <p className="text-[9.5px] mt-1" style={{ color: "var(--ca-text-2)" }}>s = (G, Δ) clamped to ±1 · centroids cᵣ at (±0.6, ±0.6)</p>
+                      <p className="font-mono text-[11px] mt-1" style={{ color: "var(--ca-text)" }}>Target(f) = Σᵣ P(r) × baseline[r][f] − 1</p>
                     </div>
                   )}
                 </div>
@@ -1938,8 +1938,8 @@ export default function StrategyLabPage() {
                       );
                     })}
                   </div>
-                  <div className="mt-3 border border-amber-200 bg-amber-50 px-3 py-2">
-                    <p className="text-[9px] text-amber-700 leading-relaxed">
+                  <div className="mt-3 px-3 py-2" style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                    <p className="text-[9px] leading-relaxed" style={{ color: "var(--ca-amber)" }}>
                       Z-scores use 36-month in-sample window — <strong>not PIT valid</strong>. Phase 3 will anchor from 1990.
                     </p>
                   </div>
@@ -1993,17 +1993,17 @@ export default function StrategyLabPage() {
               </div>
 
               <div className="mt-4 border-t border-gray-100 pt-3 grid grid-cols-2 gap-4">
-                <div className="border border-amber-200 bg-amber-50 px-4 py-3">
-                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-amber-700 mb-1">Data Quality Notice</p>
-                  <p className="text-[10.5px] text-amber-800 leading-relaxed">
+                <div className="px-4 py-3" style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--ca-amber)" }}>Data Quality Notice</p>
+                  <p className="text-[10.5px] leading-relaxed" style={{ color: "var(--ca-text-2)" }}>
                     Z-scores are computed from the 36-month FRED window, NOT from a long historical sample (1990+).
                     This is NOT point-in-time valid. Do not use these normalized composites for quantitative backtests.
                     Full PIT validation is Phase 3.
                   </p>
                 </div>
-                <div className="border border-gray-100 bg-gray-50 px-4 py-3">
-                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] text-gray-400 mb-1">Methodology Notes</p>
-                  <p className="text-[10.5px] text-gray-500 leading-relaxed">
+                <div className="px-4 py-3" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
+                  <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--ca-text-3)" }}>Methodology Notes</p>
+                  <p className="text-[10.5px] leading-relaxed" style={{ color: "var(--ca-text-2)" }}>
                     ISM PMI not available via free FRED; yield curve and initial claims serve as leading-indicator proxies.
                     Users may import custom series via CSV upload (Phase 2). Weekly series aggregated to monthly average.
                   </p>
@@ -2031,9 +2031,9 @@ export default function StrategyLabPage() {
                   </div>
                 ))}
               </div>
-              <div className="mt-3 border border-amber-200 bg-amber-50 px-4 py-2.5">
-                <p className="text-[10.5px] text-amber-800">
-                  <span className="font-bold">⚠ Circularity warning:</span> Risk appetite is derived from equity and credit market prices.
+              <div className="mt-3 px-4 py-2.5" style={{ background: "rgba(251,191,36,0.07)", border: "1px solid rgba(251,191,36,0.25)" }}>
+                <p className="text-[10.5px]" style={{ color: "var(--ca-text-2)" }}>
+                  <span className="font-bold" style={{ color: "var(--ca-amber)" }}>⚠ Circularity warning:</span> Risk appetite is derived from equity and credit market prices.
                   Using it to predict equity-factor returns creates a feedback loop. The CrossAsset Enhanced model uses it
                   only as a regime-confidence modifier, not as a primary signal.
                 </p>
@@ -2090,12 +2090,13 @@ export default function StrategyLabPage() {
                       const prob = probs ? probs[r] : null;
                       return (
                         <tr key={r}
-                          className={`border-b border-gray-100 last:border-0 ${isActive ? "bg-[#f5f7ff]" : ""}`}>
+                          className="border-b border-gray-100 last:border-0"
+                          style={isActive ? { background: `${c.bg}` } : {}}>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">
                               <span className="w-2 h-2 rounded-full" style={{ backgroundColor: c.dot }} />
                               <span className="text-[12px] font-bold" style={{ color: c.text }}>{r}</span>
-                              {isActive && <span className="text-[8.5px] font-bold border border-blue-100 bg-blue-50 text-[#0c1b38] px-1.5 py-0.5">Current</span>}
+                              {isActive && <span className="text-[8.5px] font-bold px-1.5 py-0.5" style={{ background: c.bg, border: `1px solid ${c.border}`, color: c.dot }}>Current</span>}
                               {prob != null && mode === "enhanced" && (
                                 <span className="text-[9px] text-gray-400">{Math.round(prob * 100)}%</span>
                               )}
@@ -2250,7 +2251,7 @@ export default function StrategyLabPage() {
                             </td>
                             <td className="px-3 py-1.5 text-[10.5px] text-gray-600">
                               {s.name}
-                              {inPortfolio && <span className="ml-1.5 text-[8.5px] border border-blue-100 bg-blue-50 text-[#0c1b38] px-1 py-0.5">IN PORTFOLIO</span>}
+                              {inPortfolio && <span className="ml-1.5 text-[8.5px] px-1 py-0.5" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border-2)", color: "var(--ca-accent)" }}>IN PORTFOLIO</span>}
                             </td>
                             <td className="px-3 py-1.5 text-[9.5px] text-gray-400">{s.sector}</td>
                             {zCell(s.zMomentum)}
@@ -2404,7 +2405,7 @@ export default function StrategyLabPage() {
                   </div>
                   <div className="flex items-center gap-3 shrink-0">
                     {def.sectorNeutral && (
-                      <span className="border border-blue-100 bg-blue-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-[#0c1b38]">Sector-Neutral</span>
+                      <span className="px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em]" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border-2)", color: "var(--ca-accent)" }}>Sector-Neutral</span>
                     )}
                     {def.winsorize && (
                       <span className="border border-gray-100 bg-gray-50 px-2 py-0.5 text-[9px] font-bold uppercase tracking-[0.1em] text-gray-500">
@@ -2458,7 +2459,11 @@ export default function StrategyLabPage() {
               <div className="flex items-center justify-between mb-5">
                 <div className="flex items-center gap-3">
                   <SectionLabel>Holdings</SectionLabel>
-                  <span className={`text-[10px] font-semibold rounded-full px-2.5 py-0.5 ${Math.abs(totalWeight - 1) < 0.005 ? "bg-emerald-50 text-emerald-700" : "bg-red-50 text-red-600"}`}>
+                  <span className="text-[10px] font-semibold px-2.5 py-0.5" style={
+                    Math.abs(totalWeight - 1) < 0.005
+                      ? { background: "rgba(34,197,94,0.10)", color: "var(--ca-green)", border: "1px solid rgba(34,197,94,0.25)" }
+                      : { background: "rgba(239,68,68,0.10)", color: "var(--ca-red)", border: "1px solid rgba(239,68,68,0.25)" }
+                  }>
                     {(totalWeight * 100).toFixed(1)}% allocated
                   </span>
                 </div>
@@ -2528,7 +2533,7 @@ export default function StrategyLabPage() {
               })()}
 
               {scoreError && (
-                <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 mb-4 text-[11px] text-[#b42318]">
+                <div className="rounded-lg px-4 py-3 mb-4 text-[11px]" style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.30)", color: "var(--ca-red)" }}>
                   {scoreError}
                 </div>
               )}
@@ -2733,7 +2738,13 @@ export default function StrategyLabPage() {
                             {!hasData ? (
                               <span className="text-[9px] font-bold px-1.5 py-0.5 border border-gray-200 bg-gray-50 text-gray-400">no data</span>
                             ) : (
-                              <span className={`text-[9px] font-bold px-1.5 py-0.5 border whitespace-nowrap ${aligned ? "border-emerald-200 bg-emerald-50 text-emerald-700" : gap! < 0 ? "border-red-200 bg-red-50 text-red-600" : "border-[#f0d89a] bg-[#fffbf0] text-[#b7791f]"}`}>
+                              <span className="text-[9px] font-bold px-1.5 py-0.5 whitespace-nowrap" style={
+                                aligned
+                                  ? { background: "rgba(34,197,94,0.10)",  border: "1px solid rgba(34,197,94,0.30)",  color: "var(--ca-green)" }
+                                  : gap! < 0
+                                  ? { background: "rgba(239,68,68,0.10)",  border: "1px solid rgba(239,68,68,0.30)",  color: "var(--ca-red)" }
+                                  : { background: "rgba(251,191,36,0.10)", border: "1px solid rgba(251,191,36,0.30)", color: "var(--ca-amber)" }
+                              }>
                                 {aligned ? "aligned" : gap! > 0 ? `+${gap!.toFixed(2)} under` : `${gap!.toFixed(2)} over`}
                               </span>
                             )}
@@ -3147,7 +3158,7 @@ export default function StrategyLabPage() {
 
             {/* Allocation-changed banner */}
             {backtestData && !backtestLoading && lastBacktestAlloc && lastBacktestAlloc !== JSON.stringify(allocation) && (
-              <div className="flex items-center justify-between border border-[#f0a429] bg-[#fffbf0] px-4 py-3">
+              <div className="flex items-center justify-between px-4 py-3" style={{ background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.35)" }}>
                 <p className="text-[10.5px] text-[#a06800]">Factor allocations changed — backtest results are outdated.</p>
                 <button
                   onClick={() => fetchBacktest(allocation)}
@@ -3244,7 +3255,7 @@ export default function StrategyLabPage() {
                             />
                             {/* Regime background shading */}
                             {(() => {
-                              const RFILL: Record<string, string> = { Recovery: "#dbeafe", Expansion: "#d1fae5", Slowdown: "#fef3c7", Contraction: "#fee2e2" };
+                              const RFILL: Record<string, string> = { Recovery: REGIME_COLORS.Recovery.dot, Expansion: REGIME_COLORS.Expansion.dot, Slowdown: REGIME_COLORS.Slowdown.dot, Contraction: REGIME_COLORS.Contraction.dot };
                               const periods: { x1: string; x2: string; regime: string }[] = [];
                               let cur = months[0]?.regime; let st = months[0]?.date;
                               for (let i = 1; i <= months.length; i++) {
@@ -3254,7 +3265,7 @@ export default function StrategyLabPage() {
                                 }
                               }
                               return periods.map((p, i) => (
-                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#f0f0f0"} fillOpacity={0.35} strokeOpacity={0} />
+                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#888"} fillOpacity={0.10} strokeOpacity={0} />
                               ));
                             })()}
                             <Line type="monotone" dataKey="stratNav" name="Strategy" stroke={NAVY} strokeWidth={2} dot={false} />
@@ -3265,7 +3276,7 @@ export default function StrategyLabPage() {
                       <div className="flex items-center gap-4 mt-2 flex-wrap">
                         {(["Expansion","Recovery","Slowdown","Contraction"] as const).map(r => (
                           <span key={r} className="flex items-center gap-1 text-[9px] text-gray-400">
-                            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: { Expansion:"#d1fae5", Recovery:"#dbeafe", Slowdown:"#fef3c7", Contraction:"#fee2e2" }[r] }} />
+                            <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ backgroundColor: REGIME_COLORS[r].dot, opacity: 0.8 }} />
                             {r}
                           </span>
                         ))}
@@ -3289,7 +3300,7 @@ export default function StrategyLabPage() {
                             <YAxis axisLine={false} tickLine={false} tick={{ fontSize: 9, fill: "#bbb" }} tickFormatter={(v: number) => `${(v * 100).toFixed(0)}%`} domain={["auto", 0]} />
                             <Tooltip contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 10 }} formatter={(v: unknown) => [`${typeof v === "number" ? (v * 100).toFixed(2) : v}%`, "Drawdown"]} />
                             {(() => {
-                              const RFILL: Record<string, string> = { Recovery: "#dbeafe", Expansion: "#d1fae5", Slowdown: "#fef3c7", Contraction: "#fee2e2" };
+                              const RFILL: Record<string, string> = { Recovery: REGIME_COLORS.Recovery.dot, Expansion: REGIME_COLORS.Expansion.dot, Slowdown: REGIME_COLORS.Slowdown.dot, Contraction: REGIME_COLORS.Contraction.dot };
                               const periods: { x1: string; x2: string; regime: string }[] = [];
                               let cur = months[0]?.regime; let st = months[0]?.date;
                               for (let i = 1; i <= months.length; i++) {
@@ -3299,7 +3310,7 @@ export default function StrategyLabPage() {
                                 }
                               }
                               return periods.map((p, i) => (
-                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#f0f0f0"} fillOpacity={0.35} strokeOpacity={0} />
+                                <ReferenceArea key={i} x1={p.x1} x2={p.x2} fill={RFILL[p.regime] ?? "#888"} fillOpacity={0.10} strokeOpacity={0} />
                               ));
                             })()}
                             <Area type="monotone" dataKey="drawdown" name="Drawdown" stroke={NEGATIVE} fill={NEGATIVE} fillOpacity={0.15} strokeWidth={1.5} dot={false} />
@@ -3736,7 +3747,10 @@ export default function StrategyLabPage() {
                   { cat: "Factor",        item: "Factor crowding / crash risk",               status: "pending",  note: "Phase 4: AQR-style crowding score from pairwise factor beta across universe stock positions." },
                   { cat: "Regime",        item: "Regime circularity (risk appetite composite)",status: "complete", note: "Documented and warned in Regime Engine tab. Risk appetite composite uses VIX, HY spreads, and equity momentum — all inputs to regime classifier, not outputs." },
                 ].map(({ cat, item, status, note }) => (
-                  <div key={item} className={`flex items-start gap-3 border border-gray-100 px-4 py-3 ${status === "blocked" ? "bg-[#fff9f9]" : status === "complete" ? "bg-[#f9fdf9]" : "bg-gray-50"}`}>
+                  <div key={item} className="flex items-start gap-3 px-4 py-3" style={{
+                    borderBottom: "1px solid var(--ca-border)",
+                    background: status === "blocked" ? "rgba(239,68,68,0.04)" : status === "complete" ? "rgba(34,197,94,0.04)" : "var(--ca-surface)",
+                  }}>
                     <StatusDot status={status as ReadinessGate["status"]} />
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-0.5">
