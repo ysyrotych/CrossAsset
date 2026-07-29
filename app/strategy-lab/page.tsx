@@ -55,6 +55,10 @@ const REGIME_PLAYBOOK: Record<RegimeLabel, {
   asset_signals: PlaybookSignal[];
   equity_factors: string;
   key_risk: string;
+  hist_eq: string;    // historical illustrative equity return range
+  hist_bd: string;    // bonds
+  hist_hy: string;    // HY credit
+  hist_note: string;
 }> = {
   Expansion: {
     asset_signals: [
@@ -66,6 +70,8 @@ const REGIME_PLAYBOOK: Record<RegimeLabel, {
     ],
     equity_factors: "↑↑ Momentum  ·  → Size  ·  ↓ Low Vol",
     key_risk: "Overheating triggers policy surprise; yield spike hits duration and growth equities",
+    hist_eq: "+12 to +22%", hist_bd: "−2 to +3%", hist_hy: "+6 to +12%",
+    hist_note: "Historical illustrative annualized returns. Source: academic literature (Ilmanen, AQR). Not point-in-time validated.",
   },
   Recovery: {
     asset_signals: [
@@ -77,6 +83,8 @@ const REGIME_PLAYBOOK: Record<RegimeLabel, {
     ],
     equity_factors: "↑↑ Value  ·  ↑↑ Size  ·  ↓ Low Vol  ·  ↓ Quality",
     key_risk: "False dawn — growth stalls and re-enters Contraction; watch credit spreads for signal",
+    hist_eq: "+18 to +35%", hist_bd: "+5 to +12%", hist_hy: "+12 to +22%",
+    hist_note: "Historical illustrative annualized returns. Source: academic literature (Ilmanen, AQR). Not point-in-time validated.",
   },
   Slowdown: {
     asset_signals: [
@@ -88,6 +96,8 @@ const REGIME_PLAYBOOK: Record<RegimeLabel, {
     ],
     equity_factors: "↑↑ Quality  ·  ↑↑ Low Vol  ·  ↓ Momentum  ·  ↓ Size",
     key_risk: "Contraction imminent faster than expected; policy response speed is critical variable",
+    hist_eq: "+2 to +8%", hist_bd: "+5 to +14%", hist_hy: "+1 to +5%",
+    hist_note: "Historical illustrative annualized returns. Source: academic literature (Ilmanen, AQR). Not point-in-time validated.",
   },
   Contraction: {
     asset_signals: [
@@ -99,6 +109,8 @@ const REGIME_PLAYBOOK: Record<RegimeLabel, {
     ],
     equity_factors: "↑↑ Low Vol  ·  ↑↑ Quality  ·  ↓↓ Momentum  ·  ↓↓ Size",
     key_risk: "Policy pivot (aggressive rate cuts) triggers sharp risk-on reversal; speed matters",
+    hist_eq: "−15 to −25%", hist_bd: "+10 to +22%", hist_hy: "−5 to −18%",
+    hist_note: "Historical illustrative annualized returns. Source: academic literature (Ilmanen, AQR). Not point-in-time validated.",
   },
 };
 
@@ -221,15 +233,88 @@ function Skeleton({ className = "" }: { className?: string }) {
   return <div className={`animate-pulse rounded-lg ${className}`} style={{ background: "var(--ca-surface-2)" }} />;
 }
 
+// ── Portfolio Implication Synthesizer ────────────────────────────────────────
+function PortfolioImplication({
+  regime, growth, inflation, credit, policy, riskApp,
+}: {
+  regime: import("@/lib/strategy-lab/types").RegimeLabel;
+  growth: number | null;
+  inflation: number | null;
+  credit: number | null;
+  policy: number | null;
+  riskApp: number | null;
+}) {
+  const bullets: { text: string; tone: "green" | "red" | "amber" }[] = [];
+
+  // Duration / rates call
+  if (policy != null && credit != null) {
+    if (policy < -0.4 && credit < -0.3) {
+      bullets.push({ text: "Restrictive policy + stressed credit → favor short duration; avoid long-end exposure.", tone: "red" });
+    } else if (policy > 0.4) {
+      bullets.push({ text: "Accommodative policy backdrop supports longer duration and rate-sensitive assets.", tone: "green" });
+    } else {
+      bullets.push({ text: "Neutral policy stance — barbell duration, stay close to benchmark in rates.", tone: "amber" });
+    }
+  }
+
+  // Equity / risk call
+  if (growth != null && riskApp != null) {
+    const avgBullish = (growth + riskApp) / 2;
+    if (avgBullish > 0.4) {
+      bullets.push({ text: "Growth + risk appetite both positive → OW equities; lean cyclicals over defensives.", tone: "green" });
+    } else if (avgBullish < -0.4) {
+      bullets.push({ text: "Growth and risk appetite negative → UW risk assets; defensive positioning warranted.", tone: "red" });
+    } else {
+      bullets.push({ text: "Mixed growth/risk signals → maintain near-benchmark equity weight; quality tilt.", tone: "amber" });
+    }
+  }
+
+  // Credit call
+  if (credit != null) {
+    if (credit > 0.5) {
+      bullets.push({ text: "Credit conditions benign → carry strategies attractive; add HY/IG spread duration.", tone: "green" });
+    } else if (credit < -0.5) {
+      bullets.push({ text: "Credit spreads elevated → reduce HY exposure; prefer IG quality and liquid assets.", tone: "red" });
+    }
+  }
+
+  // Inflation overlay
+  if (inflation != null && inflation > 0.75) {
+    bullets.push({ text: "Elevated inflation signal → TIPS / real assets hedge; trim nominal long-duration bonds.", tone: "red" });
+  } else if (inflation != null && inflation < -0.5) {
+    bullets.push({ text: "Disinflationary backdrop → nominal bonds likely to outperform TIPS; growth-positive.", tone: "green" });
+  }
+
+  const toneColor = { green: "var(--ca-green)", red: "var(--ca-red)", amber: "var(--ca-amber)" };
+
+  return (
+    <div className="mt-4 pt-3 space-y-2" style={{ borderTop: "1px solid var(--ca-border)" }}>
+      <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-2" style={{ color: "var(--ca-text-3)" }}>
+        Positioning Implication — {regime}
+      </p>
+      {bullets.map((b, i) => (
+        <div key={i} className="flex items-start gap-2">
+          <div className="w-1 h-1 rounded-full mt-1.5 shrink-0" style={{ background: toneColor[b.tone] }} />
+          <p className="text-[10px] leading-snug" style={{ color: "var(--ca-text-2)" }}>{b.text}</p>
+        </div>
+      ))}
+      {bullets.length === 0 && (
+        <p className="text-[10px]" style={{ color: "var(--ca-text-3)" }}>Insufficient factor data for implication.</p>
+      )}
+    </div>
+  );
+}
+
 // ── 5-Factor Macro Dashboard row ──────────────────────────────────────────────
 function MacroFactorRow({
-  label, value, loading, getLabel, invertColor = false,
+  label, value, loading, getLabel, invertColor = false, trend,
 }: {
   label: string;
   value: number | null;
   loading: boolean;
   getLabel: (v: number) => string;
   invertColor?: boolean;
+  trend?: "up" | "down" | "flat" | null;
 }) {
   const abs = value != null ? Math.min(Math.abs(value) / 2.5, 1) : 0;
   const pct = value != null ? ((value + 2.5) / 5) * 100 : 50;
@@ -238,6 +323,7 @@ function MacroFactorRow({
     : invertColor
       ? (isPos ? "var(--ca-amber)" : "var(--ca-green)")
       : (Math.abs(value) < 0.35 ? "var(--ca-amber)" : isPos ? "var(--ca-green)" : "var(--ca-red)");
+  const trendIcon = trend === "up" ? "↑" : trend === "down" ? "↓" : trend === "flat" ? "→" : "";
 
   return (
     <div className="flex items-center gap-3 py-2.5" style={{ borderBottom: "1px solid var(--ca-border)" }}>
@@ -248,16 +334,21 @@ function MacroFactorRow({
       <div className="flex-1 relative h-1.5 rounded-full overflow-hidden" style={{ background: "var(--ca-surface-2)" }}>
         <div className="absolute inset-y-0 left-1/2 w-px opacity-40" style={{ background: "var(--ca-border-2)" }} />
         {value != null && (
-          <div className="absolute top-0 h-full rounded-full" style={{
+          <div className="absolute top-0 h-full rounded-full transition-all duration-700" style={{
             left:  value >= 0 ? "50%" : `${Math.max(0, Math.min(100, pct))}%`,
             width: `${abs * 50}%`,
             background: barColor,
           }} />
         )}
       </div>
-      <span className="text-[10.5px] font-bold tabular-nums font-mono w-14 text-right" style={{ color: barColor }}>
-        {value != null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}σ` : loading ? "…" : "—"}
-      </span>
+      <div className="flex items-center gap-1 w-16 justify-end">
+        {trendIcon && (
+          <span className="text-[9px] font-bold" style={{ color: barColor, opacity: 0.7 }}>{trendIcon}</span>
+        )}
+        <span className="text-[10.5px] font-bold tabular-nums font-mono" style={{ color: barColor }}>
+          {value != null ? `${value >= 0 ? "+" : ""}${value.toFixed(2)}σ` : loading ? "…" : "—"}
+        </span>
+      </div>
       <span className="text-[9.5px] w-28 shrink-0" style={{ color: "var(--ca-text-3)" }}>
         {value != null ? getLabel(value) : ""}
       </span>
@@ -399,8 +490,8 @@ function RegimeQuadrant({
       <rect x={CX} y={CY} width={CX} height={CY} fill={qFills[3]} opacity={0.9} />
 
       {/* Dividers */}
-      <line x1={CX} y1={PAD} x2={CX} y2={H - PAD} stroke={BORDER} strokeWidth={1} />
-      <line x1={PAD} y1={CY} x2={W - PAD} y2={CY} stroke={BORDER} strokeWidth={1} />
+      <line x1={CX} y1={PAD} x2={CX} y2={H - PAD} stroke={dark ? "#353535" : BORDER} strokeWidth={1} />
+      <line x1={PAD} y1={CY} x2={W - PAD} y2={CY} stroke={dark ? "#353535" : BORDER} strokeWidth={1} />
 
       {/* Quadrant labels */}
       {quadrants.map(q => {
@@ -411,7 +502,7 @@ function RegimeQuadrant({
           <g key={q.label}>
             <text x={q.x} y={q.y - 4} textAnchor="middle" fontSize={8}
               fontWeight={isActive ? "700" : "500"}
-              fill={isActive ? c.text : "#aaa"}
+              fill={isActive ? c.text : dark ? "#505050" : "#aaa"}
               letterSpacing="0.08em">
               {q.label.toUpperCase()}
             </text>
@@ -426,10 +517,10 @@ function RegimeQuadrant({
       })}
 
       {/* Axis labels */}
-      <text x={PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill="#bbb" letterSpacing="0.06em">BELOW</text>
-      <text x={W - PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill="#bbb" letterSpacing="0.06em">ABOVE</text>
-      <text x={CX} y={PAD - 6} textAnchor="middle" fontSize={7} fill="#bbb" letterSpacing="0.06em">ACCEL.</text>
-      <text x={CX} y={H - PAD + 12} textAnchor="middle" fontSize={7} fill="#bbb" letterSpacing="0.06em">DECEL.</text>
+      <text x={PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">BELOW</text>
+      <text x={W - PAD} y={CY - 4} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">ABOVE</text>
+      <text x={CX} y={PAD - 6} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">ACCEL.</text>
+      <text x={CX} y={H - PAD + 12} textAnchor="middle" fontSize={7} fill={dark ? "#404040" : "#bbb"} letterSpacing="0.06em">DECEL.</text>
 
       {/* Enhanced mode: probability halo for each quadrant */}
       {mode === "enhanced" && probs && quadrants.map(q => {
@@ -501,15 +592,25 @@ function FactorBar({
   );
 }
 
-// ── Signal history chart ──────────────────────────────────────────────────────
+// ── Signal history chart (theme-aware) ───────────────────────────────────────
 function SignalChart({ history }: { history: { date: string; growth: number; riskAppetite: number; regime: RegimeLabel | null }[] }) {
+  const { theme } = useTheme();
+  const dark = theme === "dark";
+
+  const gridColor   = dark ? "#252525" : "#eee9df";
+  const tickColor   = dark ? "#505050" : "#999";
+  const tooltipBg   = dark ? "#111111" : "#ffffff";
+  const tooltipBdr  = dark ? "#252525" : "#e5e7eb";
+  const growthColor = dark ? "#d4a843" : NAVY;
+  const raColor     = dark ? "#22c55e" : POSITIVE;
+  const refLine     = dark ? "#353535" : "#ddd";
+
   const fmtDate = (s: string) => {
     if (!s || s.length < 7) return "";
     const [, m] = s.split("-");
     return `'${s.slice(2, 4)} ${["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"][parseInt(m) - 1]}`;
   };
 
-  // Detect regime bands for background
   const bands: { x1: string; x2: string; regime: RegimeLabel }[] = [];
   let bandStart: string | null = null;
   let bandRegime: RegimeLabel | null = null;
@@ -528,29 +629,29 @@ function SignalChart({ history }: { history: { date: string; growth: number; ris
     <div className="h-[180px] w-full">
       <ResponsiveContainer width="100%" height="100%">
         <LineChart data={history} margin={{ top: 8, right: 8, bottom: 0, left: -10 }}>
-          <CartesianGrid stroke="#eee9df" vertical={false} />
-          {/* Regime background bands */}
+          <CartesianGrid stroke={gridColor} vertical={false} />
           {bands.map((b, i) => (
             <ReferenceArea key={i} x1={b.x1} x2={b.x2}
-              fill={REGIME_COLORS[b.regime].dot} fillOpacity={0.06} />
+              fill={REGIME_COLORS[b.regime].dot} fillOpacity={dark ? 0.09 : 0.06}
+              label={{ value: b.regime, position: "insideTop", fontSize: 7, fill: REGIME_COLORS[b.regime].dot, opacity: dark ? 0.65 : 0.55 }} />
           ))}
-          <ReferenceLine y={0} stroke="#bbb" strokeDasharray="3 3" strokeWidth={1} />
+          <ReferenceLine y={0} stroke={refLine} strokeDasharray="3 3" strokeWidth={1} />
           <XAxis dataKey="date" axisLine={false} tickLine={false}
-            tick={{ fontSize: 10, fill: "#999" }}
+            tick={{ fontSize: 10, fill: tickColor }}
             interval="preserveStartEnd" tickFormatter={fmtDate} />
           <YAxis axisLine={false} tickLine={false}
-            tick={{ fontSize: 10, fill: "#999" }}
+            tick={{ fontSize: 10, fill: tickColor }}
             tickFormatter={v => Number(v).toFixed(1)}
             domain={[-2, 2]} />
           <Tooltip
-            contentStyle={{ border: `1px solid ${BORDER}`, borderRadius: 0, fontSize: 11, background: "white" }}
+            contentStyle={{ border: `1px solid ${tooltipBdr}`, borderRadius: 4, fontSize: 11, background: tooltipBg, color: dark ? "#f0f0f0" : "#111" }}
             formatter={(v: unknown, name: unknown) => [`${Number(v).toFixed(2)}σ`, String(name)]}
             labelFormatter={(l: unknown) => String(l)}
           />
           <Line type="monotone" dataKey="growth" name="Growth Composite"
-            stroke={NAVY} strokeWidth={2} dot={false} connectNulls />
+            stroke={growthColor} strokeWidth={2} dot={false} connectNulls />
           <Line type="monotone" dataKey="riskAppetite" name="Risk Appetite"
-            stroke={POSITIVE} strokeWidth={1.5} dot={false} strokeDasharray="4 2" connectNulls />
+            stroke={raColor} strokeWidth={1.5} dot={false} strokeDasharray="4 2" connectNulls />
         </LineChart>
       </ResponsiveContainer>
     </div>
@@ -788,6 +889,38 @@ export default function StrategyLabPage() {
   const creditComposite = hyOasRawZ !== null
     ? Math.round((-(hyOasRawZ * 0.65) + -(igOasZ ?? hyOasRawZ) * 0.35) * 100) / 100
     : null;
+
+  // Trend direction arrows (3M momentum) derived from available history/direction data
+  const growthTrend: "up" | "down" | "flat" | null = regimeData?.growthDirection === "accelerating" ? "up"
+    : regimeData?.growthDirection === "decelerating" ? "down" : null;
+  // Derive risk appetite trend from last 3 history points
+  const raTrend: "up" | "down" | "flat" | null = useMemo(() => {
+    if (history.length < 4) return null;
+    const last = history[history.length - 1].riskAppetite;
+    const prev = history[history.length - 4].riskAppetite;
+    if (Math.abs(last - prev) < 0.05) return "flat";
+    return last > prev ? "up" : "down";
+  }, [history]);
+  // Proximity warning: growth near regime threshold (|composite| < 0.25σ)
+  const nearThreshold = regimeData?.growthComposite != null && Math.abs(regimeData.growthComposite) < 0.25;
+
+  // Macro Health Score: weighted composite of all 5 factors (positive = healthy macro)
+  const macroHealthScore = (() => {
+    const g  = regimeData?.growthComposite ?? null;
+    const inf = inflationComposite;
+    const cr  = creditComposite;
+    const pol = policySignal;
+    const ra  = regimeData?.riskAppetiteComposite ?? null;
+    const count = [g, cr, ra].filter(v => v != null).length;
+    if (count === 0) return null;
+    let score = 0; let wSum = 0;
+    if (g   != null) { score += g   * 0.30; wSum += 0.30; }
+    if (inf != null) { score += -inf * 0.20; wSum += 0.20; }  // elevated inflation = bad
+    if (cr  != null) { score += cr   * 0.20; wSum += 0.20; }
+    if (pol != null) { score += pol  * 0.15; wSum += 0.15; }
+    if (ra  != null) { score += ra   * 0.15; wSum += 0.15; }
+    return Math.round((score / wSum) * 100) / 100;
+  })();
 
   // Handler: update indicator weight
   const updateGrowthWeight = useCallback((id: string, w: number) => {
@@ -1083,6 +1216,66 @@ export default function StrategyLabPage() {
         {activeTab === "Overview" && (
           <div className="space-y-5">
 
+            {/* Macro Pulse Header */}
+            {regimeData && !loading && (
+              <div className="flex items-center gap-4 px-4 py-3 rounded-lg" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
+                <div className="flex items-center gap-2 shrink-0">
+                  <div className="w-2 h-2 rounded-full animate-pulse" style={{ background: isDemo ? "var(--ca-amber)" : "var(--ca-green)" }} />
+                  <span className="text-[9px] font-bold uppercase tracking-[0.18em]" style={{ color: "var(--ca-text-3)" }}>
+                    {isDemo ? "Demo" : "Live FRED"}
+                  </span>
+                </div>
+                <div className="w-px h-4 shrink-0" style={{ background: "var(--ca-border)" }} />
+                {currentRegime && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[9px] uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-3)" }}>Regime</span>
+                    <span className="text-[10px] font-bold" style={{ color: REGIME_COLORS[currentRegime].text }}>{currentRegime}</span>
+                    <span className="text-[9px]" style={{ color: "var(--ca-text-3)" }}>{confidence != null ? `${confidence}% conf.` : ""}</span>
+                  </div>
+                )}
+                <div className="w-px h-4 shrink-0" style={{ background: "var(--ca-border)" }} />
+                <div className="flex items-center gap-4 flex-1 overflow-hidden">
+                  {[
+                    { label: "Growth", val: regimeData.growthComposite },
+                    { label: "Inflation", val: inflationComposite },
+                    { label: "Credit", val: creditComposite },
+                    { label: "Policy", val: policySignal },
+                    { label: "Risk App.", val: regimeData.riskAppetiteComposite },
+                  ].map(f => (
+                    <div key={f.label} className="flex items-center gap-1.5 shrink-0">
+                      <span className="text-[9px]" style={{ color: "var(--ca-text-3)" }}>{f.label}</span>
+                      <span className="text-[10px] font-bold font-mono tabular-nums" style={{
+                        color: f.val == null ? "var(--ca-text-3)"
+                          : Math.abs(f.val) < 0.3 ? "var(--ca-amber)"
+                          : f.val > 0 ? "var(--ca-green)" : "var(--ca-red)"
+                      }}>
+                        {f.val != null ? `${f.val >= 0 ? "+" : ""}${f.val.toFixed(2)}σ` : "—"}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+                <div className="w-px h-4 shrink-0" style={{ background: "var(--ca-border)" }} />
+                {macroHealthScore != null && (
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className="text-[9px] uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-3)" }}>MHS</span>
+                    <span className="text-[10px] font-bold font-mono tabular-nums" style={{
+                      color: Math.abs(macroHealthScore) < 0.2 ? "var(--ca-amber)"
+                        : macroHealthScore > 0 ? "var(--ca-green)" : "var(--ca-red)"
+                    }}>
+                      {macroHealthScore >= 0 ? "+" : ""}{macroHealthScore.toFixed(2)}σ
+                    </span>
+                    {nearThreshold && (
+                      <span className="text-[8px] font-bold px-1 py-0.5 rounded" style={{ background: "rgba(251,191,36,0.15)", color: "var(--ca-amber)" }}>
+                        near flip
+                      </span>
+                    )}
+                  </div>
+                )}
+                <div className="w-px h-4 shrink-0" style={{ background: "var(--ca-border)" }} />
+                <span className="text-[9px] shrink-0" style={{ color: "var(--ca-text-3)" }}>as of {asOf}</span>
+              </div>
+            )}
+
             {/* Row 1: Regime Panel | 5-Factor Dashboard | Regime Playbook */}
             <div className="grid grid-cols-[260px_1fr_270px] gap-5">
 
@@ -1183,11 +1376,21 @@ export default function StrategyLabPage() {
                   <span className="text-[8px] uppercase tracking-[0.14em] w-28" style={{ color: "var(--ca-text-3)" }}>Reading</span>
                 </div>
 
+                {/* Proximity warning when growth is near regime threshold */}
+                {nearThreshold && !loading && (
+                  <div className="mb-2 px-3 py-2 text-[9.5px] rounded" style={{
+                    background: "rgba(251,191,36,0.08)", border: "1px solid rgba(251,191,36,0.25)", color: "var(--ca-amber)"
+                  }}>
+                    ⚠ Growth composite near regime threshold (|G| &lt; 0.25σ) — potential regime transition signal
+                  </div>
+                )}
+
                 <MacroFactorRow
                   label="GROWTH"
                   value={regimeData?.growthComposite ?? null}
                   loading={loading}
                   getLabel={v => v > 0.5 ? "Expanding" : v < -0.5 ? "Contracting" : "Near Trend"}
+                  trend={growthTrend}
                 />
                 <MacroFactorRow
                   label="INFLATION"
@@ -1213,6 +1416,7 @@ export default function StrategyLabPage() {
                   value={regimeData?.riskAppetiteComposite ?? null}
                   loading={loading}
                   getLabel={v => v > 0.4 ? "Risk-On" : v < -0.4 ? "Risk-Off" : "Neutral"}
+                  trend={raTrend}
                 />
 
                 {regimeData?.explanation && (
@@ -1221,6 +1425,18 @@ export default function StrategyLabPage() {
                       {regimeData.explanation}
                     </p>
                   </div>
+                )}
+
+                {/* Portfolio Implication Synthesizer */}
+                {regimeData && currentRegime && (
+                  <PortfolioImplication
+                    regime={currentRegime}
+                    growth={regimeData.growthComposite}
+                    inflation={inflationComposite}
+                    credit={creditComposite}
+                    policy={policySignal}
+                    riskApp={regimeData.riskAppetiteComposite}
+                  />
                 )}
 
                 {/* Factor methodology note */}
@@ -1279,7 +1495,29 @@ export default function StrategyLabPage() {
                       </p>
                     </div>
 
-                    <div className="mt-3 pt-3 rounded px-3 py-2.5" style={{ borderTop: "1px solid var(--ca-border)", background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)" }}>
+                    {/* Historical return context */}
+                    <div className="mt-3 pt-3" style={{ borderTop: "1px solid var(--ca-border)" }}>
+                      <MiniLabel>Hist. Illustrative Returns (annualized)</MiniLabel>
+                      <div className="mt-2 grid grid-cols-3 gap-1.5">
+                        {[
+                          { label: "Equities", val: REGIME_PLAYBOOK[currentRegime].hist_eq, pos: !REGIME_PLAYBOOK[currentRegime].hist_eq.startsWith("−") },
+                          { label: "Bonds", val: REGIME_PLAYBOOK[currentRegime].hist_bd, pos: !REGIME_PLAYBOOK[currentRegime].hist_bd.startsWith("−") },
+                          { label: "HY Credit", val: REGIME_PLAYBOOK[currentRegime].hist_hy, pos: !REGIME_PLAYBOOK[currentRegime].hist_hy.startsWith("−") },
+                        ].map(item => (
+                          <div key={item.label} className="px-2 py-1.5 text-center" style={{ border: "1px solid var(--ca-border)", background: "var(--ca-surface-2)" }}>
+                            <p className="text-[8px] uppercase tracking-[0.1em] mb-0.5" style={{ color: "var(--ca-text-3)" }}>{item.label}</p>
+                            <p className="text-[10px] font-bold font-mono" style={{ color: item.pos ? "var(--ca-green)" : "var(--ca-red)" }}>
+                              {item.val}
+                            </p>
+                          </div>
+                        ))}
+                      </div>
+                      <p className="text-[8.5px] mt-1.5 leading-snug" style={{ color: "var(--ca-text-3)" }}>
+                        Illustrative historical ranges (Ilmanen / AQR research). For context only.
+                      </p>
+                    </div>
+
+                    <div className="mt-3 pt-3 px-3 py-2.5" style={{ borderTop: "1px solid var(--ca-border)", background: "rgba(251,191,36,0.06)", border: "1px solid rgba(251,191,36,0.2)", borderRadius: "4px" }}>
                       <p className="text-[8.5px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: "var(--ca-amber)" }}>Key Risk</p>
                       <p className="text-[10px] leading-snug" style={{ color: "var(--ca-text-2)" }}>
                         {REGIME_PLAYBOOK[currentRegime].key_risk}
@@ -1386,8 +1624,9 @@ export default function StrategyLabPage() {
                     </div>
                     <div>
                       <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--ca-accent)" }}>Credit Complex</p>
-                      <CrossAssetRow label="HY OAS (ICE BofA)" value={crossAsset.hyOas} unit="%" zscore={crossAsset.hyOasZ} invertZ />
-                      <CrossAssetRow label="IG OAS (ICE BofA)" value={crossAsset.igOas} unit="%" zscore={crossAsset.igOasZ} invertZ />
+                      {/* FRED returns OAS in % (e.g. 3.52 = 352 bps); multiply ×100 for bps display */}
+                      <CrossAssetRow label="HY OAS (ICE BofA)" value={crossAsset.hyOas != null ? Math.round(crossAsset.hyOas * 100) : null} unit=" bps" zscore={crossAsset.hyOasZ} decimals={0} invertZ />
+                      <CrossAssetRow label="IG OAS (ICE BofA)" value={crossAsset.igOas != null ? Math.round(crossAsset.igOas * 100) : null} unit=" bps" zscore={crossAsset.igOasZ} decimals={0} invertZ />
                     </div>
                     <div>
                       <p className="text-[8.5px] font-bold uppercase tracking-[0.18em] mb-1.5" style={{ color: "var(--ca-accent)" }}>Vol / Policy / FX</p>
@@ -1404,8 +1643,9 @@ export default function StrategyLabPage() {
 
                 {crossAsset && (
                   <p className="mt-4 pt-3 text-[9px] leading-relaxed" style={{ borderTop: "1px solid var(--ca-border)", color: "var(--ca-text-3)" }}>
-                    For z-scores: positive = above 60M average. Credit z-scores inverted (tight spreads → green).
-                    HY/IG OAS: ICE BofA indices via FRED. USD: DTWEXBGS broad trade-weighted index.
+                    Z-scores: positive = above 60M mean; credit z-scores inverted (tight = green).
+                    OAS displayed in bps (FRED source in %, ×100 applied). Rates: FRED DGS-series daily.
+                    USD: DTWEXBGS trade-weighted broad dollar index.
                   </p>
                 )}
               </Card>
