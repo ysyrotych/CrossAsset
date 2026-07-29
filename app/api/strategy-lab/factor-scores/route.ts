@@ -51,16 +51,41 @@ async function fetchFmpProfiles(tickers: string[]): Promise<FmpProfile[]> {
 }
 
 const YF_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/124.0.0.0 Safari/537.36";
-async function fetchYahooMarketCaps(tickers: string[]): Promise<Map<string, number>> {
-  const out = new Map<string, number>();
+
+type YFQuote = {
+  symbol: string;
+  price: number;
+  marketCap: number;
+  trailingPE: number | null;
+  priceToBook: number | null;
+  returnOnEquity: number | null;
+  profitMargins: number | null;
+};
+
+async function fetchYahooQuotes(tickers: string[]): Promise<Map<string, YFQuote>> {
+  const out = new Map<string, YFQuote>();
   if (!tickers.length) return out;
+  const fields = "regularMarketPrice,marketCap,trailingPE,priceToBook,returnOnEquity,profitMargins";
   try {
-    const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(",")}&fields=marketCap`;
-    const r = await fetch(url, { headers: { "User-Agent": YF_UA }, cache: "no-store" });
-    if (!r.ok) return out;
-    const result = (await r.json())?.quoteResponse?.result ?? [];
-    for (const q of result) {
-      if (q.symbol && q.marketCap > 0) out.set(q.symbol, q.marketCap);
+    const chunks: string[][] = [];
+    for (let i = 0; i < tickers.length; i += 50) chunks.push(tickers.slice(i, i + 50));
+    for (const chunk of chunks) {
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${chunk.join(",")}&fields=${fields}`;
+      const r = await fetch(url, { headers: { "User-Agent": YF_UA }, cache: "no-store" });
+      if (!r.ok) continue;
+      const result = (await r.json())?.quoteResponse?.result ?? [];
+      for (const q of result) {
+        if (!q.symbol) continue;
+        out.set(q.symbol, {
+          symbol: q.symbol,
+          price:          typeof q.regularMarketPrice === "number" ? q.regularMarketPrice : 0,
+          marketCap:      typeof q.marketCap          === "number" ? q.marketCap          : 0,
+          trailingPE:     typeof q.trailingPE         === "number" && q.trailingPE > 0 && q.trailingPE < 500 ? q.trailingPE : null,
+          priceToBook:    typeof q.priceToBook        === "number" && q.priceToBook > 0 ? q.priceToBook : null,
+          returnOnEquity: typeof q.returnOnEquity     === "number" ? q.returnOnEquity : null,
+          profitMargins:  typeof q.profitMargins      === "number" ? q.profitMargins  : null,
+        });
+      }
     }
   } catch { /* best effort */ }
   return out;
@@ -155,11 +180,11 @@ export async function POST(req: NextRequest) {
   const tickers = holdings.map(h => h.ticker).filter(t => t !== "USD" && !t.includes("Crncy") && !t.includes("Cash"));
 
   // ── Fetch price data + FMP data in parallel ───────────────────────────────
-  const [priceMap, fmpProfileRaw, fmpMetricsRaw, yahooMktCaps] = await Promise.all([
+  const [priceMap, fmpProfileRaw, fmpMetricsRaw, yfQuotes] = await Promise.all([
     fetchAdjustedHistoryBatch([...tickers, "SPY"], "2y"),
     fetchFmpProfiles(tickers),
     Promise.all(tickers.map(t => fetchFmpKeyMetricsOne(t))).then(r => r.filter(Boolean) as FmpMetrics[]),
-    fetchYahooMarketCaps(tickers),
+    fetchYahooQuotes(tickers),
   ]);
 
   const spyBars  = priceMap.get("SPY") ?? [];
@@ -172,8 +197,10 @@ export async function POST(req: NextRequest) {
     momentum12_1: number | null; momentum6_1: number | null;
     realizedVol:  number | null; beta: number | null;
     earningsYield: number | null; fcfYield: number | null;
+    bookYield: number | null;
     evEbitda: number | null; roic: number | null;
     grossMargin: number | null; netLeverage: number | null;
+    roe: number | null;
     logMktCap: number | null;
     name: string; sector: string; price: number; marketCap: number;
     priceDataOk: boolean; fundDataOk: boolean; reportingLagDays: number;
@@ -184,30 +211,47 @@ export async function POST(req: NextRequest) {
     const bars    = priceMap.get(ticker) ?? [];
     const m       = metricsMap.get(ticker);
     const prof    = profileMap.get(ticker);
+    const yf      = yfQuotes.get(ticker);
     const uStock  = UNIVERSE.find(u => u.ticker === ticker);
 
     const pf = computePriceFactors(bars, spyBars);
 
-    // FMP fundamental factors
-    const earningsYield = m?.earningsYieldTTM            ?? (m?.peRatioTTM && m.peRatioTTM > 0 ? 1 / m.peRatioTTM : null);
-    const fcfYield      = m?.freeCashFlowYieldTTM        ?? null;
-    const evEbitda      = m?.enterpriseValueOverEBITDATTM ?? null;  // raw EV/EBITDA (lower = better value)
-    const roic          = m?.roicTTM                       ?? null;
-    const grossMargin   = m?.grossProfitMarginTTM         ?? null;
-    const netLeverage   = m?.netDebtToEBITDATTM           ?? null;  // lower = better quality
-    const mktCap        = prof?.mktCap ?? m?.marketCapTTM ?? yahooMktCaps.get(ticker) ?? (uStock ? uStock.mktCapB * 1e9 : 0);
-    const logMktCap     = mktCap > 0 ? Math.log(mktCap) : null;
+    // Value: FMP primary, Yahoo fallback
+    const earningsYield = m?.earningsYieldTTM
+      ?? (m?.peRatioTTM && m.peRatioTTM > 0 ? 1 / m.peRatioTTM : null)
+      ?? (yf?.trailingPE ? 1 / yf.trailingPE : null);
+    const fcfYield    = m?.freeCashFlowYieldTTM ?? null;
+    const bookYield   = yf?.priceToBook ? 1 / yf.priceToBook : null;
+    const evEbitda    = m?.enterpriseValueOverEBITDATTM ?? null;
+
+    // Quality: FMP primary, Yahoo fallback
+    const roic        = m?.roicTTM ?? null;
+    const grossMargin = m?.grossProfitMarginTTM ?? yf?.profitMargins ?? null;
+    const netLeverage = m?.netDebtToEBITDATTM ?? null;
+    const roe         = yf?.returnOnEquity ?? null;
+
+    const mktCap    = prof?.mktCap ?? m?.marketCapTTM ?? yf?.marketCap ?? (uStock ? uStock.mktCapB * 1e9 : 0);
+    const logMktCap = mktCap > 0 ? Math.log(mktCap) : null;
+
+    const latestBarPrice = bars.length ? bars[bars.length - 1].adjClose : 0;
+    const price = (prof?.price && prof.price > 0) ? prof.price
+      : (yf?.price && yf.price > 0) ? yf.price
+      : latestBarPrice;
+
+    const hasFundamentals = !!(m || yf?.trailingPE || yf?.returnOnEquity);
 
     return {
       ticker, weight: holding.weight,
       ...pf,
-      earningsYield, fcfYield, evEbitda, roic, grossMargin, netLeverage, logMktCap,
+      earningsYield, fcfYield, bookYield, evEbitda,
+      roic, grossMargin, netLeverage, roe,
+      logMktCap,
       name:      prof?.companyName ?? holding.name ?? ticker,
       sector:    prof?.sector      ?? "Unknown",
-      price:     prof?.price       ?? (bars.length ? bars[bars.length - 1].adjClose : 0),
+      price:     Math.round(price * 100) / 100,
       marketCap: mktCap,
       priceDataOk: bars.length >= 60,
-      fundDataOk:  !!m,
+      fundDataOk:  hasFundamentals,
       reportingLagDays: uStock ? getReportingLag(uStock) : 45,
     };
   });
@@ -231,32 +275,35 @@ export async function POST(req: NextRequest) {
     return ((vv ?? 0) * 0.5 + (vb ?? 0) * 0.5) / ((vv != null ? 0.5 : 0) + (vb != null ? 0.5 : 0));
   });
 
-  // Value composite: 0.35 × ey_z + 0.35 × fcfy_z + 0.30 × (-ev_ebitda_z)
+  // Value composite: earnings yield + book yield + FCF yield + (-EV/EBITDA)
   const zEY  = crossSectionalZ(rawRows.map(r => r.earningsYield));
+  const zBY  = crossSectionalZ(rawRows.map(r => r.bookYield));
   const zFCF = crossSectionalZ(rawRows.map(r => r.fcfYield));
-  const zEVE = crossSectionalZ(rawRows.map(r => r.evEbitda != null ? -r.evEbitda : null)); // inverted
+  const zEVE = crossSectionalZ(rawRows.map(r => r.evEbitda != null ? -r.evEbitda : null));
   const zValArr = rawRows.map((_, i) => {
-    const ey = zEY[i]; const fc = zFCF[i]; const ev = zEVE[i];
-    const parts = ([ey, 0.35] as const).concat(); // typed workaround
-    if (ey == null && fc == null && ev == null) return null;
+    const ey = zEY[i]; const by = zBY[i]; const fc = zFCF[i]; const ev = zEVE[i];
+    if (ey == null && by == null && fc == null && ev == null) return null;
     let sum = 0; let w = 0;
     if (ey != null) { sum += ey * 0.35; w += 0.35; }
-    if (fc != null) { sum += fc * 0.35; w += 0.35; }
-    if (ev != null) { sum += ev * 0.30; w += 0.30; }
+    if (by != null) { sum += by * 0.25; w += 0.25; }
+    if (fc != null) { sum += fc * 0.25; w += 0.25; }
+    if (ev != null) { sum += ev * 0.15; w += 0.15; }
     return w > 0 ? sum / w : null;
   });
 
-  // Quality composite: 0.40 × roic_z + 0.35 × gm_z + 0.25 × (-lev_z)
+  // Quality composite: ROIC + gross/net margin + (-leverage) + ROE
   const zROIC = crossSectionalZ(rawRows.map(r => r.roic));
   const zGM   = crossSectionalZ(rawRows.map(r => r.grossMargin));
-  const zLev  = crossSectionalZ(rawRows.map(r => r.netLeverage != null ? -r.netLeverage : null)); // inverted
+  const zLev  = crossSectionalZ(rawRows.map(r => r.netLeverage != null ? -r.netLeverage : null));
+  const zROE  = crossSectionalZ(rawRows.map(r => r.roe));
   const zQualArr = rawRows.map((_, i) => {
-    const ro = zROIC[i]; const gm = zGM[i]; const lv = zLev[i];
-    if (ro == null && gm == null && lv == null) return null;
+    const ro = zROIC[i]; const gm = zGM[i]; const lv = zLev[i]; const re = zROE[i];
+    if (ro == null && gm == null && lv == null && re == null) return null;
     let sum = 0; let w = 0;
-    if (ro != null) { sum += ro * 0.40; w += 0.40; }
-    if (gm != null) { sum += gm * 0.35; w += 0.35; }
-    if (lv != null) { sum += lv * 0.25; w += 0.25; }
+    if (ro != null) { sum += ro * 0.35; w += 0.35; }
+    if (gm != null) { sum += gm * 0.30; w += 0.30; }
+    if (lv != null) { sum += lv * 0.20; w += 0.20; }
+    if (re != null) { sum += re * 0.15; w += 0.15; }
     return w > 0 ? sum / w : null;
   });
 

@@ -2218,6 +2218,7 @@ export default function StrategyLabPage() {
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16">Ticker</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">Name</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-24">Sector</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16 text-right">Price</th>
                         {(["Mom","LV","Val","Qlty","Sz"] as const).map(f => (
                           <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16 text-center">{f}</th>
                         ))}
@@ -2254,6 +2255,11 @@ export default function StrategyLabPage() {
                               {inPortfolio && <span className="ml-1.5 text-[8.5px] px-1 py-0.5" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border-2)", color: "var(--ca-accent)" }}>IN PORTFOLIO</span>}
                             </td>
                             <td className="px-3 py-1.5 text-[9.5px] text-gray-400">{s.sector}</td>
+                            <td className="px-3 py-1.5 text-right">
+                              <span className="text-[10.5px] font-semibold tabular-nums text-gray-700">
+                                {s.price > 0 ? `$${s.price.toFixed(2)}` : "—"}
+                              </span>
+                            </td>
                             {zCell(s.zMomentum)}
                             {zCell(s.zLowVol)}
                             {zCell(s.zValue)}
@@ -2648,6 +2654,7 @@ export default function StrategyLabPage() {
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16">Ticker</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400">Name</th>
                         <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-14 text-right">Weight</th>
+                        <th className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-16 text-right">Price</th>
                         {(["Momentum","Low Vol","Value","Quality","Size"] as const).map(f => (
                           <th key={f} className="px-3 py-2.5 text-[9px] font-bold uppercase tracking-[0.12em] text-gray-400 w-[88px] text-center">{f}</th>
                         ))}
@@ -2680,6 +2687,9 @@ export default function StrategyLabPage() {
                               <td className="px-3 py-2 text-[11.5px] font-bold text-[#0c1b38]">{s.ticker}</td>
                               <td className="px-3 py-2 text-[11px] text-gray-600">{s.name || s.ticker}</td>
                               <td className="px-3 py-2 text-[11px] tabular-nums text-gray-500 text-right">{(s.weight * 100).toFixed(1)}%</td>
+                              <td className="px-3 py-2 text-[11px] tabular-nums text-gray-700 text-right font-semibold">
+                                {s.price > 0 ? `$${s.price.toFixed(2)}` : "—"}
+                              </td>
                               {zScoreCell(s.zMomentum)}
                               {zScoreCell(s.zLowVol)}
                               {zScoreCell(s.zValue)}
@@ -2705,7 +2715,7 @@ export default function StrategyLabPage() {
                   </table>
                 </div>
                 <p className="mt-2 text-[9.5px] text-gray-400">
-                  Momentum = 0.6×12-1M + 0.4×6-1M · Low Vol = 0.5×(−σ) + 0.5×(−β) · Value = 0.35×EY + 0.35×FCF + 0.30×(−EV/EBITDA) · Quality = 0.40×ROIC + 0.35×GM + 0.25×(−leverage)
+                  Momentum = 0.6×12-1M + 0.4×6-1M · Low Vol = 0.5×(−σ) + 0.5×(−β) · Value = 0.35×EY + 0.25×BY + 0.25×FCF + 0.15×(−EV/EBITDA) · Quality = 0.35×ROIC + 0.30×Margin + 0.20×(−Lev) + 0.15×ROE
                 </p>
               </Card>
               </div>
