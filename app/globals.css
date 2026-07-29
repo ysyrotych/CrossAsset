@@ -301,8 +301,8 @@
 /* Scrollbar in dark mode */
 .dark ::-webkit-scrollbar-thumb { background: var(--ca-border-2); }
 
-/* Section labels (SectionLabel component — all pages use inline style with --ca-text-2) */
-.dark p[style*="--ca-text-2"]  { color: var(--ca-accent) !important; }
+/* Section labels — p elements with uppercase + --ca-text-2 (SectionLabel across all pages) */
+.dark p.uppercase[style*="--ca-text-2"]  { color: var(--ca-accent) !important; }
 /* News source labels — bold uppercase text-[#999] elements */
 .dark .text-\[\#999\].font-bold.uppercase { color: var(--ca-accent) !important; }
 /* Bold uppercase text-[#bbb] labels (brief output label etc.) */
