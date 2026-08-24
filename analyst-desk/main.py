@@ -166,45 +166,45 @@ async def main():
     # Build Telegram app
     app = build_app()
 
-    # Setup scheduler
+    # Setup scheduler (don't start yet)
     scheduler = AsyncIOScheduler(timezone=TZ)
     setup_scheduler(scheduler)
+
+    # Explicit lifecycle — no async with (avoids double-init RuntimeError)
+    await app.initialize()
+    await app.start()
+    await app.updater.start_polling(drop_pending_updates=True)
+
     scheduler.start()
     log.info("Scheduler started")
 
-    # Send startup notification
+    # Send startup notification with keyboard
+    from telegram import ReplyKeyboardMarkup, KeyboardButton
+    kb = ReplyKeyboardMarkup([
+        [KeyboardButton("📊 Portfolio"), KeyboardButton("📈 Markets"), KeyboardButton("📰 News")],
+        [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
+        [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
+    ], resize_keyboard=True, persistent=True)
     startup_msg = (
         f"🏦 TYLER — Online\n"
         f"Started at {datetime.now(TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
         f"Monitoring {len(__import__('config').WATCHLIST)} securities\n\n"
         f"Use the buttons below or just talk to me naturally."
     )
+    await app.bot.send_message(chat_id=TELEGRAM_USER_ID, text=startup_msg, reply_markup=kb)
+    log.info("Telegram bot started — polling for messages")
 
-    # Start Telegram bot with polling
-    async with app:
-        await app.initialize()
-        await app.start()
-
-        from telegram import ReplyKeyboardMarkup, KeyboardButton
-        kb = ReplyKeyboardMarkup([
-            [KeyboardButton("📊 Portfolio"), KeyboardButton("📈 Markets"), KeyboardButton("📰 News")],
-            [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
-            [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
-        ], resize_keyboard=True, persistent=True)
-        await app.bot.send_message(chat_id=TELEGRAM_USER_ID, text=startup_msg, reply_markup=kb)
-        log.info("Telegram bot started — polling for messages")
-
-        # Run until interrupted
-        await app.updater.start_polling(drop_pending_updates=True)
-        try:
-            await asyncio.Event().wait()   # block forever
-        except (KeyboardInterrupt, SystemExit):
-            log.info("Shutdown signal received")
-        finally:
-            scheduler.shutdown(wait=False)
-            await app.updater.stop()
-            await app.stop()
-            log.info("Analyst Desk shut down cleanly")
+    # Block until interrupted
+    try:
+        await asyncio.Event().wait()
+    except (KeyboardInterrupt, SystemExit):
+        log.info("Shutdown signal received")
+    finally:
+        scheduler.shutdown(wait=False)
+        await app.updater.stop()
+        await app.stop()
+        await app.shutdown()
+        log.info("Analyst Desk shut down cleanly")
 
 
 if __name__ == "__main__":
