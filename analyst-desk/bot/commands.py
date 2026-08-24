@@ -552,36 +552,46 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
     if not text:
         return
 
-    # Menu button shortcut
+    # Menu button shortcuts
     if text in _MENU_MAP:
         await _MENU_MAP[text](update, context)
         return
 
-    # Research button prompts
     if text in ("📰 News", "🔬 Research"):
         await send(update, "Which stock? Just type the ticker symbol, e.g. META")
         return
 
-    # Calendar intent
-    if is_calendar_request(text):
-        now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
-        event_data = parse_calendar_intent(text, now_str)
-        if event_data:
-            service = get_calendar_service()
-            if not service:
-                await send(update,
-                           "I'd add that to your calendar, but it's not connected yet.\n"
-                           "Run /setup_calendar to link Google Calendar.")
-                return
-            created = create_event(event_data)
-            if created:
-                await send(update,
-                           f"✅ Added to calendar:\n\n"
-                           f"📅 {event_data.get('title','Event')}\n"
-                           f"{event_data.get('date','')} at {event_data.get('start_time','')}")
-                return
+    # Send immediate acknowledgment so user knows request is received
+    await update.message.reply_text("Thinking...", reply_markup=main_menu())
 
-    # Check if a portfolio ticker is mentioned directly
+    # Calendar intent (only on clearly calendar-shaped messages)
+    if is_calendar_request(text):
+        try:
+            now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
+            event_data = parse_calendar_intent(text, now_str)
+            if event_data:
+                service = get_calendar_service()
+                if not service:
+                    await update.message.reply_text(
+                        "I'd add that to your calendar, but it's not connected yet.\n"
+                        "Run /setup_calendar to link Google Calendar.",
+                        reply_markup=main_menu()
+                    )
+                    return
+                created = create_event(event_data)
+                if created:
+                    await update.message.reply_text(
+                        f"✅ Added to calendar:\n\n"
+                        f"📅 {event_data.get('title','Event')}\n"
+                        f"{event_data.get('date','')} at {event_data.get('start_time','')}",
+                        reply_markup=main_menu()
+                    )
+                    return
+        except Exception as e:
+            log.warning(f"Calendar handler error: {e}")
+            # Fall through to Claude assistant
+
+    # Check if a portfolio ticker is mentioned
     words = text.upper().split()
     portfolio_tickers = set(WATCHLIST.keys())
     mentioned = next(
@@ -589,15 +599,12 @@ async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
         None
     )
 
-    # Typing indicator
-    await update.effective_chat.send_action("typing")
-
     prompt = f"""You are Tyler, a personal financial analyst assistant for Yulian.
 Portfolio: {list(WATCHLIST.keys())}
 
 Answer concisely and precisely. If asking about a stock: give price context, thesis, key risks.
-If market/macro question: answer directly with data-driven analysis.
-If asking what to do: give a clear, direct institutional-quality answer.
+If market/macro: answer with data-driven analysis.
+If asking what to do: give a direct institutional-quality answer.
 Max 180 words. No disclaimers. No "I'm just an AI". Institutional tone.
 
 Message: {text}"""
@@ -609,12 +616,15 @@ Message: {text}"""
         )
         reply = resp.content[0].text.strip()
         if mentioned:
-            await send(update, reply, ticker_actions(mentioned))
+            await update.message.reply_text(reply, reply_markup=ticker_actions(mentioned))
         else:
-            await send(update, reply)
+            await update.message.reply_text(reply, reply_markup=main_menu())
     except Exception as e:
-        log.warning(f"NL handler: {e}")
-        await send(update, "Something went wrong. Use the menu or try again.")
+        log.warning(f"NL handler error: {e}")
+        await update.message.reply_text(
+            f"Couldn't process that right now. Try again or use the menu buttons.",
+            reply_markup=main_menu()
+        )
 
 
 # ── Callback Query Handler ────────────────────────────────────────────────────

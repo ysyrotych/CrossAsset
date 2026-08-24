@@ -184,7 +184,14 @@ async def main():
     async with app:
         await app.initialize()
         await app.start()
-        await app.bot.send_message(chat_id=TELEGRAM_USER_ID, text=startup_msg)
+
+        from telegram import ReplyKeyboardMarkup, KeyboardButton
+        kb = ReplyKeyboardMarkup([
+            [KeyboardButton("📊 Portfolio"), KeyboardButton("📈 Markets"), KeyboardButton("📰 News")],
+            [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
+            [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
+        ], resize_keyboard=True, persistent=True)
+        await app.bot.send_message(chat_id=TELEGRAM_USER_ID, text=startup_msg, reply_markup=kb)
         log.info("Telegram bot started — polling for messages")
 
         # Run until interrupted

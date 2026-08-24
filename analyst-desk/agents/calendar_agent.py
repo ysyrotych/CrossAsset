@@ -65,15 +65,28 @@ def get_calendar_service():
 
 def is_calendar_request(text: str) -> bool:
     """Quick check if a message looks like a calendar request."""
-    keywords = [
+    # Must contain an explicit calendar/scheduling keyword (not generic finance words)
+    explicit_keywords = [
         "add to calendar", "schedule", "remind me", "set a meeting",
-        "book", "appointment", "calendar", "add event", "remind",
+        "book a", "appointment", "calendar", "add event", "set reminder",
         "meeting with", "call with", "lunch with", "dinner with",
-        "tomorrow", "next week", "on monday", "on tuesday", "on wednesday",
-        "on thursday", "on friday", "at ", "pm", "am",
+        "drinks with", "coffee with", "catch up with",
     ]
+    # Time + action pattern: needs both a time reference AND an action word
+    time_refs = ["tomorrow", "next week", "on monday", "on tuesday", "on wednesday",
+                 "on thursday", "on friday", "on saturday", "on sunday"]
+    action_words = ["add", "book", "schedule", "remind", "set", "create", "put"]
+
     text_lower = text.lower()
-    return any(k in text_lower for k in keywords)
+
+    # Explicit calendar phrase — direct match
+    if any(k in text_lower for k in explicit_keywords):
+        return True
+
+    # Time reference + action word together — e.g. "add tomorrow at 3pm"
+    has_time = any(t in text_lower for t in time_refs)
+    has_action = any(a in text_lower for a in action_words)
+    return has_time and has_action
 
 
 def parse_calendar_intent(user_message: str, current_time: str) -> dict | None:
