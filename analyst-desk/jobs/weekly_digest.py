@@ -1,109 +1,157 @@
 """
-Weekly Digest Job — runs Sunday at 6 PM ET.
-Full portfolio health review with thesis integrity checks.
+Weekly Digest — Loop 26 (Goldman-Quality Report)
+Runs Sunday 6 PM ET. Full institutional research newsletter.
 """
 import logging
 from datetime import datetime
 from anthropic import Anthropic
-from data.prices import get_quote, get_history
-from data.fmp import get_key_metrics, get_analyst_consensus, get_latest_earnings
+from data.prices import get_quotes_batch, get_history
+from data.fmp import get_key_metrics, get_analyst_consensus
 from data.macro import get_macro_snapshot, format_macro_brief
 from agents.earnings_agent import get_upcoming_earnings
-from config import WATCHLIST, ANTHROPIC_API_KEY, MODEL_DEEP
+from agents.earnings_quality import score_earnings_quality
+from db.queries import get_pnl_history, get_pnl_streak
+from config import WATCHLIST, ANTHROPIC_API_KEY, MODEL_DEEP, TIMEZONE
+import pytz
 
 log = logging.getLogger(__name__)
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
+TZ = pytz.timezone(TIMEZONE)
 
 
 async def run_weekly_digest(send_fn):
-    """Compose and send the Sunday weekly portfolio digest."""
+    """Compose and send the Sunday institutional weekly report."""
     log.info("Composing weekly digest")
-    today = datetime.now().strftime("%A, %B %-d, %Y")
+    today = datetime.now(TZ).strftime("%A, %B %-d, %Y")
 
+    # Portfolio data
+    tickers = list(WATCHLIST.keys())
+    quotes  = get_quotes_batch(tickers)
+
+    total_value = 0.0
     holdings_data = []
     for ticker, info in WATCHLIST.items():
-        if ticker in ("SPY", "QQQ", "GLD"):
-            quote = get_quote(ticker)
-            holdings_data.append({
-                "ticker": ticker,
-                "weight": info.get("weight", 0),
-                "price":  quote.get("price"),
-                "chg_week": quote.get("change_pct"),
-                "type": "index/etf",
-            })
-            continue
+        shares = info.get("shares", 0)
+        q      = quotes.get(ticker, {})
+        price  = q.get("price") or 0
+        prev   = q.get("prev_close") or price
+        value  = shares * price
+        total_value += value
 
         try:
-            quote   = get_quote(ticker)
-            metrics = get_key_metrics(ticker)
-            hist    = get_history(ticker, period="5d")
+            hist     = get_history(ticker, period="5d")
             week_chg = None
             if hist and len(hist) >= 2:
                 week_chg = (hist[-1]["close"] - hist[0]["close"]) / hist[0]["close"]
 
+            metrics  = get_key_metrics(ticker)
             holdings_data.append({
                 "ticker":    ticker,
-                "weight":    info.get("weight", 0),
-                "sector":    info.get("sector", ""),
-                "thesis":    info.get("thesis", "")[:200],
-                "price":     quote.get("price"),
+                "sector":    info.get("sector",""),
+                "thesis":    info.get("thesis","")[:150],
+                "shares":    shares,
+                "price":     price,
+                "value":     value,
                 "chg_week":  week_chg,
                 "pe":        metrics.get("peRatioTTM") if metrics else None,
                 "fcf_yield": metrics.get("freeCashFlowYieldTTM") if metrics else None,
                 "roic":      metrics.get("roicTTM") if metrics else None,
             })
         except Exception as e:
-            log.warning(f"Weekly digest data({ticker}): {e}")
+            log.warning(f"weekly_data({ticker}): {e}")
+            holdings_data.append({"ticker": ticker, "value": value, "shares": shares,
+                                   "price": price, "chg_week": None})
 
+    # Sort by value
+    holdings_data = sorted(holdings_data, key=lambda h: -(h.get("value") or 0))
+    for h in holdings_data:
+        h["weight"] = h["value"] / total_value if total_value else 0
+
+    # P&L history
+    pnl_history = get_pnl_history(days=7)
+    week_pnl    = sum(r["pnl"] for r in pnl_history) if pnl_history else 0
+    streak      = get_pnl_streak()
+
+    # Macro
     macro     = get_macro_snapshot()
     macro_str = format_macro_brief(macro)
-    earnings  = get_upcoming_earnings(days=14)
+
+    # Upcoming earnings
+    earnings   = get_upcoming_earnings(days=14)
     ticker_set = set(WATCHLIST.keys())
-    upcoming_eps = [e for e in earnings if e.get("symbol","") in ticker_set]
+    upcoming   = [e for e in earnings if e.get("symbol","") in ticker_set]
 
-    holdings_str = "\n".join([
-        f"  {h['ticker']} ({h['weight']*100:.1f}%): ${h.get('price','N/A')} "
-        f"WoW {h.get('chg_week',0)*100:+.2f}% "
-        f"{'P/E: '+str(round(h.get('pe',0),1)) if h.get('pe') else ''}"
-        for h in sorted(holdings_data, key=lambda x: -x.get("weight", 0))
-    ])
+    # Build data string
+    perf_lines = []
+    for h in holdings_data:
+        wk = h.get("chg_week")
+        wk_str = f"{wk*100:+.2f}%" if wk is not None else "—"
+        pe_str = f"P/E {h['pe']:.1f}" if h.get("pe") else ""
+        perf_lines.append(
+            f"{h['ticker']:<6} {h['weight']*100:.1f}%  {wk_str:>8}  ${h['value']:>8,.0f}  {pe_str}"
+        )
 
-    upcoming_str = "\n".join([
-        f"  {e['symbol']}: {e.get('date','')} | EPS est ${e.get('epsEstimated',0):.2f}"
-        for e in upcoming_eps[:8]
-    ])
+    thesis_lines = []
+    for h in holdings_data[:6]:
+        thesis_lines.append(f"{h['ticker']}: {h.get('thesis','')[:120]}")
 
-    prompt = f"""Write a comprehensive Sunday weekly portfolio digest for a professional investor.
+    earnings_str = "\n".join([
+        f"  {e['symbol']}: {e.get('date','')} {e.get('time','')} | EPS est ${e.get('epsEstimated',0):.2f}"
+        for e in upcoming[:6]
+    ]) or "  None in next 14 days"
 
-Date: {today}
-Macro: {macro_str}
+    prompt = f"""Write a Goldman Sachs-quality Sunday portfolio research report.
 
-PORTFOLIO THIS WEEK:
-{holdings_str}
+DATE: {today}
+PORTFOLIO VALUE: ${total_value:,.0f}
+WEEK P&L: ${week_pnl:+,.0f}  {'Win streak: '+str(streak)+' days' if streak >= 2 else ''}
 
-UPCOMING EARNINGS (next 14 days):
-{upcoming_str or "  None scheduled"}
+HOLDINGS PERFORMANCE:
+{chr(10).join(perf_lines)}
 
-Write the digest with these sections:
-1. 🗓 WEEKLY PORTFOLIO DIGEST · [date]
-2. WEEK IN REVIEW — 2-3 sentences on what drove the week, macro context
-3. PORTFOLIO PERFORMANCE — table of holdings with WoW change, key movers
-4. THESIS CHECKS — for top 5 holdings by weight, is thesis intact? Any cracks?
-5. RISK WATCH — top 3 risks heading into next week
-6. ON THE CALENDAR — upcoming earnings and macro events
-7. NEXT WEEK FOCUS — 3 specific things to monitor
+INVESTMENT THESES:
+{chr(10).join(thesis_lines)}
 
-Tone: senior analyst to PM. Institutional, direct. Under 500 words."""
+MACRO ENVIRONMENT:
+{macro_str}
+
+EARNINGS NEXT 14 DAYS:
+{earnings_str}
+
+Write a complete institutional weekly report with these sections:
+
+📊 WEEKLY RESEARCH REPORT · [date]
+
+1. EXECUTIVE SUMMARY
+2-3 sentences on what drove the week and what it means for the portfolio.
+
+2. PORTFOLIO PERFORMANCE
+Clean recap of week's winners and losers with specific dollar and % attribution.
+What drove the moves? Was it macro or fundamental?
+
+3. THESIS INTEGRITY CHECK
+For the top 5 holdings by value, assess: INTACT / WATCH / CHALLENGED
+One specific reason per holding — not generic, be specific to the thesis.
+
+4. RISK RADAR
+Top 3 risks heading into next week, specific and actionable.
+
+5. WEEK AHEAD — WHAT TO WATCH
+5 specific things: earnings dates, macro events, specific price levels or news to monitor.
+
+6. TYLER'S CONVICTION CALL
+One specific view Tyler has highest conviction on right now. Bull or bear, pick a side.
+
+Tone: Senior sell-side analyst writing to a sophisticated PM. No fluff, no hedging.
+Max 600 words."""
 
     try:
-        resp = client.messages.create(
-            model=MODEL_DEEP, max_tokens=1000,
-            messages=[{"role": "user", "content": prompt}]
-        )
+        resp = client.messages.create(model=MODEL_DEEP, max_tokens=1400,
+                                       messages=[{"role": "user", "content": prompt}])
         msg = resp.content[0].text.strip()
         await send_fn(msg)
         log.info("Weekly digest sent")
     except Exception as e:
-        log.warning(f"Weekly digest: {e}")
-        fallback = f"🗓 WEEKLY DIGEST · {today}\n\nPortfolio:\n{holdings_str}\n\nMacro: {macro_str}"
+        log.warning(f"weekly_digest: {e}")
+        fallback = f"📊 WEEKLY DIGEST · {today}\n\n{chr(10).join(perf_lines)}\n\n{macro_str}"
         await send_fn(fallback)

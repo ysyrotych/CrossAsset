@@ -13,6 +13,8 @@ from bot.commands import (
     cmd_earnings, cmd_insider, cmd_ratings, cmd_macro,
     cmd_brief, cmd_digest, cmd_mute, cmd_unmute, cmd_status,
     cmd_calendar, cmd_setup_calendar, cmd_cal_code,
+    cmd_chart, cmd_pnl, cmd_technical, cmd_shorts, cmd_options,
+    cmd_transcript, cmd_fed, cmd_journal, cmd_rule,
     handle_message, handle_callback,
 )
 from bot.formatter import split_message
@@ -45,6 +47,15 @@ def build_app() -> Application:
     app.add_handler(CommandHandler("calendar",       cmd_calendar))
     app.add_handler(CommandHandler("setup_calendar", cmd_setup_calendar))
     app.add_handler(CommandHandler("cal_code",       cmd_cal_code))
+    app.add_handler(CommandHandler("chart",          cmd_chart))
+    app.add_handler(CommandHandler("pnl",            cmd_pnl))
+    app.add_handler(CommandHandler("technical",      cmd_technical))
+    app.add_handler(CommandHandler("shorts",         cmd_shorts))
+    app.add_handler(CommandHandler("options",        cmd_options))
+    app.add_handler(CommandHandler("transcript",     cmd_transcript))
+    app.add_handler(CommandHandler("fed",            cmd_fed))
+    app.add_handler(CommandHandler("journal",        cmd_journal))
+    app.add_handler(CommandHandler("rule",           cmd_rule))
 
     # Inline keyboard button presses
     app.add_handler(CallbackQueryHandler(handle_callback))
@@ -68,3 +79,20 @@ async def send_alert(message: str):
             await bot.send_message(chat_id=TELEGRAM_USER_ID, text=chunk)
         except TelegramError as e:
             log.warning(f"Telegram send_alert: {e}")
+
+
+async def send_photo_alert(photo_bytes, caption: str = ""):
+    """Push a photo/chart to the configured Telegram user."""
+    if not TELEGRAM_USER_ID or not TELEGRAM_BOT_TOKEN:
+        log.warning("Telegram not configured — photo dropped")
+        return
+    bot = _app.bot if _app else Bot(token=TELEGRAM_BOT_TOKEN)
+    try:
+        photo_bytes.seek(0)
+        await bot.send_photo(
+            chat_id=TELEGRAM_USER_ID,
+            photo=photo_bytes,
+            caption=caption[:1024],
+        )
+    except TelegramError as e:
+        log.warning(f"Telegram send_photo_alert: {e}")

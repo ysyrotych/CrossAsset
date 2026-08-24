@@ -30,6 +30,13 @@ from agents.calendar_agent import (parse_calendar_intent, create_event,
                                     is_calendar_request, get_calendar_service)
 from jobs.morning_brief import run_morning_brief
 from jobs.weekly_digest import run_weekly_digest
+from agents.technical_signals import compute_signals
+from agents.short_interest_agent import format_short_report
+from agents.options_flow_agent import format_options_report
+from agents.transcript_agent import get_transcript_analysis
+from agents.fed_watch_agent import format_fed_report
+from agents.trade_journal import format_thesis_report, record_trade_decision
+from agents.custom_rules_agent import register_custom_rule
 
 log = logging.getLogger(__name__)
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
@@ -81,6 +88,14 @@ def ticker_actions(ticker: str) -> InlineKeyboardMarkup:
         [
             InlineKeyboardButton("👤 Insider",     callback_data=f"insider:{ticker}"),
             InlineKeyboardButton("📊 Ratings",     callback_data=f"ratings:{ticker}"),
+        ],
+        [
+            InlineKeyboardButton("📈 Chart",       callback_data=f"chart:{ticker}"),
+            InlineKeyboardButton("⚙️ Options",     callback_data=f"options:{ticker}"),
+        ],
+        [
+            InlineKeyboardButton("📉 Shorts",      callback_data=f"shorts:{ticker}"),
+            InlineKeyboardButton("📓 Journal",     callback_data=f"journal:{ticker}"),
         ],
     ])
 
@@ -472,6 +487,247 @@ async def cmd_cal_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
         await send(update, "❌ Code didn't work. Try /setup_calendar again.")
 
 
+# ── Chart ─────────────────────────────────────────────────────────────────────
+
+async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /chart TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Generating chart for {ticker}...")
+
+    try:
+        import asyncio
+        from agents.chart_agent import generate_price_chart
+        from data.prices import get_history
+        from bot.telegram_bot import _app
+        from config import TELEGRAM_USER_ID
+
+        loop = asyncio.get_running_loop()
+        history = await loop.run_in_executor(None, get_history, ticker, "3mo")
+        info = WATCHLIST.get(ticker, {})
+        buy_price = info.get("buy_price")
+        img_bytes = await loop.run_in_executor(
+            None, generate_price_chart, ticker, history, 90, buy_price, None
+        )
+        if img_bytes:
+            img_bytes.seek(0)
+            chat_id = (update.effective_chat.id if update.effective_chat
+                       else TELEGRAM_USER_ID)
+            await _app.bot.send_photo(
+                chat_id=chat_id,
+                photo=img_bytes,
+                caption=f"📈 {ticker} — 3-Month Chart",
+                reply_markup=ticker_actions(ticker),
+            )
+        else:
+            await send(update, f"Chart unavailable for {ticker}")
+    except Exception as e:
+        log.warning(f"cmd_chart({ticker}): {e}")
+        await send(update, f"Chart error: {e}")
+
+
+# ── Portfolio P&L ─────────────────────────────────────────────────────────────
+
+async def cmd_pnl(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Computing P&L...")
+    try:
+        from agents.pnl_agent import run_pnl_update
+        await run_pnl_update(
+            lambda msg: update.effective_message.reply_text(msg, reply_markup=main_menu())
+        )
+    except Exception as e:
+        await send(update, f"P&L error: {e}")
+
+
+# ── Technical Signals ─────────────────────────────────────────────────────────
+
+async def cmd_technical(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /technical TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Computing signals for {ticker}...")
+
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        signals = await loop.run_in_executor(None, compute_signals, ticker)
+
+        rsi    = signals.get("rsi")
+        macd_h = signals.get("macd_hist")
+        ma50   = signals.get("ma50")
+        ma200  = signals.get("ma200")
+        price  = signals.get("price")
+        hi52   = signals.get("week52_high")
+        lo52   = signals.get("week52_low")
+
+        rsi_str = f"{rsi:.1f}" if rsi else "N/A"
+        rsi_note = ""
+        if rsi:
+            if rsi < 30:
+                rsi_note = " 🟢 OVERSOLD"
+            elif rsi > 70:
+                rsi_note = " 🔴 OVERBOUGHT"
+
+        lines = [f"📡 TECHNICAL · {ticker}\n"]
+        if price:
+            lines.append(f"Price:  ${price:.2f}")
+        lines.append(f"RSI:    {rsi_str}{rsi_note}")
+        if macd_h is not None:
+            lines.append(f"MACD:   {'▲ bullish' if macd_h > 0 else '▼ bearish'} ({macd_h:.3f})")
+        if ma50 and ma200:
+            lines.append(f"MA50:   ${ma50:.2f}")
+            lines.append(f"MA200:  ${ma200:.2f}")
+            if price:
+                if ma50 > ma200:
+                    lines.append("Golden Cross: ✅ Bullish structure")
+                else:
+                    lines.append("Death Cross: ⚠️ Bearish structure")
+        if hi52 and lo52 and price:
+            from_hi = (price - hi52) / hi52
+            lines.append(f"52W:    ${lo52:.2f} — ${hi52:.2f}  ({from_hi*100:+.1f}% from high)")
+
+        convergence = signals.get("convergence")
+        if convergence:
+            direction = convergence["direction"].upper()
+            strength  = convergence["strength"]
+            d_emoji   = "🟢" if direction == "BULLISH" else "🔴"
+            lines.append(f"\nSignal Convergence: {d_emoji} {direction} ({strength} signals agree)")
+
+        await send(update, "\n".join(lines), ticker_actions(ticker))
+    except Exception as e:
+        log.warning(f"cmd_technical({ticker}): {e}")
+        await send(update, f"Technical analysis error: {e}")
+
+
+# ── Short Interest ────────────────────────────────────────────────────────────
+
+async def cmd_shorts(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /shorts TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Fetching short data for {ticker}...")
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(None, format_short_report, ticker)
+        await send(update, report, ticker_actions(ticker))
+    except Exception as e:
+        await send(update, f"Short data error: {e}")
+
+
+# ── Options Flow ──────────────────────────────────────────────────────────────
+
+async def cmd_options(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /options TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Analyzing options flow for {ticker}...")
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(None, format_options_report, ticker)
+        await send(update, report, ticker_actions(ticker))
+    except Exception as e:
+        await send(update, f"Options error: {e}")
+
+
+# ── Earnings Transcript ───────────────────────────────────────────────────────
+
+async def cmd_transcript(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /transcript TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Fetching transcript for {ticker}... (~20 sec)")
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        analysis = await loop.run_in_executor(None, get_transcript_analysis, ticker)
+        await send(update, analysis, ticker_actions(ticker))
+    except Exception as e:
+        await send(update, f"Transcript error: {e}")
+
+
+# ── Fed Watch ─────────────────────────────────────────────────────────────────
+
+async def cmd_fed(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    await update.effective_message.reply_text("Fetching Fed data...")
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(None, format_fed_report)
+        await send(update, report)
+    except Exception as e:
+        await send(update, f"Fed data error: {e}")
+
+
+# ── Trade Journal ─────────────────────────────────────────────────────────────
+
+async def cmd_journal(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Usage: /journal TICKER", portfolio_ticker_grid())
+        return
+
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Loading journal for {ticker}...")
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        report = await loop.run_in_executor(None, format_thesis_report, ticker)
+        await send(update, report, ticker_actions(ticker))
+    except Exception as e:
+        await send(update, f"Journal error: {e}")
+
+
+# ── Custom Alert Rules ────────────────────────────────────────────────────────
+
+async def cmd_rule(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args or []
+    if not args:
+        await send(update, (
+            "Create a custom alert rule in plain English:\n\n"
+            "/rule Alert when NVDA drops 5%\n"
+            "/rule Alert when META goes above $650\n"
+            "/rule Alert when AAPL RSI drops below 30"
+        ))
+        return
+    rule_text = " ".join(args)
+    try:
+        import asyncio
+        loop = asyncio.get_running_loop()
+        result = await loop.run_in_executor(None, register_custom_rule, rule_text)
+        await send(update, result)
+    except Exception as e:
+        await send(update, f"Rule error: {e}")
+
+
 # ── Brief / Digest ────────────────────────────────────────────────────────────
 
 async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -520,14 +776,25 @@ async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
         f"Calendar: {'✅ Connected' if cal_ok else '❌ Not connected (/setup_calendar)'}",
         "",
         "MONITORS RUNNING:",
-        "  ✅ Price (5min, market hours)",
+        "  ✅ Price alerts (5min, market hours)",
+        "  ✅ Crisis detection (5min, market hours)",
+        "  ✅ Custom rules (5min, market hours)",
         "  ✅ News — portfolio (15min)",
-        "  ✅ Market news — global (3× daily)",
+        "  ✅ Earnings war room (15min)",
+        "  ✅ Cross-asset (30min, market hours)",
+        "  ✅ Intraday P&L (30min)",
         "  ✅ SEC filings (30min)",
         "  ✅ Analyst ratings (1h)",
-        "  ✅ Earnings watch (15min)",
+        "  ✅ Technical signals (2h)",
+        "  ✅ Competitor intel (2h)",
+        "  ✅ Market news — global (3× daily)",
         "  ✅ Morning brief (7 AM ET)",
+        "  ✅ Close heatmap (4:30 PM ET)",
         "  ✅ Weekly digest (Sun 6 PM)",
+        "",
+        "COMMANDS:",
+        "  /chart /pnl /technical /shorts",
+        "  /options /transcript /fed /journal /rule",
     ]
     await send(update, "\n".join(lines))
 
@@ -669,3 +936,21 @@ async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
 
     elif data == "prompt:deep":
         await send(update, "Which ticker to research? Just type the symbol, e.g.: NVDA")
+
+    elif data.startswith("chart:"):
+        await cmd_chart(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("options:"):
+        await cmd_options(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("shorts:"):
+        await cmd_shorts(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("journal:"):
+        await cmd_journal(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("technical:"):
+        await cmd_technical(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("transcript:"):
+        await cmd_transcript(update, context, data.split(":", 1)[1])

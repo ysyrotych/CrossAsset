@@ -15,7 +15,7 @@ from apscheduler.triggers.interval import IntervalTrigger
 
 from config import TELEGRAM_BOT_TOKEN, TELEGRAM_USER_ID, TIMEZONE, LOG_LEVEL
 from db.models import init_db
-from bot.telegram_bot import build_app, send_alert
+from bot.telegram_bot import build_app, send_alert, send_photo_alert
 from jobs.price_check import run_price_check, reset_gap_tracker
 from jobs.news_check import run_news_check
 from jobs.filing_check import run_filing_check
@@ -26,6 +26,13 @@ from jobs.weekly_digest import run_weekly_digest
 from jobs.market_news_check import (run_market_news_premarket,
                                      run_market_news_midday,
                                      run_market_news_close)
+from jobs.technical_check import run_technical_check
+from jobs.pnl_update import run_intraday_pnl, run_close_pnl
+from jobs.cross_asset_check import run_cross_asset_check
+from jobs.crisis_check import run_crisis_check
+from jobs.competitor_check import run_competitor_check
+from jobs.earnings_war_room import run_war_room_check
+from jobs.custom_rules_check import run_custom_rules_check
 from db.queries import cleanup_old_records
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -145,6 +152,69 @@ def setup_scheduler(scheduler: AsyncIOScheduler):
         cleanup_old_records,
         CronTrigger(hour=3, minute=0, timezone=TZ),
         id="db_cleanup", name="DB Cleanup",
+    )
+
+    # Technical signals — every 2 hours (skips VOO/VUG internally)
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_technical_check(send_alert)),
+        IntervalTrigger(hours=2),
+        id="technical_check", name="Technical Signals",
+        max_instances=1, coalesce=True,
+    )
+
+    # Intraday P&L — every 30 min
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_intraday_pnl(send_alert)),
+        IntervalTrigger(minutes=30),
+        id="pnl_intraday", name="Intraday P&L",
+        max_instances=1, coalesce=True,
+    )
+
+    # Close heatmap — 4:30 PM ET weekdays
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_close_pnl(send_alert, send_photo_alert)),
+        CronTrigger(day_of_week="mon-fri", hour=16, minute=30, timezone=TZ),
+        id="pnl_close", name="Close P&L Heatmap",
+    )
+
+    # Cross-asset monitoring — every 30 min
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_cross_asset_check(send_alert)),
+        IntervalTrigger(minutes=30),
+        id="cross_asset", name="Cross-Asset Check",
+        max_instances=1, coalesce=True,
+    )
+
+    # Crisis detection — every 5 min
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_crisis_check(send_alert)),
+        IntervalTrigger(minutes=5),
+        id="crisis_check", name="Crisis Detection",
+        max_instances=1, coalesce=True,
+    )
+
+    # Competitor intelligence — every 2 hours
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_competitor_check(send_alert)),
+        IntervalTrigger(hours=2),
+        id="competitor_check", name="Competitor Intelligence",
+        max_instances=1, coalesce=True,
+    )
+
+    # Earnings war room — every 15 min
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_war_room_check(send_alert)),
+        IntervalTrigger(minutes=15),
+        id="earnings_war_room", name="Earnings War Room",
+        max_instances=1, coalesce=True,
+    )
+
+    # Custom alert rules — every 5 min
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_custom_rules_check(send_alert)),
+        IntervalTrigger(minutes=5),
+        id="custom_rules", name="Custom Alert Rules",
+        max_instances=1, coalesce=True,
     )
 
     log.info(f"Scheduled {len(scheduler.get_jobs())} jobs")

@@ -1,6 +1,6 @@
 """SQLAlchemy models for analyst desk state + deduplication."""
 from datetime import datetime
-from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, Boolean, Text
+from sqlalchemy import create_engine, Column, String, Float, Integer, DateTime, Boolean, Text, JSON
 from sqlalchemy.orm import declarative_base, sessionmaker
 from config import DB_PATH
 
@@ -10,7 +10,6 @@ Session = sessionmaker(bind=engine)
 
 
 class AlertSent(Base):
-    """Dedup log — one row per alert dispatched to Telegram."""
     __tablename__ = "alerts_sent"
     id           = Column(Integer, primary_key=True, autoincrement=True)
     ticker       = Column(String(16), nullable=False, index=True)
@@ -22,35 +21,31 @@ class AlertSent(Base):
 
 
 class PriceSnapshot(Base):
-    """Last-seen price per ticker — used to detect moves between checks."""
     __tablename__ = "price_snapshots"
-    ticker        = Column(String(16), primary_key=True)
-    price         = Column(Float)
-    prev_close    = Column(Float)
-    volume        = Column(Float)
+    ticker         = Column(String(16), primary_key=True)
+    price          = Column(Float)
+    prev_close     = Column(Float)
+    volume         = Column(Float)
     avg_volume_30d = Column(Float)
-    updated_at    = Column(DateTime, default=datetime.utcnow)
+    updated_at     = Column(DateTime, default=datetime.utcnow)
 
 
 class MutedTicker(Base):
-    """Tickers silenced via /mute command."""
     __tablename__ = "muted_tickers"
-    ticker    = Column(String(16), primary_key=True)
+    ticker      = Column(String(16), primary_key=True)
     muted_until = Column(DateTime, nullable=False)
 
 
 class Thesis(Base):
-    """Investment thesis per ticker with integrity tracking."""
     __tablename__ = "theses"
     ticker       = Column(String(16), primary_key=True)
     thesis_text  = Column(Text)
-    status       = Column(String(16), default="INTACT")   # INTACT / WATCH / CHALLENGED
+    status       = Column(String(16), default="INTACT")
     last_checked = Column(DateTime)
     notes        = Column(Text)
 
 
 class SeenFiling(Base):
-    """Tracks SEC filings already processed to avoid re-alerting."""
     __tablename__ = "seen_filings"
     accession_no = Column(String(32), primary_key=True)
     ticker       = Column(String(16), index=True)
@@ -59,19 +54,80 @@ class SeenFiling(Base):
 
 
 class SeenNews(Base):
-    """Tracks news articles already processed."""
     __tablename__ = "seen_news"
-    url_hash  = Column(String(64), primary_key=True)
-    ticker    = Column(String(16), index=True)
-    seen_at   = Column(DateTime, default=datetime.utcnow)
+    url_hash = Column(String(64), primary_key=True)
+    ticker   = Column(String(16), index=True)
+    seen_at  = Column(DateTime, default=datetime.utcnow)
 
 
 class SeenRating(Base):
-    """Tracks analyst rating changes already processed."""
     __tablename__ = "seen_ratings"
     rating_hash = Column(String(64), primary_key=True)
     ticker      = Column(String(16), index=True)
     seen_at     = Column(DateTime, default=datetime.utcnow)
+
+
+class DailyPnL(Base):
+    """Daily portfolio P&L tracking for streaks and history."""
+    __tablename__ = "daily_pnl"
+    id            = Column(Integer, primary_key=True, autoincrement=True)
+    date          = Column(String(10), nullable=False, index=True)
+    total_value   = Column(Float)
+    day_pnl       = Column(Float)
+    day_pnl_pct   = Column(Float)
+    best_ticker   = Column(String(16))
+    worst_ticker  = Column(String(16))
+    recorded_at   = Column(DateTime, default=datetime.utcnow)
+
+
+class TylerMemory(Base):
+    """Persistent memory — Tyler remembers preferences and context."""
+    __tablename__ = "tyler_memory"
+    key        = Column(String(128), primary_key=True)
+    value      = Column(Text)
+    category   = Column(String(32))     # preference | decision | note | alert_pref
+    updated_at = Column(DateTime, default=datetime.utcnow)
+
+
+class CustomAlertRule(Base):
+    """User-defined alert rules set via natural language."""
+    __tablename__ = "custom_alert_rules"
+    id          = Column(Integer, primary_key=True, autoincrement=True)
+    description = Column(Text, nullable=False)
+    ticker      = Column(String(16))
+    rule_type   = Column(String(32))    # price_threshold | periodic_check | condition
+    parameters  = Column(Text)          # JSON string of rule parameters
+    active      = Column(Boolean, default=True)
+    created_at  = Column(DateTime, default=datetime.utcnow)
+    last_fired  = Column(DateTime)
+
+
+class InsiderCluster(Base):
+    """Tracks insider transactions for cluster detection."""
+    __tablename__ = "insider_clusters"
+    id               = Column(Integer, primary_key=True, autoincrement=True)
+    ticker           = Column(String(16), nullable=False, index=True)
+    reporter_name    = Column(String(128))
+    transaction_type = Column(String(32))
+    shares           = Column(Float)
+    price            = Column(Float)
+    value            = Column(Float)
+    transaction_date = Column(String(20))
+    alerted          = Column(Boolean, default=False)
+    recorded_at      = Column(DateTime, default=datetime.utcnow)
+
+
+class TechnicalSignal(Base):
+    """Last computed technical indicators per ticker."""
+    __tablename__ = "technical_signals"
+    ticker      = Column(String(16), primary_key=True)
+    rsi         = Column(Float)
+    macd        = Column(Float)
+    macd_signal = Column(Float)
+    ma50        = Column(Float)
+    ma200       = Column(Float)
+    price       = Column(Float)
+    updated_at  = Column(DateTime, default=datetime.utcnow)
 
 
 def init_db():
