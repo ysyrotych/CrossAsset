@@ -7,12 +7,14 @@ import logging
 from datetime import datetime, timedelta
 
 import matplotlib
-matplotlib.use("Agg")
+matplotlib.use("Agg")  # must be before pyplot import; headless server safe
 import matplotlib.pyplot as plt
 import matplotlib.patches as mpatches
-import numpy as np
 
 log = logging.getLogger(__name__)
+
+# Verify backend is headless; log once at import time
+log.debug(f"chart_agent: matplotlib backend = {matplotlib.get_backend()}")
 
 
 def generate_price_chart(ticker: str, quotes: list[dict], days: int = 90,
@@ -24,13 +26,15 @@ def generate_price_chart(ticker: str, quotes: list[dict], days: int = 90,
     """
     try:
         if not quotes or len(quotes) < 5:
+            log.warning(f"generate_price_chart({ticker}): insufficient data ({len(quotes) if quotes else 0} bars)")
             return None
 
-        dates  = [q["date"] for q in quotes[-days:]]
-        closes = [q["close"] for q in quotes[-days:]]
-        highs  = [q["high"] for q in quotes[-days:]]
-        lows   = [q["low"] for q in quotes[-days:]]
-        vols   = [q.get("volume", 0) for q in quotes[-days:]]
+        slice_ = quotes[-days:] if len(quotes) > days else quotes
+        dates  = [q["date"] for q in slice_]
+        closes = [float(q["close"]) for q in slice_]
+        highs  = [float(q["high"]) for q in slice_]
+        lows   = [float(q["low"]) for q in slice_]
+        vols   = [float(q.get("volume") or 0) for q in slice_]
 
         x = list(range(len(dates)))
 
@@ -110,14 +114,14 @@ def generate_price_chart(ticker: str, quotes: list[dict], days: int = 90,
         ax2.set_xticks(x[::step])
         ax2.set_xticklabels(date_labels, fontsize=6, rotation=30, ha="right", color="#8b949e")
 
-        plt.tight_layout(pad=1.5)
+        fig.tight_layout(pad=1.5)
         buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi=150, facecolor="#0d1117", bbox_inches="tight")
+        fig.savefig(buf, format="png", dpi=150, facecolor="#0d1117", bbox_inches="tight")
         plt.close(fig)
         buf.seek(0)
         return buf
     except Exception as e:
-        log.warning(f"generate_price_chart({ticker}): {e}")
+        log.warning(f"generate_price_chart({ticker}): {e}", exc_info=True)
         return None
 
 
@@ -181,12 +185,12 @@ def generate_portfolio_heatmap(holdings: list[dict]) -> io.BytesIO | None:
             color=title_color, fontsize=13, fontweight="bold", pad=8
         )
 
-        plt.tight_layout(pad=0.5)
+        fig.tight_layout(pad=0.5)
         buf = io.BytesIO()
-        plt.savefig(buf, format="png", dpi=150, facecolor="#0d1117", bbox_inches="tight")
+        fig.savefig(buf, format="png", dpi=150, facecolor="#0d1117", bbox_inches="tight")
         plt.close(fig)
         buf.seek(0)
         return buf
     except Exception as e:
-        log.warning(f"generate_portfolio_heatmap: {e}")
+        log.warning(f"generate_portfolio_heatmap: {e}", exc_info=True)
         return None

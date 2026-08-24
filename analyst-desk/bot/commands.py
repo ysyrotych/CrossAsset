@@ -504,22 +504,22 @@ async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: 
         import asyncio
         from agents.chart_agent import generate_price_chart
         from data.prices import get_history
-        from bot.telegram_bot import _app
-        from config import TELEGRAM_USER_ID
 
         loop = asyncio.get_running_loop()
         history = await loop.run_in_executor(None, get_history, ticker, "3mo")
-        info = WATCHLIST.get(ticker, {})
-        buy_price = info.get("buy_price")
+
+        if not history:
+            await send(update, f"No price history available for {ticker}")
+            return
+
+        info      = WATCHLIST.get(ticker, {})
+        buy_price = info.get("buy_price")  # optional cost basis field
         img_bytes = await loop.run_in_executor(
             None, generate_price_chart, ticker, history, 90, buy_price, None
         )
         if img_bytes:
             img_bytes.seek(0)
-            chat_id = (update.effective_chat.id if update.effective_chat
-                       else TELEGRAM_USER_ID)
-            await _app.bot.send_photo(
-                chat_id=chat_id,
+            await update.effective_message.reply_photo(
                 photo=img_bytes,
                 caption=f"📈 {ticker} — 3-Month Chart",
                 reply_markup=ticker_actions(ticker),
@@ -527,7 +527,7 @@ async def cmd_chart(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: 
         else:
             await send(update, f"Chart unavailable for {ticker}")
     except Exception as e:
-        log.warning(f"cmd_chart({ticker}): {e}")
+        log.warning(f"cmd_chart({ticker}): {e}", exc_info=True)
         await send(update, f"Chart error: {e}")
 
 
