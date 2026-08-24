@@ -1,7 +1,8 @@
 """
 News Check Job — runs every 15 minutes.
-Scans all watchlist tickers for material news.
+Runs blocking news fetches + Claude scoring in thread pool to keep event loop free.
 """
+import asyncio
 import logging
 from agents.news_analyst import check_news
 from config import WATCHLIST
@@ -12,10 +13,9 @@ log = logging.getLogger(__name__)
 async def run_news_check(send_fn):
     """Scan news for all watchlist tickers."""
     log.debug("Running news scan")
+    loop = asyncio.get_running_loop()
     for ticker in WATCHLIST:
         try:
-            msgs = check_news(ticker, send_fn)
-            if msgs:
-                log.info(f"News alerts sent for {ticker}: {len(msgs)}")
+            await loop.run_in_executor(None, check_news, ticker, send_fn)
         except Exception as e:
-            log.warning(f"News check({ticker}): {e}")
+            log.warning(f"news_check({ticker}): {e}")

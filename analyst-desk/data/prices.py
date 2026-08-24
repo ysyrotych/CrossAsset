@@ -4,8 +4,15 @@ All functions return plain dicts/lists — no pandas in callers.
 """
 import logging
 from datetime import datetime
+import requests
 import yfinance as yf
 import pytz
+
+# Give yfinance a session with a hard timeout so it never hangs the event loop
+_session = requests.Session()
+_session.request = lambda method, url, **kwargs: requests.Session.request(
+    _session, method, url, timeout=kwargs.pop("timeout", 12), **kwargs
+)
 
 log = logging.getLogger(__name__)
 

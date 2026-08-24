@@ -170,7 +170,7 @@ def try_send_alert(ticker: str, event_type: str, content_hash: str,
                    severity: str, message: str, send_fn) -> bool:
     """
     Check dedup, send alert, record it. Returns True if sent.
-    send_fn: async coroutine that sends the Telegram message.
+    send_fn: async coroutine. Safe to call from both async context and threads.
     """
     if is_muted(ticker):
         log.info(f"Alert suppressed — {ticker} is muted")
@@ -182,7 +182,13 @@ def try_send_alert(ticker: str, event_type: str, content_hash: str,
 
     try:
         import asyncio
-        asyncio.get_event_loop().create_task(send_fn(message))
+        try:
+            loop = asyncio.get_running_loop()
+            # Called from a thread (run_in_executor) — schedule on the running loop
+            asyncio.run_coroutine_threadsafe(send_fn(message), loop)
+        except RuntimeError:
+            # No running loop — shouldn't happen in production but handle gracefully
+            asyncio.run(send_fn(message))
         record_alert(ticker, event_type, content_hash, severity, message)
         log.info(f"Alert sent: {ticker} {event_type} ({severity})")
         return True

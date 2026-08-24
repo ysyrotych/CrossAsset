@@ -1,7 +1,8 @@
 """
 Price Check Job — runs every 5 minutes during market hours.
-Checks all watchlist tickers for significant price moves and gap opens.
+All blocking yfinance/API calls run in a thread pool so the event loop stays free.
 """
+import asyncio
 import logging
 from data.prices import is_market_hours
 from agents.price_watcher import check_price_move, check_gap_open
@@ -17,20 +18,19 @@ async def run_price_check(send_fn):
     if not is_market_hours():
         return
 
-    log.debug("Running price check for all watchlist tickers")
+    log.debug("Running price check")
+    loop = asyncio.get_running_loop()
+
     for ticker in WATCHLIST:
-        if ticker in ("SPY", "QQQ", "GLD"):  # indexes don't need gap alerts
-            check_price_move(ticker, send_fn)
-            continue
+        try:
+            if ticker not in _gap_checked_today:
+                await loop.run_in_executor(None, check_gap_open, ticker, send_fn)
+                _gap_checked_today.add(ticker)
 
-        # Gap check — once per day, first check after open
-        if ticker not in _gap_checked_today:
-            check_gap_open(ticker, send_fn)
-            _gap_checked_today.add(ticker)
-
-        check_price_move(ticker, send_fn)
+            await loop.run_in_executor(None, check_price_move, ticker, send_fn)
+        except Exception as e:
+            log.warning(f"price_check({ticker}): {e}")
 
 
 def reset_gap_tracker():
-    """Called at midnight to reset daily gap tracking."""
     _gap_checked_today.clear()
