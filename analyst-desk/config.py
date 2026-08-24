@@ -1,6 +1,6 @@
 """
 Analyst Desk — Watchlist & Configuration
-Edit WATCHLIST and THRESHOLDS to personalise. Everything else is env-driven.
+Watchlist stores actual share counts — weights computed live from current prices.
 """
 import os
 from dotenv import load_dotenv
@@ -18,37 +18,42 @@ FINNHUB_API_KEY    = os.getenv("FINNHUB_API_KEY", "")
 TIMEZONE           = os.getenv("TIMEZONE", "America/New_York")
 LOG_LEVEL          = os.getenv("LOG_LEVEL", "INFO")
 
-# ── Watchlist ─────────────────────────────────────────────────────────────────
-# ticker → { weight: portfolio %, thesis: your investment thesis }
-# Weight is informational — used to escalate severity for larger positions.
+# Google Calendar (stored as JSON strings in env after OAuth setup)
+GOOGLE_CREDENTIALS_JSON = os.getenv("GOOGLE_CREDENTIALS_JSON", "")
+GOOGLE_TOKEN_JSON       = os.getenv("GOOGLE_TOKEN_JSON", "")
+
+# ── Real Portfolio (Yulian — Robinhood) ───────────────────────────────────────
+# shares = actual shares owned. Weight computed live from current price × shares.
 WATCHLIST: dict[str, dict] = {
-    "AAPL":  {"weight": 0.08, "sector": "Technology",   "thesis": "Services flywheel + ecosystem lock-in. Watch: services margin, China revenue, Vision Pro adoption."},
-    "MSFT":  {"weight": 0.09, "sector": "Technology",   "thesis": "Azure + AI copilot upsell cycle. Watch: cloud segment growth rate, OpenAI partnership terms."},
-    "NVDA":  {"weight": 0.10, "sector": "Technology",   "thesis": "AI compute monopoly in training + inference. Watch: data center guidance, China export controls, AMD competition."},
-    "GOOGL": {"weight": 0.07, "sector": "Technology",   "thesis": "Search moat + Cloud inflection. Watch: AI search cannibalization risk, Cloud vs Azure/AWS gap."},
-    "META":  {"weight": 0.06, "sector": "Technology",   "thesis": "Ad efficiency + Llama open-source moat. Watch: Reality Labs burn, regulatory risk, ad market cycle."},
-    "JPM":   {"weight": 0.05, "sector": "Financials",   "thesis": "Best-in-class bank, rate cycle beneficiary. Watch: NII guidance, credit card delinquencies, CRE exposure."},
-    "BRK-B": {"weight": 0.05, "sector": "Financials",   "thesis": "Value compounder, Buffett succession. Watch: book value growth, operating earnings, cash deployment."},
-    "SPY":   {"weight": 0.10, "sector": "Index",        "thesis": "Core market exposure. Benchmark."},
-    "QQQ":   {"weight": 0.08, "sector": "Index",        "thesis": "Tech-weighted beta. Monitor relative to SPY for rotation signals."},
-    "GLD":   {"weight": 0.04, "sector": "Commodities",  "thesis": "Inflation hedge + tail risk. Watch: real rates, DXY correlation."},
+    "META":  {"shares": 1.82,      "sector": "Technology",  "thesis": "Ad efficiency + Llama open-source moat. Watch: Reality Labs burn, regulatory risk, ad market."},
+    "GOOGL": {"shares": 1.68,      "sector": "Technology",  "thesis": "Search moat + Cloud inflection. Watch: AI search cannibalization, Cloud vs Azure/AWS gap."},
+    "UBER":  {"shares": 6.24,      "sector": "Technology",  "thesis": "Mobility + delivery network moat. Watch: autonomous vehicle risk, driver economics, take rate."},
+    "DUOL":  {"shares": 2.86,      "sector": "Technology",  "thesis": "Gamified language learning flywheel. Watch: DAU growth, subscription conversion, AI integration."},
+    "NBIS":  {"shares": 1.19,      "sector": "Technology",  "thesis": "AI infrastructure play (Nebius). Watch: GPU utilization, revenue growth, hyperscaler competition."},
+    "CMG":   {"shares": 4.57,      "sector": "Consumer",    "thesis": "Best-in-class fast casual compounder. Watch: same-store sales, menu pricing, digital mix."},
+    "VOO":   {"shares": 0.170013,  "sector": "ETF",         "thesis": "Core S&P 500 exposure. Benchmark."},
+    "AMZN":  {"shares": 0.440286,  "sector": "Technology",  "thesis": "AWS margin expansion + ad revenue inflection. Watch: AWS growth rate, retail profitability."},
+    "AAPL":  {"shares": 0.278221,  "sector": "Technology",  "thesis": "Services flywheel + ecosystem lock-in. Watch: services margin, China revenue, AI integration."},
+    "APLD":  {"shares": 2.22,      "sector": "Technology",  "thesis": "Applied Digital — AI data center infra. Watch: contract wins, power capacity, financing."},
+    "HOOD":  {"shares": 0.173502,  "sector": "Financials",  "thesis": "Retail brokerage + crypto exposure. Watch: MAU, PFOF regulation, Gold subscribers."},
+    "NVDA":  {"shares": 0.058889,  "sector": "Technology",  "thesis": "AI compute monopoly. Watch: data center guidance, China export controls, AMD competition."},
+    "VUG":   {"shares": 0.130194,  "sector": "ETF",         "thesis": "Large-cap growth ETF. Tech-heavy benchmark."},
 }
 
 # ── Alert Thresholds ──────────────────────────────────────────────────────────
 THRESHOLDS = {
-    "price_move_urgent":    0.05,    # 5%+ single session → URGENT
-    "price_move_watch":     0.03,    # 3%+ single session → WATCH
-    "price_move_gap_urgent": 0.04,   # 4%+ gap from prior close → URGENT
-    "volume_spike_mult":    2.5,     # 2.5× 30-day avg volume → WATCH
-    "insider_sell_urgent":  1_000_000,  # $1M+ insider sell → URGENT
-    "insider_sell_watch":   500_000,    # $500K+ insider sell → WATCH
-    "insider_buy_positive": 200_000,    # $200K+ insider buy → POSITIVE
-    "pt_cut_pct":           0.10,    # 10%+ PT cut → WATCH
-    "dedup_window_hours":   24,      # don't re-alert same ticker+type within 24h
+    "price_move_urgent":     0.05,
+    "price_move_watch":      0.03,
+    "price_move_gap_urgent": 0.04,
+    "volume_spike_mult":     2.5,
+    "insider_sell_urgent":   1_000_000,
+    "insider_sell_watch":    500_000,
+    "insider_buy_positive":  200_000,
+    "pt_cut_pct":            0.10,
+    "dedup_window_hours":    24,
 }
 
-# ── Macro Series to Monitor ───────────────────────────────────────────────────
-# FRED series IDs to fetch for macro overlay
+# ── Macro Series ──────────────────────────────────────────────────────────────
 MACRO_SERIES = {
     "fed_funds":   "FEDFUNDS",
     "t10y":        "DGS10",
@@ -60,13 +65,22 @@ MACRO_SERIES = {
     "vix":         "VIXCLS",
 }
 
+# ── Global Market News RSS Feeds ──────────────────────────────────────────────
+MARKET_NEWS_FEEDS = [
+    "https://feeds.reuters.com/reuters/businessNews",
+    "https://feeds.reuters.com/reuters/technologyNews",
+    "https://www.cnbc.com/id/10000664/device/rss/rss.html",
+    "https://www.cnbc.com/id/20910258/device/rss/rss.html",
+    "https://rss.nytimes.com/services/xml/rss/nyt/Business.xml",
+    "https://feeds.a.dj.com/rss/RSSMarketsMain.xml",
+    "https://feeds.a.dj.com/rss/RSSWSJD.xml",
+]
+
 # ── Claude Models ─────────────────────────────────────────────────────────────
-MODEL_FAST  = "claude-haiku-4-5-20251001"   # screening + materiality scoring
-MODEL_DEEP  = "claude-sonnet-4-6"           # write-ups, briefs, deep research
+MODEL_FAST = "claude-haiku-4-5-20251001"
+MODEL_DEEP = "claude-sonnet-4-6"
 
 # ── Market Hours (ET) ─────────────────────────────────────────────────────────
-MARKET_OPEN_ET  = (9, 30)   # 9:30 AM
-MARKET_CLOSE_ET = (16, 0)   # 4:00 PM
-
-# ── DB ────────────────────────────────────────────────────────────────────────
+MARKET_OPEN_ET  = (9, 30)
+MARKET_CLOSE_ET = (16, 0)
 DB_PATH = os.getenv("DB_PATH", "analyst_desk.db")

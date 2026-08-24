@@ -23,6 +23,9 @@ from jobs.ratings_check import run_ratings_check
 from jobs.morning_brief import run_morning_brief
 from jobs.earnings_watch import run_earnings_watch
 from jobs.weekly_digest import run_weekly_digest
+from jobs.market_news_check import (run_market_news_premarket,
+                                     run_market_news_midday,
+                                     run_market_news_close)
 from db.queries import cleanup_old_records
 
 # ── Logging ───────────────────────────────────────────────────────────────────
@@ -116,6 +119,27 @@ def setup_scheduler(scheduler: AsyncIOScheduler):
         id="weekly_digest", name="Weekly Digest",
     )
 
+    # Market news — pre-market 8 AM ET
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_market_news_premarket(send_alert)),
+        CronTrigger(hour=8, minute=0, timezone=TZ),
+        id="market_news_premarket", name="Market News Pre-Market",
+    )
+
+    # Market news — midday 12:30 PM ET
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_market_news_midday(send_alert)),
+        CronTrigger(hour=12, minute=30, timezone=TZ),
+        id="market_news_midday", name="Market News Midday",
+    )
+
+    # Market news — close 4:30 PM ET
+    scheduler.add_job(
+        lambda: asyncio.create_task(run_market_news_close(send_alert)),
+        CronTrigger(hour=16, minute=30, timezone=TZ),
+        id="market_news_close", name="Market News Close",
+    )
+
     # DB cleanup — daily at 3 AM ET
     scheduler.add_job(
         cleanup_old_records,
@@ -150,10 +174,10 @@ async def main():
 
     # Send startup notification
     startup_msg = (
-        f"🏦 ANALYST DESK — Online\n"
+        f"🏦 TYLER — Online\n"
         f"Started at {datetime.now(TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
-        f"Monitoring {len(__import__('config').WATCHLIST)} securities\n"
-        f"Type /status for system info"
+        f"Monitoring {len(__import__('config').WATCHLIST)} securities\n\n"
+        f"Use the buttons below or just talk to me naturally."
     )
 
     # Start Telegram bot with polling

@@ -1,480 +1,661 @@
 """
-Telegram command handlers — all /command responses.
-Each handler is an async function receiving (update, context).
+Telegram command + callback handlers with full button UI.
+ReplyKeyboardMarkup provides persistent bottom menu.
+InlineKeyboardMarkup provides contextual action buttons per ticker.
+Natural language messages are handled via Claude routing.
 """
 import logging
 from datetime import datetime
-from telegram import Update
+
+import pytz
+from telegram import (Update, InlineKeyboardButton, InlineKeyboardMarkup,
+                       ReplyKeyboardMarkup, KeyboardButton)
 from telegram.ext import ContextTypes
 from anthropic import Anthropic
 
-from config import WATCHLIST, ANTHROPIC_API_KEY, MODEL_DEEP, MODEL_FAST, THRESHOLDS
+from config import (WATCHLIST, ANTHROPIC_API_KEY, MODEL_DEEP, MODEL_FAST,
+                    THRESHOLDS, TIMEZONE)
 from data.prices import get_quote, get_quotes_batch, get_market_snapshot
 from data.news import get_all_news
-from data.fmp import (get_analyst_ratings, get_insider_trades, get_earnings_calendar,
-                      get_key_metrics, get_profile, get_analyst_consensus, get_income_statement)
-from data.macro import get_macro_snapshot, format_macro_brief
+from data.fmp import (get_analyst_ratings, get_insider_trades,
+                      get_key_metrics, get_profile, get_income_statement,
+                      get_analyst_consensus)
+from data.macro import get_macro_snapshot
 from db.queries import mute_ticker, unmute_ticker, is_muted
-from bot.formatter import fmt_pct, fmt_price, fmt_large, split_message, portfolio_table
+from bot.formatter import fmt_pct, fmt_price, fmt_large, split_message
 from agents.earnings_agent import get_upcoming_earnings
+from agents.calendar_agent import (parse_calendar_intent, create_event,
+                                    get_upcoming_calendar_events, format_events_list,
+                                    generate_auth_url, exchange_auth_code,
+                                    is_calendar_request, get_calendar_service)
 from jobs.morning_brief import run_morning_brief
 from jobs.weekly_digest import run_weekly_digest
 
 log = logging.getLogger(__name__)
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
+TZ = pytz.timezone(TIMEZONE)
 
-async def send_text(update: Update, text: str):
-    """Send long text, splitting if needed."""
-    for chunk in split_message(text):
-        await update.message.reply_text(chunk)
+
+# ── Portfolio helpers ─────────────────────────────────────────────────────────
+
+def compute_portfolio(quotes: dict) -> dict:
+    """Compute portfolio values and weights from shares × live price."""
+    holdings = []
+    total_value = 0.0
+    for ticker, info in WATCHLIST.items():
+        shares = info.get("shares", 0)
+        q = quotes.get(ticker, {})
+        price = q.get("price") or 0.0
+        value = shares * price
+        total_value += value
+        holdings.append({
+            "ticker": ticker, "shares": shares, "price": price,
+            "value": value, "change_pct": q.get("change_pct"),
+            "sector": info.get("sector", ""),
+        })
+    for h in holdings:
+        h["weight"] = h["value"] / total_value if total_value > 0 else 0.0
+    return {"holdings": holdings, "total_value": total_value}
+
+
+# ── Keyboards ─────────────────────────────────────────────────────────────────
+
+def main_menu() -> ReplyKeyboardMarkup:
+    """Persistent bottom keyboard — always visible."""
+    rows = [
+        [KeyboardButton("📊 Portfolio"), KeyboardButton("📈 Markets"), KeyboardButton("📰 News")],
+        [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
+        [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
+    ]
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True, persistent=True)
+
+
+def ticker_actions(ticker: str) -> InlineKeyboardMarkup:
+    """Inline action buttons shown under any ticker response."""
+    return InlineKeyboardMarkup([
+        [
+            InlineKeyboardButton("🔬 Deep Brief",  callback_data=f"deep:{ticker}"),
+            InlineKeyboardButton("📰 News",        callback_data=f"news:{ticker}"),
+        ],
+        [
+            InlineKeyboardButton("👤 Insider",     callback_data=f"insider:{ticker}"),
+            InlineKeyboardButton("📊 Ratings",     callback_data=f"ratings:{ticker}"),
+        ],
+    ])
+
+
+def portfolio_ticker_grid() -> InlineKeyboardMarkup:
+    """Grid of portfolio tickers as tappable buttons."""
+    tickers = list(WATCHLIST.keys())
+    rows = []
+    row: list = []
+    for t in tickers:
+        row.append(InlineKeyboardButton(t, callback_data=f"price:{t}"))
+        if len(row) == 4:
+            rows.append(row)
+            row = []
+    if row:
+        rows.append(row)
+    rows.append([InlineKeyboardButton("🔬 Research Any", callback_data="prompt:deep")])
+    return InlineKeyboardMarkup(rows)
+
+
+# ── Unified send helper ───────────────────────────────────────────────────────
+
+async def send(update: Update, text: str, markup=None):
+    """Send with smart splitting and always re-attach main menu."""
+    chunks = split_message(text)
+    for i, chunk in enumerate(chunks):
+        is_last = (i == len(chunks) - 1)
+        kb = markup if (is_last and markup) else (main_menu() if is_last else None)
+        if update.callback_query:
+            await update.effective_message.reply_text(chunk, reply_markup=kb)
+        else:
+            await update.message.reply_text(chunk, reply_markup=kb)
 
 
 # ── /start ────────────────────────────────────────────────────────────────────
 
 async def cmd_start(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    msg = """🏦 ANALYST DESK — Online
-
-Your 24/7 institutional-grade financial analyst team.
-
-Commands:
-/portfolio — holdings & today's P&L
-/price TICKER — live quote
-/news TICKER — material news
-/deep TICKER — full research brief
-/earnings — upcoming earnings calendar
-/insider TICKER — recent insider trades
-/ratings TICKER — analyst upgrades/downgrades
-/brief — trigger morning brief now
-/digest — trigger weekly digest now
-/macro — macro snapshot
-/add TICKER WEIGHT% — add to watchlist
-/remove TICKER — remove from watchlist
-/mute TICKER Nh — silence alerts for N hours
-/status — system health
-
-The desk monitors your portfolio 24/7 and will message you when something material happens."""
-    await send_text(update, msg)
+    msg = (
+        "🏦 TYLER — Your Personal Analyst\n\n"
+        "I monitor your portfolio 24/7 and alert you when something matters.\n\n"
+        "Use the buttons below, or just talk to me naturally:\n"
+        "• \"What happened to META today?\"\n"
+        "• \"Add a meeting with John tomorrow at 3pm\"\n"
+        "• \"Is NVDA still a buy?\"\n"
+        "• \"Biggest news today?\""
+    )
+    await send(update, msg)
 
 
-# ── /portfolio ────────────────────────────────────────────────────────────────
+# ── Portfolio ─────────────────────────────────────────────────────────────────
 
 async def cmd_portfolio(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Fetching portfolio snapshot...")
+    await update.effective_message.reply_text("Fetching portfolio...")
     tickers = list(WATCHLIST.keys())
     quotes = get_quotes_batch(tickers)
-    text = portfolio_table(WATCHLIST, quotes)
+    pf = compute_portfolio(quotes)
+    total = pf["total_value"]
+    holdings = sorted(pf["holdings"], key=lambda h: -h["value"])
 
-    # Total portfolio P&L today (weight-averaged)
-    weighted_chg = 0.0
-    total_w = 0.0
-    for ticker, info in WATCHLIST.items():
-        w = info.get("weight", 0)
-        q = quotes.get(ticker, {})
-        chg = q.get("change_pct")
-        if chg is not None:
-            weighted_chg += w * chg
-            total_w += w
+    weighted_chg = sum(
+        h["weight"] * h["change_pct"]
+        for h in holdings if h["change_pct"] is not None
+    )
 
-    if total_w > 0:
-        portfolio_chg = weighted_chg / total_w
-        arrow = "▲" if portfolio_chg > 0 else "▼"
-        text += f"\n\nPortfolio today: {arrow} {fmt_pct(portfolio_chg)}"
+    lines = [f"📊 PORTFOLIO  ·  Total: {fmt_large(total)}\n"]
+    for h in holdings:
+        chg = h["change_pct"]
+        arrow = "▲" if (chg or 0) >= 0 else "▼"
+        chg_str = f"{arrow}{abs(chg)*100:.2f}%" if chg is not None else "—"
+        lines.append(
+            f"{h['ticker']:<6} {fmt_price(h['price']):>9}  {chg_str:>8}  "
+            f"{fmt_large(h['value']):>8}  {h['weight']*100:.1f}%"
+        )
 
-    await send_text(update, text)
+    arrow = "▲" if weighted_chg >= 0 else "▼"
+    pnl = total * weighted_chg
+    lines.append(f"\nToday: {arrow}{abs(weighted_chg)*100:.2f}%  ·  P&L: {fmt_large(pnl)}")
+    await send(update, "\n".join(lines), portfolio_ticker_grid())
 
 
-# ── /price TICKER ─────────────────────────────────────────────────────────────
+# ── Markets ───────────────────────────────────────────────────────────────────
 
-async def cmd_price(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /price TICKER")
+async def cmd_markets(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    market = get_market_snapshot()
+    lines = ["📈 MARKETS — Live\n"]
+    for key, label in [("SPX","S&P 500"), ("NDX","Nasdaq 100"), ("VIX","VIX"),
+                        ("DXY","Dollar (DXY)"), ("OIL","WTI Oil"), ("GOLD","Gold"), ("BTC","Bitcoin")]:
+        d = market.get(key, {})
+        p = d.get("price")
+        c = d.get("change_pct")
+        if p:
+            arrow = "▲" if (c or 0) >= 0 else "▼"
+            chg = f" {arrow}{abs(c)*100:.2f}%" if c else ""
+            lines.append(f"{label:<15} {p:>12,.2f}{chg}")
+
+    macro_kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📊 Full Macro", callback_data="macro:full"),
+        InlineKeyboardButton("📅 Econ Calendar", callback_data="macro:calendar"),
+    ]])
+    await send(update, "\n".join(lines), macro_kb)
+
+
+# ── Price ─────────────────────────────────────────────────────────────────────
+
+async def cmd_price(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Which ticker? Tap one below or type: /price NVDA",
+                   portfolio_ticker_grid())
         return
-    ticker = args[0].upper()
+
+    ticker = ticker.upper()
     q = get_quote(ticker)
     price = q.get("price")
     if not price:
-        await update.message.reply_text(f"Could not fetch quote for {ticker}")
+        await send(update, f"Couldn't fetch quote for {ticker}")
         return
 
-    chg  = q.get("change_pct", 0) or 0
+    chg = q.get("change_pct") or 0
+    arrow = "▲" if chg >= 0 else "▼"
     high = q.get("year_high")
     low  = q.get("year_low")
-    arrow = "▲" if chg >= 0 else "▼"
-    weight = WATCHLIST.get(ticker, {}).get("weight", 0)
-    muted = is_muted(ticker)
+    info = WATCHLIST.get(ticker, {})
+    shares = info.get("shares", 0)
 
-    lines = [
-        f"📈 {ticker} — Live Quote",
-        f"Price: {fmt_price(price)} {arrow} {fmt_pct(chg)}",
-    ]
+    lines = [f"📈 {ticker}\n",
+             f"Price:   {fmt_price(price)}  {arrow}{abs(chg)*100:.2f}%"]
     if high and low:
-        pct_from_high = (price - high) / high if high else 0
-        lines.append(f"52W: {fmt_price(low)} — {fmt_price(high)} ({fmt_pct(pct_from_high)} from high)")
-    if weight > 0:
-        lines.append(f"Your weight: {weight*100:.1f}%")
-    if muted:
-        lines.append("⚠️ Alerts muted for this ticker")
+        from_high = (price - high) / high
+        lines.append(f"52W:     {fmt_price(low)} — {fmt_price(high)}  ({fmt_pct(from_high)} from high)")
+    if shares > 0:
+        lines.append(f"You own: {shares} sh  ·  {fmt_large(shares * price)}")
+    if is_muted(ticker):
+        lines.append("⚠️ Alerts muted")
 
-    await send_text(update, "\n".join(lines))
+    await send(update, "\n".join(lines), ticker_actions(ticker))
 
 
-# ── /news TICKER ──────────────────────────────────────────────────────────────
+# ── News ──────────────────────────────────────────────────────────────────────
 
-async def cmd_news(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /news TICKER")
+async def cmd_news(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Which ticker? e.g. /news META", portfolio_ticker_grid())
         return
-    ticker = args[0].upper()
-    await update.message.reply_text(f"Scanning news for {ticker}...")
 
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"Scanning news for {ticker}...")
     prof = get_profile(ticker)
     company = prof.get("companyName", "") if prof else ""
     articles = get_all_news(ticker, company, days=2)
 
     if not articles:
-        await update.message.reply_text(f"No recent news found for {ticker}")
+        await send(update, f"No recent news for {ticker}")
         return
 
-    lines = [f"📰 NEWS — {ticker} (last 48h)\n"]
+    lines = [f"📰 NEWS — {ticker}\n"]
     for i, a in enumerate(articles[:8], 1):
-        title = a.get("title", "")[:100]
-        source = a.get("source", "")
-        published = a.get("published", "")[:10]
-        lines.append(f"{i}. [{source}] {title}\n   {published}")
+        src   = a.get("source", "")
+        title = a.get("title", "")[:90]
+        lines.append(f"{i}. [{src}] {title}")
 
-    await send_text(update, "\n".join(lines))
+    await send(update, "\n".join(lines), ticker_actions(ticker))
 
 
-# ── /deep TICKER ──────────────────────────────────────────────────────────────
+# ── Deep Research ─────────────────────────────────────────────────────────────
 
-async def cmd_deep(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /deep TICKER")
+async def cmd_deep(update: Update, context: ContextTypes.DEFAULT_TYPE, ticker: str = None):
+    if not ticker:
+        args = context.args or []
+        ticker = args[0].upper() if args else None
+    if not ticker:
+        await send(update, "Which ticker? e.g. /deep AAPL", portfolio_ticker_grid())
         return
-    ticker = args[0].upper()
-    await update.message.reply_text(f"Researching {ticker}... (30-60 seconds)")
 
-    # Gather data
+    ticker = ticker.upper()
+    await update.effective_message.reply_text(f"🔬 Researching {ticker}... (~30 sec)")
+
     prof      = get_profile(ticker)
     metrics   = get_key_metrics(ticker)
-    consensus = get_analyst_consensus(ticker)
     quote     = get_quote(ticker)
     ratings   = get_analyst_ratings(ticker, limit=3)
-    articles  = get_all_news(ticker, days=3)[:5]
-    statements= get_income_statement(ticker, limit=4)
-    thesis    = WATCHLIST.get(ticker, {}).get("thesis", "No saved thesis.")
-    weight    = WATCHLIST.get(ticker, {}).get("weight", 0)
+    articles  = get_all_news(ticker, days=2)[:5]
+    info      = WATCHLIST.get(ticker, {})
+    shares    = info.get("shares", 0)
+    thesis    = info.get("thesis", "Not in portfolio.")
 
-    # Recent news titles
-    news_str = "\n".join([f"- {a.get('title','')[:100]}" for a in articles])
-
-    # Recent ratings
+    news_str = "\n".join([f"- {a.get('title','')[:90]}" for a in articles])
     ratings_str = "\n".join([
-        f"- {r.get('gradingCompany','')} {r.get('action','')} → {r.get('newGrade','')} "
-        f"PT: ${r.get('priceTarget','N/A')}"
+        f"- {r.get('gradingCompany','')} → {r.get('newGrade','')} PT ${r.get('priceTarget','?')}"
         for r in ratings
     ])
 
-    prompt = f"""Write a comprehensive institutional research brief for {ticker}.
+    prompt = f"""Write an institutional research brief for {ticker}.
 
 COMPANY: {prof.get('companyName','') if prof else ticker}
-SECTOR: {prof.get('sector','') if prof else ''}
-DESCRIPTION: {prof.get('description','')[:400] if prof else ''}
+DESCRIPTION: {(prof.get('description','')[:300] if prof else '')}
+PRICE: ${quote.get('price','N/A')} ({fmt_pct(quote.get('change_pct'))} today)
+POSITION: {shares} shares owned
+THESIS: {thesis}
 
-FINANCIALS:
-P/E: {metrics.get('peRatioTTM','N/A') if metrics else 'N/A'}
-FCF Yield: {metrics.get('freeCashFlowYieldTTM','N/A') if metrics else 'N/A'}
-ROIC: {metrics.get('roicTTM','N/A') if metrics else 'N/A'}
-EV/EBITDA: {metrics.get('enterpriseValueOverEBITDATTM','N/A') if metrics else 'N/A'}
-Revenue growth: {metrics.get('revenueGrowthTTM','N/A') if metrics else 'N/A'}
+METRICS: P/E {metrics.get('peRatioTTM','N/A') if metrics else 'N/A'} · \
+FCF Yield {metrics.get('freeCashFlowYieldTTM','N/A') if metrics else 'N/A'} · \
+ROIC {metrics.get('roicTTM','N/A') if metrics else 'N/A'}
+ANALYST RATINGS: {ratings_str or 'None'}
+RECENT NEWS: {news_str or 'None'}
 
-CURRENT PRICE: ${quote.get('price','N/A')} ({fmt_pct(quote.get('change_pct'))} today)
-PORTFOLIO WEIGHT: {weight*100:.1f}%
+Write:
+🔬 DEEP BRIEF · {ticker}
 
-RECENT ANALYST ACTIVITY:
-{ratings_str or 'No recent ratings'}
+INVESTMENT SUMMARY (3 sentences)
+BUSINESS QUALITY (moat, margins, market position)
+FINANCIALS (key metrics, trends)
+BULL CASE (3 bullets)
+BEAR CASE (3 bullets)
+THESIS CHECK (intact / watch / challenged — why)
+BOTTOM LINE (1 sentence)
 
-RECENT NEWS:
-{news_str or 'No recent news'}
-
-MY INVESTMENT THESIS: {thesis}
-
-Write a professional research brief with these sections:
-1. INVESTMENT SUMMARY (3-4 sentences, overall view)
-2. BUSINESS QUALITY (competitive moat, market position, margin quality)
-3. FINANCIAL SNAPSHOT (key metrics, trends, quality of earnings)
-4. BULL CASE (3 bullets)
-5. BEAR CASE (3 bullets)
-6. THESIS CHECK (is my thesis intact? Any cracks?)
-7. VALUATION (cheap/fair/expensive vs history and peers)
-8. CONCLUSION (1-2 sentence bottom line)
-
-Start with: 🔬 DEEP BRIEF · {ticker}
-Institutional tone. Max 450 words."""
+Max 400 words. Institutional tone. No disclaimers."""
 
     try:
-        resp = client.messages.create(
-            model=MODEL_DEEP, max_tokens=900,
-            messages=[{"role": "user", "content": prompt}]
-        )
-        await send_text(update, resp.content[0].text.strip())
+        resp = client.messages.create(model=MODEL_DEEP, max_tokens=900,
+                                       messages=[{"role": "user", "content": prompt}])
+        await send(update, resp.content[0].text.strip(), ticker_actions(ticker))
     except Exception as e:
-        log.warning(f"/deep {ticker}: {e}")
-        await update.message.reply_text(f"Error generating brief for {ticker}: {e}")
+        await send(update, f"Error: {e}")
 
 
-# ── /earnings ─────────────────────────────────────────────────────────────────
+# ── Insider trades ────────────────────────────────────────────────────────────
+
+async def _insider_for(update: Update, ticker: str):
+    trades = get_insider_trades(ticker, limit=10)
+    if not trades:
+        await send(update, f"No recent insider trades for {ticker}")
+        return
+    lines = [f"👤 INSIDER — {ticker}\n"]
+    for t in trades[:8]:
+        name   = t.get("reportingName", "")[:20]
+        ttype  = t.get("transactionType", "")
+        shares = abs(t.get("securitiesTransacted", 0) or 0)
+        price  = t.get("price", 0) or 0
+        value  = shares * price
+        date   = t.get("transactionDate", "")
+        icon   = "🟢" if "P" in ttype or "Buy" in ttype else "🔴"
+        lines.append(f"{icon} {name}: {fmt_large(value)}  ·  {date}")
+    await send(update, "\n".join(lines), ticker_actions(ticker))
+
+
+async def cmd_insider(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args or []
+    if not args:
+        await send(update, "Usage: /insider TICKER")
+        return
+    await _insider_for(update, args[0].upper())
+
+
+# ── Analyst ratings ───────────────────────────────────────────────────────────
+
+async def _ratings_for(update: Update, ticker: str):
+    ratings = get_analyst_ratings(ticker, limit=8)
+    if not ratings:
+        await send(update, f"No recent analyst ratings for {ticker}")
+        return
+    lines = [f"📊 RATINGS — {ticker}\n"]
+    for r in ratings[:6]:
+        firm   = r.get("gradingCompany", "")[:18]
+        new_g  = r.get("newGrade", "")
+        pt     = r.get("priceTarget", "")
+        date   = r.get("publishedDate", "")[:10]
+        action = r.get("action", "").lower()
+        icon = "🟢" if "upgrade" in action or "initiat" in action else "🔴" if "downgrade" in action else "⚪️"
+        lines.append(f"{icon} {firm}: {new_g}" + (f" PT ${pt}" if pt else "") + f"  ·  {date}")
+    await send(update, "\n".join(lines), ticker_actions(ticker))
+
+
+async def cmd_ratings(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args or []
+    if not args:
+        await send(update, "Usage: /ratings TICKER")
+        return
+    await _ratings_for(update, args[0].upper())
+
+
+# ── Earnings ──────────────────────────────────────────────────────────────────
 
 async def cmd_earnings(update: Update, context: ContextTypes.DEFAULT_TYPE):
     upcoming = get_upcoming_earnings(days=14)
     ticker_set = set(WATCHLIST.keys())
-    mine = [e for e in upcoming if e.get("symbol","") in ticker_set]
-
+    mine = [e for e in upcoming if e.get("symbol", "") in ticker_set]
     if not mine:
-        await update.message.reply_text("No earnings scheduled for your watchlist in the next 14 days.")
+        await send(update, "No earnings for your portfolio in the next 14 days.")
         return
-
-    lines = ["📅 UPCOMING EARNINGS (next 14 days)\n"]
-    for e in sorted(mine, key=lambda x: x.get("date","")):
-        sym  = e.get("symbol","")
-        date = e.get("date","")
+    lines = ["📅 UPCOMING EARNINGS\n"]
+    for e in sorted(mine, key=lambda x: x.get("date", "")):
+        sym  = e.get("symbol", "")
+        date = e.get("date", "")
         est  = e.get("epsEstimated")
-        time = e.get("time","")
-        weight = WATCHLIST.get(sym, {}).get("weight", 0)
-        lines.append(
-            f"{sym} ({weight*100:.0f}%) — {date} {time}"
-            + (f" | EPS est ${est:.2f}" if est else "")
-        )
-
-    await send_text(update, "\n".join(lines))
+        tod  = e.get("time", "")
+        shares = WATCHLIST.get(sym, {}).get("shares", 0)
+        lines.append(f"• {sym} — {date} {tod}" + (f"  ·  EPS est ${est:.2f}" if est else ""))
+    await send(update, "\n".join(lines))
 
 
-# ── /insider TICKER ───────────────────────────────────────────────────────────
-
-async def cmd_insider(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /insider TICKER")
-        return
-    ticker = args[0].upper()
-    trades = get_insider_trades(ticker, limit=15)
-
-    if not trades:
-        await update.message.reply_text(f"No recent insider trades found for {ticker}")
-        return
-
-    lines = [f"👤 INSIDER TRADES — {ticker} (last 30d)\n"]
-    for t in trades[:10]:
-        name  = t.get("reportingName","")[:25]
-        ttype = t.get("transactionType","")
-        shares = t.get("securitiesTransacted", 0) or 0
-        price  = t.get("price", 0) or 0
-        value  = abs(shares * price)
-        date   = t.get("transactionDate","")
-        icon   = "🟢" if "P" in ttype or "Buy" in ttype else "🔴"
-        lines.append(f"{icon} {name}: {fmt_large(value)} @ {fmt_price(price)} ({date})")
-
-    await send_text(update, "\n".join(lines))
-
-
-# ── /ratings TICKER ───────────────────────────────────────────────────────────
-
-async def cmd_ratings(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /ratings TICKER")
-        return
-    ticker = args[0].upper()
-    ratings = get_analyst_ratings(ticker, limit=10)
-
-    if not ratings:
-        await update.message.reply_text(f"No recent analyst ratings for {ticker}")
-        return
-
-    lines = [f"📊 ANALYST RATINGS — {ticker}\n"]
-    for r in ratings[:8]:
-        firm   = r.get("gradingCompany","")[:20]
-        action = r.get("action","")
-        new_g  = r.get("newGrade","")
-        prev_g = r.get("previousGrade","")
-        pt     = r.get("priceTarget","")
-        date   = r.get("publishedDate","")[:10]
-        icon   = "🟢" if "upgrade" in action.lower() or "initiat" in action.lower() else "🔴" if "downgrade" in action.lower() else "⚪️"
-        lines.append(f"{icon} {firm}: {new_g}" + (f" (from {prev_g})" if prev_g else "") + (f" PT ${pt}" if pt else "") + f" — {date}")
-
-    await send_text(update, "\n".join(lines))
-
-
-# ── /macro ────────────────────────────────────────────────────────────────────
+# ── Macro ─────────────────────────────────────────────────────────────────────
 
 async def cmd_macro(update: Update, context: ContextTypes.DEFAULT_TYPE):
     snapshot = get_macro_snapshot()
-    market   = get_market_snapshot()
-
-    lines = ["📊 MACRO SNAPSHOT\n"]
-
-    # Rates
-    for key, label in [("fed_funds","Fed Funds"), ("t10y","10Y"), ("t2y","2Y"),
-                        ("real10y","Real 10Y"), ("breakeven5y","5Y Breakeven")]:
+    lines = ["🌍 MACRO SNAPSHOT\n"]
+    for key, label in [("fed_funds","Fed Funds"), ("t10y","10Y Treasury"), ("t2y","2Y Treasury"),
+                        ("real10y","Real Yield"), ("breakeven5y","5Y Breakeven")]:
         d = snapshot.get(key, {})
         v = d.get("value")
         c = d.get("change")
         if v is not None:
-            chg_str = f" ({c:+.2f})" if c else ""
-            lines.append(f"  {label}: {v:.2f}%{chg_str}")
-
+            chg = f" ({c:+.2f}%)" if c else ""
+            lines.append(f"{label:<18} {v:.2f}%{chg}")
     lines.append("")
-
-    # Spreads
     for key, label in [("hy_spread","HY Spread"), ("ig_spread","IG Spread")]:
         d = snapshot.get(key, {})
         v = d.get("value")
-        c = d.get("change")
         if v is not None:
-            chg_str = f" ({c:+.0f}bp)" if c else ""
-            lines.append(f"  {label}: {v:.0f}bp{chg_str}")
-
-    # VIX, DXY
-    for key, label in [("vix","VIX")]:
-        d = snapshot.get(key, {})
-        v = d.get("value")
-        if v is not None:
-            lines.append(f"  {label}: {v:.1f}")
-
-    # Market
+            lines.append(f"{label:<18} {v:.0f}bp")
     lines.append("")
-    for key, label in [("SPX","SPX"), ("NDX","NDX"), ("DXY","DXY"), ("OIL","WTI Oil"), ("GOLD","Gold")]:
-        d = market.get(key, {})
-        p = d.get("price")
-        c = d.get("change_pct")
-        if p:
-            lines.append(f"  {label}: {p:,.1f}" + (f" ({fmt_pct(c)})" if c else ""))
+    vix = snapshot.get("vix", {}).get("value")
+    if vix:
+        lines.append(f"{'VIX':<18} {vix:.1f}")
 
-    await send_text(update, "\n".join(lines))
+    macro_kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("📊 Markets", callback_data="markets"),
+        InlineKeyboardButton("📅 Econ Calendar", callback_data="macro:calendar"),
+    ]])
+    await send(update, "\n".join(lines), macro_kb)
 
 
-# ── /brief ────────────────────────────────────────────────────────────────────
+# ── Calendar ──────────────────────────────────────────────────────────────────
+
+async def cmd_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    service = get_calendar_service()
+    if not service:
+        msg = (
+            "📅 Google Calendar not connected.\n\n"
+            "Run /setup_calendar to connect, or just tell me what to add:\n"
+            "\"Add a call with Sarah tomorrow at 2pm\""
+        )
+        await send(update, msg)
+        return
+    events = get_upcoming_calendar_events(days=7)
+    kb = InlineKeyboardMarkup([[
+        InlineKeyboardButton("➕ Add Event", callback_data="cal:add"),
+        InlineKeyboardButton("📅 Next 14 days", callback_data="cal:14"),
+    ]])
+    await send(update, format_events_list(events), kb)
+
+
+async def cmd_setup_calendar(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    auth_url = generate_auth_url()
+    if not auth_url:
+        await send(update, (
+            "⚙️ Set up Google Calendar:\n\n"
+            "1. Go to console.cloud.google.com\n"
+            "2. Create project → Enable Calendar API\n"
+            "3. Create OAuth credentials (Desktop app)\n"
+            "4. Download credentials.json → set GOOGLE_CREDENTIALS_JSON env var on Render\n"
+            "5. Run /setup_calendar again"
+        ))
+        return
+    msg = (
+        f"📅 Connect Google Calendar\n\n"
+        f"1. Open this link and sign in:\n{auth_url}\n\n"
+        f"2. Copy the code shown\n"
+        f"3. Send: /cal_code YOUR_CODE"
+    )
+    await send(update, msg)
+
+
+async def cmd_cal_code(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    args = context.args
+    if not args:
+        await send(update, "Usage: /cal_code YOUR_CODE")
+        return
+    success = exchange_auth_code(args[0].strip())
+    if success:
+        await send(update, "✅ Google Calendar connected! Say \"Add lunch tomorrow at noon\" to test.")
+    else:
+        await send(update, "❌ Code didn't work. Try /setup_calendar again.")
+
+
+# ── Brief / Digest ────────────────────────────────────────────────────────────
 
 async def cmd_brief(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Composing morning brief...")
-    send_fn = lambda msg: update.message.reply_text(msg)
+    await update.effective_message.reply_text("Composing morning brief...")
+    send_fn = lambda msg: update.effective_message.reply_text(msg)
     await run_morning_brief(send_fn)
 
 
-# ── /digest ───────────────────────────────────────────────────────────────────
-
 async def cmd_digest(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.message.reply_text("Composing weekly digest...")
-    send_fn = lambda msg: update.message.reply_text(msg)
+    await update.effective_message.reply_text("Composing weekly digest...")
+    send_fn = lambda msg: update.effective_message.reply_text(msg)
     await run_weekly_digest(send_fn)
 
 
-# ── /add TICKER WEIGHT ────────────────────────────────────────────────────────
-
-async def cmd_add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if len(args) < 2:
-        await update.message.reply_text("Usage: /add TICKER WEIGHT%  (e.g. /add PLTR 3%)")
-        return
-    ticker = args[0].upper()
-    weight_str = args[1].replace("%", "")
-    try:
-        weight = float(weight_str) / 100
-    except ValueError:
-        await update.message.reply_text("Invalid weight — use e.g. /add PLTR 3%")
-        return
-
-    WATCHLIST[ticker] = {"weight": weight, "sector": "Unknown", "thesis": "No thesis set."}
-    await update.message.reply_text(
-        f"✅ {ticker} added to watchlist at {weight*100:.1f}% weight.\n"
-        f"Note: This is session-only. Edit config.py to make it permanent."
-    )
-
-
-# ── /remove TICKER ────────────────────────────────────────────────────────────
-
-async def cmd_remove(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
-    if not args:
-        await update.message.reply_text("Usage: /remove TICKER")
-        return
-    ticker = args[0].upper()
-    if ticker in WATCHLIST:
-        del WATCHLIST[ticker]
-        await update.message.reply_text(f"✅ {ticker} removed from watchlist.")
-    else:
-        await update.message.reply_text(f"{ticker} not in watchlist.")
-
-
-# ── /mute TICKER Nh ──────────────────────────────────────────────────────────
+# ── Mute / Unmute ─────────────────────────────────────────────────────────────
 
 async def cmd_mute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
+    args = context.args or []
     if len(args) < 2:
-        await update.message.reply_text("Usage: /mute TICKER 2h  (mutes for 2 hours)")
+        await send(update, "Usage: /mute TICKER 2h")
         return
     ticker = args[0].upper()
-    dur_str = args[1].lower().replace("h","")
-    try:
-        hours = float(dur_str)
-    except ValueError:
-        await update.message.reply_text("Invalid duration — use e.g. /mute TSLA 2h")
-        return
+    hours  = float(args[1].lower().replace("h", ""))
     mute_ticker(ticker, hours)
-    await update.message.reply_text(f"🔇 {ticker} alerts muted for {hours:.0f}h")
+    await send(update, f"🔇 {ticker} muted for {hours:.0f}h")
 
-
-# ── /unmute TICKER ────────────────────────────────────────────────────────────
 
 async def cmd_unmute(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    args = context.args
+    args = context.args or []
     if not args:
-        await update.message.reply_text("Usage: /unmute TICKER")
+        await send(update, "Usage: /unmute TICKER")
         return
-    ticker = args[0].upper()
-    unmute_ticker(ticker)
-    await update.message.reply_text(f"🔔 {ticker} alerts re-enabled")
+    unmute_ticker(args[0].upper())
+    await send(update, f"🔔 {args[0].upper()} alerts re-enabled")
 
 
-# ── /status ───────────────────────────────────────────────────────────────────
+# ── Status ────────────────────────────────────────────────────────────────────
 
 async def cmd_status(update: Update, context: ContextTypes.DEFAULT_TYPE):
     from data.prices import is_market_hours
-    market_open = is_market_hours()
-    tickers_monitored = len(WATCHLIST)
-    now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-
+    cal_ok = get_calendar_service() is not None
     lines = [
-        "🟢 ANALYST DESK — OPERATIONAL",
-        f"Time: {now}",
-        f"Market: {'OPEN' if market_open else 'CLOSED'}",
-        f"Watching: {tickers_monitored} securities",
+        "⚙️ TYLER — OPERATIONAL\n",
+        f"Market: {'🟢 OPEN' if is_market_hours() else '🔴 CLOSED'}",
+        f"Watching: {len(WATCHLIST)} securities",
+        f"Calendar: {'✅ Connected' if cal_ok else '❌ Not connected (/setup_calendar)'}",
         "",
-        "ACTIVE MONITORS:",
-        "  ✅ Price watch (5min, market hours)",
-        "  ✅ News scan (15min)",
+        "MONITORS RUNNING:",
+        "  ✅ Price (5min, market hours)",
+        "  ✅ News — portfolio (15min)",
+        "  ✅ Market news — global (3× daily)",
         "  ✅ SEC filings (30min)",
-        "  ✅ Analyst ratings (hourly)",
+        "  ✅ Analyst ratings (1h)",
         "  ✅ Earnings watch (15min)",
-        "  ✅ Morning brief (7:00 AM ET)",
-        "  ✅ Weekly digest (Sunday 6 PM ET)",
+        "  ✅ Morning brief (7 AM ET)",
+        "  ✅ Weekly digest (Sun 6 PM)",
     ]
-    await send_text(update, "\n".join(lines))
+    await send(update, "\n".join(lines))
 
 
-# ── /thresholds ───────────────────────────────────────────────────────────────
+# ── Natural Language Message Handler ─────────────────────────────────────────
 
-async def cmd_thresholds(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    lines = ["⚙️ ALERT THRESHOLDS\n"]
-    for k, v in THRESHOLDS.items():
-        if isinstance(v, float) and v < 1:
-            lines.append(f"  {k}: {v*100:.1f}%")
-        elif isinstance(v, float):
-            lines.append(f"  {k}: ${v:,.0f}")
+# Menu button text → handler mapping
+_MENU_MAP = {
+    "📊 Portfolio":  cmd_portfolio,
+    "📈 Markets":    cmd_markets,
+    "📅 Earnings":   cmd_earnings,
+    "🌍 Macro":      cmd_macro,
+    "📅 Calendar":   cmd_calendar,
+    "⚡ Brief":      cmd_brief,
+    "⚙️ Status":     cmd_status,
+}
+
+
+async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Route all plain-text messages: menu buttons, calendar, or AI assistant."""
+    text = (update.message.text or "").strip()
+    if not text:
+        return
+
+    # Menu button shortcut
+    if text in _MENU_MAP:
+        await _MENU_MAP[text](update, context)
+        return
+
+    # Research button prompts
+    if text in ("📰 News", "🔬 Research"):
+        await send(update, "Which stock? Just type the ticker symbol, e.g. META")
+        return
+
+    # Calendar intent
+    if is_calendar_request(text):
+        now_str = datetime.now(TZ).strftime("%Y-%m-%d %H:%M %Z")
+        event_data = parse_calendar_intent(text, now_str)
+        if event_data:
+            service = get_calendar_service()
+            if not service:
+                await send(update,
+                           "I'd add that to your calendar, but it's not connected yet.\n"
+                           "Run /setup_calendar to link Google Calendar.")
+                return
+            created = create_event(event_data)
+            if created:
+                await send(update,
+                           f"✅ Added to calendar:\n\n"
+                           f"📅 {event_data.get('title','Event')}\n"
+                           f"{event_data.get('date','')} at {event_data.get('start_time','')}")
+                return
+
+    # Check if a portfolio ticker is mentioned directly
+    words = text.upper().split()
+    portfolio_tickers = set(WATCHLIST.keys())
+    mentioned = next(
+        (w.strip("?.,!:'\"") for w in words if w.strip("?.,!:'\"") in portfolio_tickers),
+        None
+    )
+
+    # Typing indicator
+    await update.effective_chat.send_action("typing")
+
+    prompt = f"""You are Tyler, a personal financial analyst assistant for Yulian.
+Portfolio: {list(WATCHLIST.keys())}
+
+Answer concisely and precisely. If asking about a stock: give price context, thesis, key risks.
+If market/macro question: answer directly with data-driven analysis.
+If asking what to do: give a clear, direct institutional-quality answer.
+Max 180 words. No disclaimers. No "I'm just an AI". Institutional tone.
+
+Message: {text}"""
+
+    try:
+        resp = client.messages.create(
+            model=MODEL_DEEP, max_tokens=400,
+            messages=[{"role": "user", "content": prompt}]
+        )
+        reply = resp.content[0].text.strip()
+        if mentioned:
+            await send(update, reply, ticker_actions(mentioned))
         else:
-            lines.append(f"  {k}: {v}")
-    await send_text(update, "\n".join(lines))
+            await send(update, reply)
+    except Exception as e:
+        log.warning(f"NL handler: {e}")
+        await send(update, "Something went wrong. Use the menu or try again.")
+
+
+# ── Callback Query Handler ────────────────────────────────────────────────────
+
+async def handle_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
+    """Dispatch all inline button presses."""
+    query = update.callback_query
+    await query.answer()
+    data = query.data
+
+    if data.startswith("price:"):
+        await cmd_price(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("deep:"):
+        await cmd_deep(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("news:"):
+        await cmd_news(update, context, data.split(":", 1)[1])
+
+    elif data.startswith("insider:"):
+        await _insider_for(update, data.split(":", 1)[1])
+
+    elif data.startswith("ratings:"):
+        await _ratings_for(update, data.split(":", 1)[1])
+
+    elif data == "markets":
+        await cmd_markets(update, context)
+
+    elif data == "macro:full":
+        await cmd_macro(update, context)
+
+    elif data == "macro:calendar":
+        # Simple placeholder — FMP free tier doesn't have econ calendar
+        await send(update, "📅 Economic calendar coming soon.\nFor now, check investing.com/economic-calendar")
+
+    elif data == "cal:add":
+        await send(update, "Just tell me what to add!\nExample: \"Lunch with Alex on Friday at 1pm\"")
+
+    elif data == "cal:14":
+        events = get_upcoming_calendar_events(days=14)
+        await send(update, format_events_list(events))
+
+    elif data == "prompt:deep":
+        await send(update, "Which ticker to research? Just type the symbol, e.g.: NVDA")
