@@ -21,7 +21,7 @@ def check_news(ticker: str, send_fn) -> list[str]:
         prof = get_profile(ticker)
         company_name = prof.get("companyName", "") if prof else ""
 
-    articles = get_all_news(ticker, company_name, days=1)
+    articles = get_all_news(ticker, company_name, days=2)
     if not articles:
         return []
 
@@ -30,18 +30,22 @@ def check_news(ticker: str, send_fn) -> list[str]:
     if not new_articles:
         return []
 
-    # Mark all as seen immediately to prevent re-processing
+    log.debug(f"news_analyst({ticker}): {len(new_articles)} new articles to score")
+
+    # Score materiality with Claude BEFORE marking seen
+    material = score_news_materiality(ticker, new_articles)
+
+    # Mark ALL new articles as seen now (scored or not) to prevent re-scoring
     for a in new_articles:
         mark_news_seen(a["url_hash"], ticker)
 
-    # Score materiality with Claude
-    material = score_news_materiality(ticker, new_articles)
     if not material:
+        log.debug(f"news_analyst({ticker}): no material articles (threshold >=6)")
         return []
 
     messages_sent = []
     for article in material:
-        score = article.get("materiality", 0)
+        score    = article.get("materiality", 0)
         severity = "URGENT" if score >= 9 else "WATCH" if score >= 7 else "DATA"
 
         content_hash = make_hash(ticker, "news", article.get("url_hash", article.get("title", "")))

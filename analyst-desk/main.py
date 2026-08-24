@@ -245,6 +245,10 @@ async def main():
     await app.start()
     await app.updater.start_polling(drop_pending_updates=True)
 
+    # Register running loop so sync agent threads can schedule sends on it
+    from agents.chief_of_staff import set_main_loop
+    set_main_loop(asyncio.get_running_loop())
+
     scheduler.start()
     log.info("Scheduler started")
 

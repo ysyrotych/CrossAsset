@@ -12,7 +12,7 @@ log = logging.getLogger(__name__)
 
 async def run_news_check(send_fn):
     """Scan news for all watchlist tickers."""
-    log.debug("Running news scan")
+    log.info(f"Running news scan for {len(WATCHLIST)} tickers")
     loop = asyncio.get_running_loop()
     for ticker in WATCHLIST:
         try:

@@ -11,6 +11,16 @@ from db.queries import already_alerted, record_alert, make_hash, is_muted
 log = logging.getLogger(__name__)
 client = Anthropic(api_key=ANTHROPIC_API_KEY)
 
+# Set once at startup so threads can schedule coroutines on the main loop
+_main_loop = None
+
+
+def set_main_loop(loop) -> None:
+    global _main_loop
+    _main_loop = loop
+    log.info("Chief of Staff: main event loop registered")
+
+
 SEVERITY_ICONS = {
     "URGENT":   "🔴",
     "WATCH":    "🟡",
@@ -182,13 +192,17 @@ def try_send_alert(ticker: str, event_type: str, content_hash: str,
 
     try:
         import asyncio
-        try:
-            loop = asyncio.get_running_loop()
-            # Called from a thread (run_in_executor) — schedule on the running loop
-            asyncio.run_coroutine_threadsafe(send_fn(message), loop)
-        except RuntimeError:
-            # No running loop — shouldn't happen in production but handle gracefully
-            asyncio.run(send_fn(message))
+        if _main_loop is not None and _main_loop.is_running():
+            # Correct path: schedule on the known main event loop from a thread
+            asyncio.run_coroutine_threadsafe(send_fn(message), _main_loop)
+        else:
+            # Fallback when called directly from async context (not in executor)
+            try:
+                loop = asyncio.get_running_loop()
+                loop.create_task(send_fn(message))
+            except RuntimeError:
+                log.error("try_send_alert: no event loop available — alert dropped")
+                return False
         record_alert(ticker, event_type, content_hash, severity, message)
         log.info(f"Alert sent: {ticker} {event_type} ({severity})")
         return True
