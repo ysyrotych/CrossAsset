@@ -1,0 +1,11 @@
+anthropic>=0.40.0
+python-telegram-bot>=20.7
+apscheduler>=3.10.4
+sqlalchemy>=2.0.0
+yfinance>=0.2.36
+requests>=2.31.0
+feedparser>=6.0.11
+pytz>=2024.1
+python-dotenv>=1.0.0
+aiohttp>=3.9.0
+finnhub-python>=2.4.19
