@@ -68,7 +68,7 @@ def main_menu() -> ReplyKeyboardMarkup:
         [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
         [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
     ]
-    return ReplyKeyboardMarkup(rows, resize_keyboard=True, persistent=True)
+    return ReplyKeyboardMarkup(rows, resize_keyboard=True)
 
 
 def ticker_actions(ticker: str) -> InlineKeyboardMarkup:

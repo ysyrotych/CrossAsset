@@ -184,7 +184,7 @@ async def main():
         [KeyboardButton("📊 Portfolio"), KeyboardButton("📈 Markets"), KeyboardButton("📰 News")],
         [KeyboardButton("🔬 Research"),  KeyboardButton("📅 Earnings"), KeyboardButton("🌍 Macro")],
         [KeyboardButton("📅 Calendar"),  KeyboardButton("⚡ Brief"),    KeyboardButton("⚙️ Status")],
-    ], resize_keyboard=True, persistent=True)
+    ], resize_keyboard=True)
     startup_msg = (
         f"🏦 TYLER — Online\n"
         f"Started at {datetime.now(TZ).strftime('%Y-%m-%d %H:%M:%S %Z')}\n"
