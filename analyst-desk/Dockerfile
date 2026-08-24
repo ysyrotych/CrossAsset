@@ -8,7 +8,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy entire package
 COPY . .
 
-# Persistent DB lives in /data volume on Railway
-ENV DB_PATH=/data/analyst_desk.db
+# DB lives in the working directory (writable on Render)
+ENV DB_PATH=/app/analyst_desk.db
 
 CMD ["python", "main.py"]
