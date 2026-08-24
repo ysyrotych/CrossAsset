@@ -90,6 +90,12 @@ def get_income_statement(ticker: str, limit: int = 4) -> list[dict]:
     return data if isinstance(data, list) else []
 
 
+def get_cash_flow_statement(ticker: str, limit: int = 4) -> list[dict]:
+    """Quarterly cash flow statements: FCF, SBC, capex, operating cash flow."""
+    data = _get(f"cash-flow-statement/{ticker}", {"period": "quarter", "limit": limit})
+    return data if isinstance(data, list) else []
+
+
 def get_analyst_consensus(ticker: str) -> dict | None:
     """Consensus rating and price target."""
     data = _get("analyst-stock-recommendations", {"symbol": ticker}, v4=True)
