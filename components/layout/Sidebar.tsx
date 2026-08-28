@@ -4,9 +4,8 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { cn } from "@/lib/utils";
 import CrossAssetLogo from "./CrossAssetLogo";
-import { ThemeToggle } from "@/components/ThemeToggle";
 
-const NAV = [
+const NAV: { label: string; href: string; dev?: boolean }[] = [
   { label: "Dashboard",        href: "/" },
   { label: "Newspaper",        href: "/issue/create" },
   { label: "Reaction Tracker", href: "/reaction-tracker" },
@@ -14,7 +13,7 @@ const NAV = [
   { label: "Calendar",         href: "/calendar" },
   { label: "10K / 10Q",        href: "/10k" },
   { label: "Backtesting",      href: "/backtesting" },
-  { label: "Strategy Lab",     href: "/strategy-lab" },
+  { label: "Strategy Lab",     href: "/strategy-lab", dev: true },
   { label: "Research",         href: "/research" },
   { label: "Archive",          href: "/archive" },
   { label: "Settings",         href: "/settings" },
@@ -25,7 +24,7 @@ export default function Sidebar() {
 
   return (
     <aside
-      className="fixed left-0 top-0 h-screen w-56 flex flex-col z-40 transition-colors duration-300"
+      className="fixed left-0 top-0 h-screen w-56 flex flex-col z-40"
       style={{ background: "var(--ca-sidebar-bg)" }}
     >
       <div className="px-5 pt-6 pb-5 flex items-center gap-3">
@@ -40,7 +39,7 @@ export default function Sidebar() {
       <div className="mx-6 border-t border-white/10" />
 
       <nav className="flex-1 px-3 py-5 space-y-0.5">
-        {NAV.map(({ label, href }) => {
+        {NAV.map(({ label, href, dev }) => {
           const active = href === "/" ? path === "/" : path.startsWith(href);
           return (
             <Link
@@ -60,6 +59,12 @@ export default function Sidebar() {
                 />
               )}
               <span className={active ? "" : "pl-[5px]"}>{label}</span>
+              {dev && (
+                <span className="ml-auto text-[8px] font-bold uppercase tracking-[0.12em] px-1.5 py-0.5 rounded"
+                  style={{ background: "rgba(255,255,255,0.08)", color: "rgba(255,255,255,0.35)" }}>
+                  Dev
+                </span>
+              )}
             </Link>
           );
         })}
@@ -67,11 +72,10 @@ export default function Sidebar() {
 
       <div className="mx-6 border-t border-white/10" />
 
-      <div className="px-5 py-4 flex items-center justify-between">
+      <div className="px-5 py-4">
         <p className="text-[10px] font-medium text-white/30 leading-relaxed">
-          Research only.<br />Not advice.
+          Research only. Not investment advice.
         </p>
-        <ThemeToggle />
       </div>
     </aside>
   );

@@ -31,12 +31,29 @@ export type Scenario = {
 };
 export type SectorQuote = { symbol: string; name: string; price: number; change: number; pct: number };
 
+const FRED_TIMEOUT_MS = 8_000;
+
+async function fredFetch(url: string): Promise<Response> {
+  const attempt = () => {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), FRED_TIMEOUT_MS);
+    return fetch(url, { cache: "no-store", signal: ctrl.signal }).finally(() =>
+      clearTimeout(timer)
+    );
+  };
+  try {
+    return await attempt();
+  } catch {
+    // one retry on network error or timeout
+    return attempt();
+  }
+}
+
 async function fredLatest(id: string, limit = 5): Promise<LiveQuote | null> {
   if (!KEY) return null;
   try {
-    const r = await fetch(
-      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=${limit}`,
-      { cache: "no-store" }
+    const r = await fredFetch(
+      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=${limit}`
     );
     if (!r.ok) return null;
     const obs: { value: string }[] = ((await r.json()).observations ?? []).filter(
@@ -56,9 +73,8 @@ async function fredLatest(id: string, limit = 5): Promise<LiveQuote | null> {
 async function fredYoY(id: string): Promise<LiveQuote | null> {
   if (!KEY) return null;
   try {
-    const r = await fetch(
-      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=15`,
-      { cache: "no-store" }
+    const r = await fredFetch(
+      `${FRED}?series_id=${id}&api_key=${KEY}&file_type=json&sort_order=desc&limit=15`
     );
     if (!r.ok) return null;
     const obs: { value: string }[] = ((await r.json()).observations ?? []).filter(
