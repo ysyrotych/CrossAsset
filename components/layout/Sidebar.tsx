@@ -7,15 +7,15 @@ import CrossAssetLogo from "./CrossAssetLogo";
 
 const NAV: { label: string; href: string; dev?: boolean }[] = [
   { label: "Dashboard",        href: "/" },
-  { label: "Newspaper",        href: "/issue/create", dev: true },
   { label: "Reaction Tracker", href: "/reaction-tracker" },
   { label: "Watchlist",        href: "/watchlist" },
   { label: "Calendar",         href: "/calendar" },
   { label: "10K / 10Q",        href: "/10k" },
   { label: "Backtesting",      href: "/backtesting" },
-  { label: "Strategy Lab",     href: "/strategy-lab", dev: true },
   { label: "Research",         href: "/research" },
   { label: "Archive",          href: "/archive" },
+  { label: "Newspaper",        href: "/issue/create", dev: true },
+  { label: "Strategy Lab",     href: "/strategy-lab", dev: true },
   { label: "Settings",         href: "/settings" },
 ];
 
