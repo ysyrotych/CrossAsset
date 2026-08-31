@@ -12,6 +12,7 @@ const NAV: { label: string; href: string; dev?: boolean }[] = [
   { label: "Calendar",         href: "/calendar" },
   { label: "10K / 10Q",        href: "/10k" },
   { label: "Backtesting",      href: "/backtesting" },
+  { label: "Tournament",       href: "/tournament" },
   { label: "Research",         href: "/research" },
   { label: "Archive",          href: "/archive" },
   { label: "Newspaper",        href: "/issue/create", dev: true },
