@@ -32,6 +32,22 @@ export default function InstitutionalPage() {
     fetch("/api/institutional/consensus?limit=20").then((r) => r.json()).then((d) => setTape(d.rows ?? []));
   }, []);
 
+  // Deep-linking: sync view + selection to the URL hash (#managers/berkshire, #security/NVDA)
+  useEffect(() => {
+    const h = window.location.hash.replace(/^#/, "");
+    const [v, arg] = h.split("/");
+    if (["managers", "security", "consensus", "superinvestors"].includes(v)) setView(v as View);
+    if (v === "managers" && arg) setSelectedManager(arg);
+    if (v === "security" && arg) setSelectedTicker(arg.toUpperCase());
+  }, []);
+
+  useEffect(() => {
+    let hash = `#${view}`;
+    if (view === "managers" && selectedManager) hash += `/${selectedManager}`;
+    if (view === "security" && selectedTicker) hash += `/${selectedTicker}`;
+    if (window.location.hash !== hash) history.replaceState(null, "", hash);
+  }, [view, selectedManager, selectedTicker]);
+
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setPaletteOpen((o) => !o); }
