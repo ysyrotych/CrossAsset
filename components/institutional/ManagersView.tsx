@@ -271,22 +271,26 @@ function ActivityBar({ holdings, top10Weight }: { holdings: HoldingRow[]; top10W
 }
 
 // ── treemap cell + tooltip ──────────────────────────────────────────────────
-function TreeCell(props: any) {
-  const { x, y, width, height, name, action, onPick } = props;
+type TreeCellProps = {
+  x?: number; y?: number; width?: number; height?: number;
+  name?: string; action?: HoldingAction; onPick?: (t: string) => void;
+};
+function TreeCell({ x = 0, y = 0, width = 0, height = 0, name, action, onPick }: TreeCellProps) {
   if (width < 2 || height < 2) return null;
-  const m = ACTION_META[(action as keyof typeof ACTION_META) ?? "HOLD"] ?? ACTION_META.HOLD;
+  const m = ACTION_META[action ?? "HOLD"] ?? ACTION_META.HOLD;
   const show = width > 44 && height > 24;
   return (
     <g onClick={() => name && onPick?.(name)} style={{ cursor: "pointer" }}>
       <rect x={x} y={y} width={width} height={height} rx={3}
         style={{ fill: m.bg, stroke: "#fff", strokeWidth: 2 }} />
-      {show && (
+      {show && name && (
         <text x={x + 6} y={y + 16} fontSize={11} fontWeight={700} fill={m.fg}>{name}</text>
       )}
     </g>
   );
 }
-function TreeTip({ active, payload }: any) {
+type TreeTipProps = { active?: boolean; payload?: { payload: { name: string; size: number; pct: number } }[] };
+function TreeTip({ active, payload }: TreeTipProps) {
   if (!active || !payload?.length) return null;
   const d = payload[0].payload;
   return (

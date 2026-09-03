@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { Search, Building2, LineChart, CornerDownLeft } from "lucide-react";
+import { Search, LineChart, CornerDownLeft } from "lucide-react";
 import type { ManagerListItem } from "@/lib/institutional/types";
 import { fmtMoney, initials } from "./shared";
 
