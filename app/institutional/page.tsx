@@ -9,7 +9,7 @@ import SecurityView from "@/components/institutional/SecurityView";
 import ConsensusView from "@/components/institutional/ConsensusView";
 import SuperinvestorsView from "@/components/institutional/SuperinvestorsView";
 import CommandPalette from "@/components/institutional/CommandPalette";
-import { ACTION_META } from "@/components/institutional/shared";
+import { ACTION_META, quarterOf } from "@/components/institutional/shared";
 
 type View = "managers" | "security" | "consensus" | "superinvestors";
 const TABS: { id: View; label: string }[] = [
@@ -66,10 +66,17 @@ export default function InstitutionalPage() {
         <div className="flex items-end justify-between">
           <div>
             <p className="text-[10px] font-semibold tracking-[0.14em] uppercase mb-2" style={{ color: "var(--ca-text-2)" }}>Institutional Intelligence</p>
-            <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Smart Money</h1>
+            <div className="flex items-center gap-3">
+              <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>Smart Money</h1>
+              {managers.length > 0 && (
+                <span className="text-[10.5px] font-medium px-2.5 py-1 rounded-full" style={{ background: "var(--ca-surface-2)", color: "var(--ca-text-2)" }}>
+                  {quarterOf(managers[0].lastFiledPeriod)} · {managers.length} funds tracked
+                </span>
+              )}
+            </div>
             <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>13F holdings, quarter-over-quarter conviction, and insider fusion — across the funds that move markets.</p>
           </div>
-          <button onClick={() => setPaletteOpen(true)}
+          <button onClick={() => setPaletteOpen(true)} aria-label="Open command palette to jump to a fund or ticker"
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
             style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
             <Command size={13} /> Jump to… <kbd className="text-[10px] px-1.5 py-0.5 rounded ml-1" style={{ background: "var(--ca-surface-2)" }}>⌘K</kbd>

@@ -38,7 +38,7 @@ export default function ManagersView({
   }, [managers, q]);
 
   return (
-    <div className="grid grid-cols-[280px_1fr] gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-[280px_1fr] gap-6">
       {/* ── manager list ── */}
       <div className="inst-fade-up">
         <div className="relative mb-3">
