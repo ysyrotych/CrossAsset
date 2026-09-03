@@ -135,9 +135,13 @@ function HolderColumn({ title, icon, rows, tone, onPick }: { title: string; icon
             <span className="text-[12.5px] font-medium truncate" style={{ color: "var(--ca-text)" }}>{r.manager}</span>
             <ActionBadge action={r.action} />
           </div>
-          <span className="text-[11.5px] tabular-nums shrink-0" style={{ color: fg }}>
-            {r.dValue >= 0 ? "+" : ""}{fmtMoney(r.dValue)}
-          </span>
+          <div className="flex items-center gap-2 shrink-0">
+            <span className="text-[10px] tabular-nums px-1.5 py-0.5 rounded" style={{ background: "var(--ca-surface-2)", color: "var(--ca-text-3)" }}
+              title="Weight of this name in the fund's book">{r.pctOfBook.toFixed(1)}% book</span>
+            <span className="text-[11.5px] tabular-nums" style={{ color: fg }}>
+              {r.dValue >= 0 ? "+" : ""}{fmtMoney(r.dValue)}
+            </span>
+          </div>
         </button>
       ))}
     </div>
@@ -146,10 +150,18 @@ function HolderColumn({ title, icon, rows, tone, onPick }: { title: string; icon
 
 function InsiderTimeline({ txns }: { txns: InsiderTxn[] }) {
   const open = txns.filter((t) => t.isOpenMarket);
+  const buyVal = open.filter((t) => t.code === "P").reduce((s, t) => s + t.value, 0);
+  const sellVal = open.filter((t) => t.code === "S").reduce((s, t) => s + t.value, 0);
   return (
     <div className="rounded-xl overflow-hidden" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
       <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--ca-border)" }}>
         <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-2)" }}>Insider Activity — Form 4 (real-time)</p>
+        {open.length > 0 && (
+          <span className="text-[10.5px] tabular-nums px-2 py-0.5 rounded-full ml-2"
+            style={{ background: buyVal >= sellVal ? "#f0fdf4" : "#fef2f2", color: buyVal >= sellVal ? "#147a4f" : "#b42318" }}>
+            net {buyVal - sellVal >= 0 ? "+" : "−"}{fmtMoney(Math.abs(buyVal - sellVal))}
+          </span>
+        )}
         <span className="ml-auto text-[10px]" style={{ color: "var(--ca-text-3)" }}>open-market P/S only</span>
       </div>
       {open.length === 0 ? (
