@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { ResponsiveContainer, Treemap, Tooltip } from "recharts";
 import { Search, ArrowUpRight, Sparkles } from "lucide-react";
-import type { ManagerListItem, ManagerView, HoldingRow } from "@/lib/institutional/types";
+import type { ManagerListItem, ManagerView, HoldingRow, HoldingAction } from "@/lib/institutional/types";
 import {
   fmtMoney, fmtShares, fmtPct, ACTION_META, ActionBadge, ConvictionMeter,
   StatCard, CountMoney, CountNum, StalenessChip, initials,
