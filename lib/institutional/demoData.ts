@@ -29,6 +29,9 @@ const PRICE_MOVE: Record<string, number> = {
   WMT: 5.5, SE: 22.3, APO: 4.4, TSLA: 11.6, LNG: 3.1, MOH: -14.7, HCA: 8.8,
   DHR: -2.2, GRBK: 6.6, TORM: -7.1, SPOT: 15.2, IEP: -12.4, CVI: -4.9, DVA: 2.3,
   C: 1.9, KR: 3.4, SIRI: -6.2, VRSN: 4.1,
+  LBRDK: 4.7, WBD: -3.5, CLVT: -9.8, VSAT: 5.2, BHF: 2.1, CNXC: -6.4, HPQ: 1.8,
+  EA: 7.9, "BRK.B": 3.2, XRX: -8.1, KKR: 9.4, INSP: -4.3, FLUT: 6.8, TMUS: 4.2,
+  UNH: -5.7, WDAY: 8.3, VST: 24.6, SBLK: -3.9, DINO: -2.8, LNC: 3.6, EXPE: 5.9,
 };
 
 const RAW_BOOKS: RawBook[] = [
@@ -135,6 +138,89 @@ const RAW_BOOKS: RawBook[] = [
       { ticker: "TSLA", issuer: "Tesla Inc",               value: 1_600_000_000, shares: 5_050_000, action: "NEW",  dValue: 1_600_000_000 },
       { ticker: "TSM",  issuer: "Taiwan Semiconductor",    value: 1_500_000_000, shares: 8_700_000, action: "ADD",  dValue: 380_000_000 },
       { ticker: "SE",   issuer: "Sea Limited",             value: 900_000_000,   shares: 6_400_000, action: "ADD",  dValue: 240_000_000 },
+    ],
+  },
+  {
+    slug: "baupost", aum: 4_100_000_000,
+    holdings: [
+      { ticker: "LNG",   issuer: "Cheniere Energy",         value: 620_000_000, shares: 2_800_000,  action: "HOLD", dValue: 40_000_000 },
+      { ticker: "LBRDK", issuer: "Liberty Broadband",       value: 480_000_000, shares: 6_100_000,  action: "ADD",  dValue: 120_000_000 },
+      { ticker: "WBD",   issuer: "Warner Bros. Discovery",  value: 410_000_000, shares: 38_000_000, action: "TRIM", dValue: -90_000_000 },
+      { ticker: "CLVT",  issuer: "Clarivate Plc",           value: 300_000_000, shares: 44_000_000, action: "HOLD", dValue: 10_000_000 },
+      { ticker: "VSAT",  issuer: "Viasat Inc",              value: 260_000_000, shares: 13_500_000, action: "ADD",  dValue: 70_000_000 },
+      { ticker: "GOOG",  issuer: "Alphabet Inc (C)",        value: 240_000_000, shares: 1_400_000,  action: "NEW",  dValue: 240_000_000 },
+      { ticker: "WMT",   issuer: "Walmart Inc",             value: 180_000_000, shares: 1_900_000,  action: "HOLD", dValue: 5_000_000 },
+    ],
+  },
+  {
+    slug: "greenlight", aum: 1_900_000_000,
+    holdings: [
+      { ticker: "GRBK", issuer: "Green Brick Partners",     value: 420_000_000, shares: 6_900_000,  action: "HOLD", dValue: 20_000_000 },
+      { ticker: "BHF",  issuer: "Brighthouse Financial",    value: 210_000_000, shares: 3_900_000,  action: "ADD",  dValue: 50_000_000 },
+      { ticker: "CNXC", issuer: "Concentrix Corp",          value: 180_000_000, shares: 3_400_000,  action: "NEW",  dValue: 180_000_000 },
+      { ticker: "HPQ",  issuer: "HP Inc",                   value: 160_000_000, shares: 5_500_000,  action: "HOLD", dValue: -10_000_000 },
+      { ticker: "LNC",  issuer: "Lincoln National",         value: 140_000_000, shares: 4_300_000,  action: "ADD",  dValue: 40_000_000 },
+      { ticker: "DINO", issuer: "HF Sinclair Corp",         value: 120_000_000, shares: 2_700_000,  action: "HOLD", dValue: 5_000_000 },
+    ],
+  },
+  {
+    slug: "himalaya", aum: 2_300_000_000,
+    holdings: [
+      { ticker: "BAC",  issuer: "Bank of America",          value: 620_000_000, shares: 19_400_000, action: "HOLD", dValue: 20_000_000 },
+      { ticker: "GOOG", issuer: "Alphabet Inc (C)",         value: 580_000_000, shares: 3_300_000,  action: "HOLD", dValue: 30_000_000 },
+      { ticker: "BRK.B",issuer: "Berkshire Hathaway (B)",   value: 520_000_000, shares: 1_150_000,  action: "HOLD", dValue: 10_000_000 },
+      { ticker: "AAPL", issuer: "Apple Inc",                value: 340_000_000, shares: 1_460_000,  action: "ADD",  dValue: 90_000_000 },
+      { ticker: "EA",   issuer: "Electronic Arts",          value: 240_000_000, shares: 1_600_000,  action: "NEW",  dValue: 240_000_000 },
+    ],
+  },
+  {
+    slug: "icahn", aum: 13_800_000_000,
+    holdings: [
+      { ticker: "IEP",  issuer: "Icahn Enterprises",        value: 10_900_000_000, shares: 660_000_000, action: "HOLD", dValue: 0 },
+      { ticker: "CVI",  issuer: "CVR Energy",               value: 1_400_000_000,  shares: 66_000_000,  action: "HOLD", dValue: -40_000_000 },
+      { ticker: "XRX",  issuer: "Xerox Holdings",           value: 380_000_000,    shares: 44_000_000,  action: "HOLD", dValue: -20_000_000 },
+      { ticker: "BAC",  issuer: "Bank of America",          value: 210_000_000,    shares: 6_600_000,   action: "NEW",  dValue: 210_000_000 },
+    ],
+  },
+  {
+    slug: "valueact", aum: 8_200_000_000,
+    holdings: [
+      { ticker: "SPOT", issuer: "Spotify Technology",       value: 1_400_000_000, shares: 2_100_000,  action: "ADD",  dValue: 320_000_000 },
+      { ticker: "KKR",  issuer: "KKR & Co",                 value: 980_000_000,   shares: 8_100_000,  action: "HOLD", dValue: 40_000_000 },
+      { ticker: "INSP", issuer: "Inspire Medical Systems",  value: 640_000_000,   shares: 3_400_000,  action: "NEW",  dValue: 640_000_000 },
+      { ticker: "META", issuer: "Meta Platforms",           value: 720_000_000,   shares: 1_000_000,  action: "HOLD", dValue: 30_000_000 },
+      { ticker: "EXPE", issuer: "Expedia Group",            value: 480_000_000,   shares: 3_500_000,  action: "TRIM", dValue: -110_000_000 },
+    ],
+  },
+  {
+    slug: "lone-pine", aum: 14_200_000_000,
+    holdings: [
+      { ticker: "MSFT", issuer: "Microsoft Corp",           value: 2_100_000_000, shares: 4_450_000,  action: "HOLD", dValue: 80_000_000 },
+      { ticker: "META", issuer: "Meta Platforms",           value: 1_900_000_000, shares: 2_640_000,  action: "ADD",  dValue: 420_000_000 },
+      { ticker: "AMZN", issuer: "Amazon.com Inc",           value: 1_700_000_000, shares: 7_700_000,  action: "HOLD", dValue: 50_000_000 },
+      { ticker: "FLUT", issuer: "Flutter Entertainment",    value: 1_200_000_000, shares: 4_900_000,  action: "ADD",  dValue: 310_000_000 },
+      { ticker: "TMUS", issuer: "T-Mobile US",              value: 980_000_000,   shares: 4_100_000,  action: "NEW",  dValue: 980_000_000 },
+      { ticker: "TSM",  issuer: "Taiwan Semiconductor",     value: 860_000_000,   shares: 5_000_000,  action: "ADD",  dValue: 220_000_000 },
+    ],
+  },
+  {
+    slug: "viking-global", aum: 24_100_000_000,
+    holdings: [
+      { ticker: "AMZN", issuer: "Amazon.com Inc",           value: 2_400_000_000, shares: 10_900_000, action: "ADD",  dValue: 560_000_000 },
+      { ticker: "UNH",  issuer: "UnitedHealth Group",       value: 1_900_000_000, shares: 3_800_000,  action: "HOLD", dValue: -60_000_000 },
+      { ticker: "WDAY", issuer: "Workday Inc",              value: 1_500_000_000, shares: 5_800_000,  action: "ADD",  dValue: 380_000_000 },
+      { ticker: "TSM",  issuer: "Taiwan Semiconductor",     value: 1_400_000_000, shares: 8_100_000,  action: "ADD",  dValue: 340_000_000 },
+      { ticker: "META", issuer: "Meta Platforms",           value: 1_300_000_000, shares: 1_800_000,  action: "HOLD", dValue: 40_000_000 },
+      { ticker: "GOOGL",issuer: "Alphabet Inc (A)",         value: 1_100_000_000, shares: 6_200_000,  action: "NEW",  dValue: 1_100_000_000 },
+    ],
+  },
+  {
+    slug: "oaktree", aum: 3_100_000_000,
+    holdings: [
+      { ticker: "TORM", issuer: "Torm Plc",                 value: 480_000_000, shares: 16_000_000, action: "HOLD", dValue: -20_000_000 },
+      { ticker: "VST",  issuer: "Vistra Corp",              value: 420_000_000, shares: 2_600_000,  action: "ADD",  dValue: 140_000_000 },
+      { ticker: "SBLK", issuer: "Star Bulk Carriers",       value: 260_000_000, shares: 13_000_000, action: "HOLD", dValue: 10_000_000 },
+      { ticker: "CVX",  issuer: "Chevron Corp",             value: 180_000_000, shares: 1_160_000,  action: "NEW",  dValue: 180_000_000 },
     ],
   },
 ];

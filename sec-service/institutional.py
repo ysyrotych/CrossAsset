@@ -39,6 +39,12 @@ CURATED = [
     ("1040273", "third-point",        "Third Point",             "Dan Loeb",              "hedge_fund"),
     ("1167483", "tiger-global",       "Tiger Global Management", "Chase Coleman",         "hedge_fund"),
     ("1135730", "coatue",             "Coatue Management",       "Philippe Laffont",      "hedge_fund"),
+    ("1061165", "lone-pine",          "Lone Pine Capital",       "Stephen Mandel",        "hedge_fund"),
+    ("1103804", "viking-global",      "Viking Global Investors", "Andreas Halvorsen",     "hedge_fund"),
+    ("1709323", "himalaya",           "Himalaya Capital",        "Li Lu",                 "value"),
+    ("921669",  "icahn",              "Icahn Enterprises",       "Carl Icahn",            "activist"),
+    ("949509",  "oaktree",            "Oaktree Capital",         "Howard Marks",          "value"),
+    ("1418814", "valueact",           "ValueAct Capital",        "Mason Morfit",          "activist"),
 ]
 
 # ── Supabase REST helpers ─────────────────────────────────────────────────────

@@ -87,10 +87,15 @@ export function ConvictionMeter({ score, delay = 0 }: { score: number; delay?: n
 // ── stat card ─────────────────────────────────────────────────────────────────
 export function StatCard({ label, children, sub, accent }: { label: string; children: React.ReactNode; sub?: string; accent?: boolean }) {
   return (
-    <div className="rounded-xl px-5 py-4 inst-card-hover"
-      style={{ background: "var(--ca-surface)", border: `1px solid ${accent ? "var(--ca-accent)" : "var(--ca-border)"}` }}>
+    <div className="rounded-xl px-5 py-4 inst-card-hover relative overflow-hidden"
+      style={{
+        background: "linear-gradient(180deg, var(--ca-surface), var(--ca-surface-2))",
+        border: `1px solid ${accent ? "var(--ca-accent)" : "var(--ca-border)"}`,
+        boxShadow: "0 1px 2px rgba(12,27,56,0.04)",
+      }}>
+      {accent && <span className="absolute top-0 left-0 right-0 h-[2px]" style={{ background: "var(--ca-accent)" }} />}
       <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] mb-2" style={{ color: "var(--ca-text-3)" }}>{label}</p>
-      <div className="text-[26px] font-light tabular-nums leading-none" style={{ color: "var(--ca-text)", fontFamily: "var(--font-serif)" }}>{children}</div>
+      <div className="text-[27px] font-semibold tabular-nums leading-none tracking-tight" style={{ color: "var(--ca-text)" }}>{children}</div>
       {sub && <p className="text-[10.5px] mt-1.5" style={{ color: "var(--ca-text-3)" }}>{sub}</p>}
     </div>
   );

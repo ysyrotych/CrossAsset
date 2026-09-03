@@ -158,7 +158,17 @@ function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker
 
       {/* treemap */}
       <div className="rounded-xl p-4 mb-5" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
-        <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ca-text-3)" }}>Position Sizing — click a tile to inspect</p>
+        <div className="flex items-center justify-between mb-3">
+          <p className="text-[10px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-3)" }}>Position Sizing — click a tile to inspect</p>
+          <div className="flex items-center gap-3">
+            {(["NEW", "ADD", "HOLD", "TRIM", "EXIT"] as const).map((a) => (
+              <span key={a} className="flex items-center gap-1">
+                <span className="w-2 h-2 rounded-[1px]" style={{ background: ACTION_META[a].dot }} />
+                <span className="text-[9px] font-medium" style={{ color: "var(--ca-text-3)" }}>{ACTION_META[a].label}</span>
+              </span>
+            ))}
+          </div>
+        </div>
         <div style={{ width: "100%", height: 240 }}>
           <ResponsiveContainer>
             <Treemap data={treemapData} dataKey="size" nameKey="name" stroke="#fff" isAnimationActive
@@ -273,18 +283,32 @@ function ActivityBar({ holdings, top10Weight }: { holdings: HoldingRow[]; top10W
 // ── treemap cell + tooltip ──────────────────────────────────────────────────
 type TreeCellProps = {
   x?: number; y?: number; width?: number; height?: number;
-  name?: string; action?: HoldingAction; onPick?: (t: string) => void;
+  name?: string; action?: HoldingAction; pct?: number; onPick?: (t: string) => void;
 };
-function TreeCell({ x = 0, y = 0, width = 0, height = 0, name, action, onPick }: TreeCellProps) {
+// Premium heatmap: navy fill deepens with position size; a saturated stripe
+// encodes the quarter's action; white labels for a Bloomberg-grade look.
+function navyShade(pct: number): string {
+  const t = Math.min(1, (pct ?? 0) / 25);            // 0 (small) → 1 (large)
+  const light = { r: 0x3a, g: 0x55, b: 0x8f };
+  const dark  = { r: 0x0a, g: 0x18, b: 0x33 };
+  const mix = (a: number, b: number) => Math.round(a + (b - a) * t);
+  return `rgb(${mix(light.r, dark.r)},${mix(light.g, dark.g)},${mix(light.b, dark.b)})`;
+}
+function TreeCell({ x = 0, y = 0, width = 0, height = 0, name, action, pct = 0, onPick }: TreeCellProps) {
   if (width < 2 || height < 2) return null;
-  const m = ACTION_META[action ?? "HOLD"] ?? ACTION_META.HOLD;
-  const show = width > 44 && height > 24;
+  const stripe = ACTION_META[action ?? "HOLD"]?.dot ?? "#9ca3af";
+  const showName = width > 40 && height > 22;
+  const showPct = width > 60 && height > 40;
   return (
     <g onClick={() => name && onPick?.(name)} style={{ cursor: "pointer" }}>
-      <rect x={x} y={y} width={width} height={height} rx={3}
-        style={{ fill: m.bg, stroke: "#fff", strokeWidth: 2 }} />
-      {show && name && (
-        <text x={x + 6} y={y + 16} fontSize={11} fontWeight={700} fill={m.fg}>{name}</text>
+      <rect x={x} y={y} width={width} height={height} rx={2}
+        style={{ fill: navyShade(pct), stroke: "#f9fafb", strokeWidth: 1.5 }} />
+      <rect x={x} y={y} width={Math.min(3, width)} height={height} style={{ fill: stripe }} />
+      {showName && name && (
+        <text x={x + 8} y={y + 17} fontSize={11.5} fontWeight={700} fill="#ffffff">{name}</text>
+      )}
+      {showPct && (
+        <text x={x + 8} y={y + 32} fontSize={10} fontWeight={500} fill="rgba(255,255,255,0.72)">{pct.toFixed(1)}%</text>
       )}
     </g>
   );

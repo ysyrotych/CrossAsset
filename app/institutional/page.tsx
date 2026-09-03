@@ -122,6 +122,8 @@ function Tape({ rows, onPick }: { rows: ConsensusRow[]; onPick: (t: string) => v
   const doubled = useMemo(() => [...rows, ...rows], [rows]);
   return (
     <div className="relative overflow-hidden rounded-xl py-2.5" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+      <div className="absolute left-0 top-0 bottom-0 w-16 z-10 pointer-events-none" style={{ background: "linear-gradient(90deg, var(--ca-surface), transparent)" }} />
+      <div className="absolute right-0 top-0 bottom-0 w-16 z-10 pointer-events-none" style={{ background: "linear-gradient(270deg, var(--ca-surface), transparent)" }} />
       <div className="inst-marquee-track">
         {doubled.map((r, i) => {
           const up = r.consensusScore >= 0;
