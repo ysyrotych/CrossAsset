@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { ArrowUpRight, ArrowDownRight } from "lucide-react";
+import { ArrowUpRight, ArrowDownRight, Sparkles, Loader2 } from "lucide-react";
 import type { SuperinvestorDigest } from "@/lib/institutional/types";
 import { fmtMoney, initials } from "./shared";
 
@@ -22,6 +22,8 @@ export default function SuperinvestorsView({
 
   return (
     <div className="inst-fade-up">
+      <SmartMoneyBrief />
+
       {/* quarter digest */}
       <div className="grid grid-cols-2 gap-5 mb-8">
         <DigestPanel title="Biggest new bets" tone="green" icon={<ArrowUpRight size={13} />}
@@ -54,6 +56,48 @@ export default function SuperinvestorsView({
           </button>
         ))}
       </div>
+    </div>
+  );
+}
+
+function SmartMoneyBrief() {
+  const [brief, setBrief] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [open, setOpen] = useState(false);
+
+  function generate() {
+    setOpen(true); setLoading(true);
+    fetch("/api/institutional/brief").then((r) => r.json())
+      .then((d) => setBrief(d.brief ?? "Unable to generate brief."))
+      .finally(() => setLoading(false));
+  }
+
+  return (
+    <div className="rounded-xl p-5 mb-6 inst-aurora inst-scale-in" style={{ color: "#fff" }}>
+      <div className="flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Sparkles size={15} style={{ color: "#fff" }} />
+          <p className="text-[13px] font-semibold">Smart-Money Brief</p>
+          <span className="text-[10.5px] px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.15)", color: "rgba(255,255,255,0.85)" }}>AI</span>
+        </div>
+        {!open && (
+          <button onClick={generate} className="text-[12px] font-medium px-3.5 py-1.5 rounded-lg inst-card-hover"
+            style={{ background: "rgba(255,255,255,0.14)", color: "#fff" }}>
+            Generate this quarter&apos;s brief
+          </button>
+        )}
+      </div>
+      {open && (
+        <div className="mt-3">
+          {loading ? (
+            <div className="flex items-center gap-2 text-[12.5px]" style={{ color: "rgba(255,255,255,0.8)" }}>
+              <Loader2 size={14} className="animate-spin" /> Reading the tape…
+            </div>
+          ) : (
+            <p className="text-[13.5px] leading-relaxed" style={{ color: "rgba(255,255,255,0.92)" }}>{brief}</p>
+          )}
+        </div>
+      )}
     </div>
   );
 }
