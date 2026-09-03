@@ -23,6 +23,14 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+# ── Institutional Ownership Engine (13F ingestion) ────────────────────────────
+try:
+    from institutional import router as institutional_router
+    app.include_router(institutional_router)
+except Exception as _e:  # keep the core service alive if the module errors
+    import logging as _logging
+    _logging.getLogger("institutional").warning("institutional router not mounted: %s", _e)
+
 # ── edgartools imports ────────────────────────────────────────────────────────
 
 try:

@@ -411,3 +411,63 @@
 
 .dark .text-\[\#b0a898\]      { color: var(--ca-text-3) !important; }
 .dark .text-\[\#b5813c\]      { color: var(--ca-accent) !important; }
+
+/* ── Institutional Ownership Engine — animations ─────────────────────────── */
+@keyframes inst-fade-up {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes inst-scale-in {
+  from { opacity: 0; transform: scale(0.97); }
+  to   { opacity: 1; transform: scale(1); }
+}
+@keyframes inst-meter {
+  from { width: 0; }
+}
+@keyframes inst-aurora {
+  0%   { background-position: 0% 50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0% 50%; }
+}
+@keyframes inst-marquee {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-50%); }
+}
+@keyframes inst-shimmer {
+  0%   { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+@keyframes inst-pulse-ring {
+  0%   { box-shadow: 0 0 0 0 rgba(12,27,56,0.28); }
+  70%  { box-shadow: 0 0 0 8px rgba(12,27,56,0); }
+  100% { box-shadow: 0 0 0 0 rgba(12,27,56,0); }
+}
+
+.inst-fade-up   { animation: inst-fade-up 0.5s cubic-bezier(0.22,1,0.36,1) both; }
+.inst-scale-in  { animation: inst-scale-in 0.4s cubic-bezier(0.22,1,0.36,1) both; }
+.inst-meter-fill{ animation: inst-meter 0.9s cubic-bezier(0.22,1,0.36,1) both; }
+.inst-pulse     { animation: inst-pulse-ring 2s infinite; }
+
+.inst-aurora {
+  background: linear-gradient(120deg, #0c1b38, #16305f, #0c1b38, #1e2a5a);
+  background-size: 300% 300%;
+  animation: inst-aurora 14s ease infinite;
+}
+.inst-marquee-track {
+  display: inline-flex;
+  animation: inst-marquee 40s linear infinite;
+}
+.inst-marquee-track:hover { animation-play-state: paused; }
+
+.inst-skeleton {
+  background: linear-gradient(90deg, #f3f4f6 25%, #e9ebef 37%, #f3f4f6 63%);
+  background-size: 400px 100%;
+  animation: inst-shimmer 1.4s ease infinite;
+}
+.inst-row-hover { transition: background-color 0.15s ease, transform 0.15s ease; }
+.inst-card-hover { transition: transform 0.2s cubic-bezier(0.22,1,0.36,1), box-shadow 0.2s ease, border-color 0.2s ease; }
+.inst-card-hover:hover { transform: translateY(-2px); box-shadow: 0 10px 30px -12px rgba(12,27,56,0.22); }
+@media (prefers-reduced-motion: reduce) {
+  .inst-fade-up, .inst-scale-in, .inst-meter-fill, .inst-aurora,
+  .inst-marquee-track, .inst-skeleton, .inst-pulse { animation: none !important; }
+}
