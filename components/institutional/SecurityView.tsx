@@ -79,6 +79,25 @@ export default function SecurityView({ ticker, onPickManager }: { ticker: string
 
           {/* insider overlay */}
           <InsiderTimeline txns={view.insiderOverlay} />
+
+          {/* co-movement — smart-money network effect */}
+          {view.alsoBought.length > 0 && (
+            <div className="mt-5 rounded-xl p-4" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+              <p className="text-[10px] font-bold uppercase tracking-[0.12em] mb-3" style={{ color: "var(--ca-text-3)" }}>
+                Funds buying {view.ticker} also accumulated
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {view.alsoBought.map((c) => (
+                  <button key={c.ticker} onClick={() => { setInput(c.ticker); setActive(c.ticker); }}
+                    className="flex items-center gap-2 px-3 py-1.5 rounded-lg inst-card-hover"
+                    style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
+                    <span className="text-[12px] font-bold" style={{ color: "var(--ca-text)" }}>{c.ticker}</span>
+                    <span className="text-[10px]" style={{ color: "var(--ca-text-3)" }}>{c.sharedFunds} shared funds</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
         </div>
       ) : null}
     </div>

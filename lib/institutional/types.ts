@@ -83,6 +83,7 @@ export type SecurityView = {
   distributors: HolderRow[];
   insiderOverlay: InsiderTxn[];
   signalAlignment: "ALIGNED_BULLISH" | "ALIGNED_BEARISH" | "DIVERGENT" | "NEUTRAL";
+  alsoBought: { ticker: string; issuer: string; sharedFunds: number }[];
 };
 
 export type ConsensusRow = {

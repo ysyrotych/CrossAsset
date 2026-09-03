@@ -263,12 +263,30 @@ export function demoSecurityView(ticker: string): SecurityView | null {
   if (netManagerFlow > 0 && insiderNet > 0) signalAlignment = "ALIGNED_BULLISH";
   else if (netManagerFlow < 0 && insiderNet < 0) signalAlignment = "ALIGNED_BEARISH";
   else if (netManagerFlow !== 0 && insiderNet !== 0) signalAlignment = "DIVERGENT";
+
+  // "Funds buying this also bought…" — co-movement across the holders' other books
+  const holderSlugs = new Set(holders.map(({ m }) => m.slug));
+  const coCount: Record<string, { issuer: string; n: number }> = {};
+  for (const book of RAW_BOOKS) {
+    if (!holderSlugs.has(book.slug)) continue;
+    for (const h of book.holdings) {
+      if (!h.ticker || h.putCall || h.ticker === ticker.toUpperCase()) continue;
+      if (!(h.action === "NEW" || h.action === "ADD")) continue;
+      (coCount[h.ticker] ||= { issuer: h.issuer, n: 0 }).n += 1;
+    }
+  }
+  const alsoBought = Object.entries(coCount)
+    .filter(([, v]) => v.n >= 2)
+    .sort((a, b) => b[1].n - a[1].n)
+    .slice(0, 6)
+    .map(([t, v]) => ({ ticker: t, issuer: v.issuer, sharedFunds: v.n }));
+
   return {
     ticker: ticker.toUpperCase(), issuer, period: DEMO_PERIOD, stalenessDays: STALENESS_DAYS,
     aggregateInstValue: holders.reduce((s, x) => s + x.h.value, 0),
     holderCount: holders.length,
     netShareFlow: holders.reduce((s, x) => s + x.h.dShares, 0),
-    netManagerFlow, accumulators, distributors, insiderOverlay: insider, signalAlignment,
+    netManagerFlow, accumulators, distributors, insiderOverlay: insider, signalAlignment, alsoBought,
   };
 }
 
