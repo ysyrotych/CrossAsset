@@ -82,7 +82,26 @@ export default function ManagersView({
   );
 }
 
+type SortKey = "rank" | "value" | "pctOfBook" | "convictionScore" | "dShares" | "priceChangeSincePeriodEnd";
+
 function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker: (t: string) => void }) {
+  const [sortKey, setSortKey] = useState<SortKey>("rank");
+  const [asc, setAsc] = useState(true);
+
+  const sorted = useMemo(() => {
+    const rows = [...view.holdings];
+    rows.sort((a, b) => {
+      const av = (a[sortKey] ?? 0) as number, bv = (b[sortKey] ?? 0) as number;
+      return asc ? av - bv : bv - av;
+    });
+    return rows;
+  }, [view.holdings, sortKey, asc]);
+
+  function toggleSort(k: SortKey) {
+    if (k === sortKey) setAsc((v) => !v);
+    else { setSortKey(k); setAsc(k === "rank"); }
+  }
+
   const treemapData = view.holdings
     .filter((h) => h.putCall === "NONE")
     .slice(0, 20)
@@ -155,22 +174,36 @@ function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker
         <table className="w-full">
           <thead>
             <tr className="text-[9.5px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-3)" }}>
-              <th className="text-left px-4 py-3">#</th>
+              <Th label="#" k="rank" cur={sortKey} asc={asc} onSort={toggleSort} align="left" pad="px-4" />
               <th className="text-left px-2 py-3">Holding</th>
-              <th className="text-right px-2 py-3">Value</th>
-              <th className="text-right px-2 py-3">% Book</th>
+              <Th label="Value" k="value" cur={sortKey} asc={asc} onSort={toggleSort} align="right" />
+              <Th label="% Book" k="pctOfBook" cur={sortKey} asc={asc} onSort={toggleSort} align="right" />
               <th className="text-center px-2 py-3">Change</th>
-              <th className="text-right px-2 py-3">Δ Shares</th>
-              <th className="text-left px-2 py-3">Conviction</th>
-              <th className="text-right px-4 py-3">Since Q-End</th>
+              <Th label="Δ Shares" k="dShares" cur={sortKey} asc={asc} onSort={toggleSort} align="right" />
+              <Th label="Conviction" k="convictionScore" cur={sortKey} asc={asc} onSort={toggleSort} align="left" />
+              <Th label="Since Q-End" k="priceChangeSincePeriodEnd" cur={sortKey} asc={asc} onSort={toggleSort} align="right" pad="px-4" />
             </tr>
           </thead>
           <tbody>
-            {view.holdings.map((h, i) => <HoldingRowEl key={`${h.ticker}-${h.putCall}-${i}`} h={h} i={i} onPick={onPickTicker} />)}
+            {sorted.map((h, i) => <HoldingRowEl key={`${h.ticker}-${h.putCall}-${i}`} h={h} i={i} onPick={onPickTicker} />)}
           </tbody>
         </table>
       </div>
     </div>
+  );
+}
+
+function Th({ label, k, cur, asc, onSort, align, pad = "px-2" }: {
+  label: string; k: SortKey; cur: SortKey; asc: boolean; onSort: (k: SortKey) => void;
+  align: "left" | "right"; pad?: string;
+}) {
+  const active = cur === k;
+  return (
+    <th className={`${pad} py-3 ${align === "right" ? "text-right" : "text-left"} cursor-pointer select-none`} onClick={() => onSort(k)}>
+      <span className="inline-flex items-center gap-1 hover:opacity-100 transition-opacity" style={{ opacity: active ? 1 : 0.7, color: active ? "var(--ca-accent)" : undefined }}>
+        {label}<span className="text-[8px]">{active ? (asc ? "▲" : "▼") : "↕"}</span>
+      </span>
+    </th>
   );
 }
 
