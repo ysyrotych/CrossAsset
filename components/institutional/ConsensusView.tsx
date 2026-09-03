@@ -5,9 +5,12 @@ import { Flame, Snowflake } from "lucide-react";
 import type { ConsensusRow } from "@/lib/institutional/types";
 import { fmtMoney } from "./shared";
 
+type Filter = "all" | "buy" | "sell";
+
 export default function ConsensusView({ onPickTicker }: { onPickTicker: (t: string) => void }) {
   const [rows, setRows] = useState<ConsensusRow[]>([]);
   const [loading, setLoading] = useState(true);
+  const [filter, setFilter] = useState<Filter>("all");
 
   useEffect(() => {
     fetch("/api/institutional/consensus?limit=60")
@@ -19,9 +22,14 @@ export default function ConsensusView({ onPickTicker }: { onPickTicker: (t: stri
   if (loading) return <div className="grid grid-cols-2 gap-4"><div className="h-96 rounded-xl inst-skeleton" /><div className="h-96 rounded-xl inst-skeleton" /></div>;
 
   const buys = rows.filter((r) => r.consensusScore > 0).sort((a, b) => b.consensusScore - a.consensusScore).slice(0, 14);
-  const sells = rows.filter((r) => r.consensusScore < 0).sort((a, b) => a.consensusScore - b.consensusScore).slice(0, 10);
+  const sells = rows.filter((r) => r.consensusScore < 0).sort((a, b) => a.consensusScore - b.consensusScore).slice(0, 12);
   const maxAbs = Math.max(1, ...rows.map((r) => Math.abs(r.consensusScore)));
   const topBuy = buys[0];
+  const totalNewMoney = rows.reduce((s, r) => s + (r.newMoney ?? 0), 0);
+  const crowded = rows.filter((r) => r.buyers + r.sellers >= 4).length;
+
+  const showBuys = filter !== "sell";
+  const showSells = filter !== "buy";
 
   return (
     <div className="inst-fade-up">
@@ -40,9 +48,28 @@ export default function ConsensusView({ onPickTicker }: { onPickTicker: (t: stri
         </div>
       )}
 
-      <div className="grid grid-cols-2 gap-5">
-        <HeatColumn title="Most Bought" icon={<Flame size={14} />} tone="green" rows={buys} maxAbs={maxAbs} onPick={onPickTicker} />
-        <HeatColumn title="Most Dumped" icon={<Snowflake size={14} />} tone="red" rows={sells} maxAbs={maxAbs} onPick={onPickTicker} />
+      {/* filter + summary bar */}
+      <div className="flex items-center justify-between mb-4">
+        <div className="inline-flex rounded-lg p-0.5" style={{ background: "var(--ca-surface-2)" }}>
+          {(["all", "buy", "sell"] as Filter[]).map((f) => (
+            <button key={f} onClick={() => setFilter(f)}
+              className="px-3.5 py-1.5 rounded-md text-[11.5px] font-semibold capitalize transition-colors"
+              style={{ background: filter === f ? "var(--ca-surface)" : "transparent",
+                color: filter === f ? "var(--ca-text)" : "var(--ca-text-3)",
+                boxShadow: filter === f ? "0 1px 3px rgba(0,0,0,0.08)" : "none" }}>
+              {f === "all" ? "All" : f === "buy" ? "Buying" : "Selling"}
+            </button>
+          ))}
+        </div>
+        <div className="flex items-center gap-4 text-[11.5px]" style={{ color: "var(--ca-text-3)" }}>
+          <span><b style={{ color: "var(--ca-text-2)" }}>{fmtMoney(totalNewMoney)}</b> fresh initiations</span>
+          <span className="flex items-center gap-1"><Flame size={12} style={{ color: "#f59e0b" }} /> <b style={{ color: "var(--ca-text-2)" }}>{crowded}</b> crowded names</span>
+        </div>
+      </div>
+
+      <div className={showBuys && showSells ? "grid grid-cols-2 gap-5" : ""}>
+        {showBuys && <HeatColumn title="Most Bought" icon={<Flame size={14} />} tone="green" rows={buys} maxAbs={maxAbs} onPick={onPickTicker} />}
+        {showSells && <HeatColumn title="Most Dumped" icon={<Snowflake size={14} />} tone="red" rows={sells} maxAbs={maxAbs} onPick={onPickTicker} />}
       </div>
     </div>
   );
@@ -69,7 +96,13 @@ function HeatColumn({ title, icon, tone, rows, maxAbs, onPick }: {
               <div className="absolute inset-y-0 left-0 inst-meter-fill" style={{ width: `${w}%`, background: `${barBg}14`, animationDelay: `${i * 40}ms` }} />
               <div className="relative flex items-center gap-3 px-3.5 py-2.5">
                 <span className="text-[13px] font-bold w-14 shrink-0" style={{ color: "var(--ca-text)" }}>{r.ticker}</span>
+                {r.buyers + r.sellers >= 4 && (
+                  <span title="Crowded — held by many tracked funds" className="shrink-0"><Flame size={11} style={{ color: "#f59e0b" }} /></span>
+                )}
                 <span className="text-[11px] truncate flex-1" style={{ color: "var(--ca-text-3)" }}>{r.issuer}</span>
+                {r.newMoney > 0 && (
+                  <span className="text-[10px] font-medium tabular-nums" style={{ color: "#0369a1" }} title="Fresh initiation dollars">+{fmtMoney(r.newMoney)}</span>
+                )}
                 <span className="text-[10.5px] tabular-nums" style={{ color: "var(--ca-text-2)" }}>
                   {r.buyers}▲ {r.sellers}▼
                 </span>
