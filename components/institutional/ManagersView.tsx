@@ -113,6 +113,9 @@ function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker
         <StatCard label="Turnover"><CountNum value={view.turnoverPct} dp={0} suffix="%" /></StatCard>
       </div>
 
+      {/* quarter activity breakdown */}
+      <ActivityBar holdings={view.holdings} top10Weight={view.top10Weight} />
+
       {/* new high-conviction strip */}
       {view.newHighConviction.length > 0 && (
         <div className="rounded-xl px-4 py-3 mb-5 inst-scale-in" style={{ background: "linear-gradient(90deg, #eff6ff, #f0fdf4)", border: "1px solid #dbeafe" }}>
@@ -201,6 +204,36 @@ function HoldingRowEl({ h, i, onPick }: { h: HoldingRow; i: number; onPick: (t: 
         {move == null ? "—" : fmtPct(move)}
       </td>
     </tr>
+  );
+}
+
+// ── quarter activity + concentration ────────────────────────────────────────
+function ActivityBar({ holdings, top10Weight }: { holdings: HoldingRow[]; top10Weight: number }) {
+  const counts = holdings.reduce((acc, h) => { acc[h.action] = (acc[h.action] ?? 0) + 1; return acc; },
+    {} as Record<string, number>);
+  const order: (keyof typeof ACTION_META)[] = ["NEW", "ADD", "HOLD", "TRIM", "EXIT"];
+  return (
+    <div className="flex items-center gap-5 mb-5 px-4 py-3 rounded-xl" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+      <div className="flex items-center gap-3">
+        {order.filter((a) => counts[a]).map((a) => {
+          const m = ACTION_META[a];
+          return (
+            <div key={a} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ background: m.dot }} />
+              <span className="text-[11.5px] font-semibold tabular-nums" style={{ color: "var(--ca-text)" }}>{counts[a]}</span>
+              <span className="text-[10.5px]" style={{ color: "var(--ca-text-3)" }}>{m.label}</span>
+            </div>
+          );
+        })}
+      </div>
+      <div className="flex-1 flex items-center gap-2.5 min-w-0">
+        <span className="text-[10px] font-bold uppercase tracking-wide shrink-0" style={{ color: "var(--ca-text-3)" }}>Concentration</span>
+        <div className="flex-1 h-2 rounded-full overflow-hidden" style={{ background: "var(--ca-surface-2)" }}>
+          <div className="h-full rounded-full inst-meter-fill" style={{ width: `${top10Weight}%`, background: "var(--ca-accent)" }} />
+        </div>
+        <span className="text-[11px] font-semibold tabular-nums shrink-0" style={{ color: "var(--ca-text)" }}>{top10Weight.toFixed(0)}% in top 10</span>
+      </div>
+    </div>
   );
 }
 
