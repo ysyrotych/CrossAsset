@@ -124,7 +124,11 @@ export default function MacroReportPage() {
 
   function scrollTo(id: SectionId) {
     setActive(id);
-    scrollRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
+    const el = scrollRefs.current[id];
+    if (el) {
+      const y = el.getBoundingClientRect().top + window.scrollY - 64;
+      window.scrollTo({ top: y, behavior: "smooth" });
+    }
   }
 
   const asDate = report ? new Date(report.generatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";

@@ -6,6 +6,11 @@ import MacroChart, { ChangeText } from "./MacroChart";
 import { SECTION_TITLE } from "@/lib/macro/manifest";
 import type { RenderedChart } from "@/lib/macro/types";
 
+function ordinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] ?? s[v] ?? s[0]);
+}
+
 function fmt(v: number | undefined, unit: string, p = 1): string {
   if (v == null) return "—";
   const n = Math.abs(v) >= 10000 ? v.toLocaleString(undefined, { maximumFractionDigits: 0 }) : v.toFixed(p);
@@ -29,7 +34,7 @@ export default function ChartDetailModal({ chart, onClose }: { chart: RenderedCh
     { label: "Average", node: chart.avg != null ? fmt(chart.avg, chart.unit, p) : "—" },
     { label: "Min", node: fmt(s?.min, chart.unit, p) },
     { label: "Max", node: fmt(s?.max, chart.unit, p) },
-    { label: "Percentile", node: s ? `${s.percentile.toFixed(0)}th` : "—" },
+    { label: "Percentile", node: s ? ordinal(Math.round(s.percentile)) : "—" },
   ];
 
   return (

@@ -8,9 +8,10 @@ const KEY = process.env.FRED_API_KEY;
 
 // series-specific unit scaling applied to raw values (level/rate series)
 const SCALE: Record<string, number> = {
-  WRESBAL: 1 / 1000,      // $b → $t
+  WRESBAL: 1 / 1_000_000, // $m → $t
   HOUST: 1 / 1000,        // thousands → millions
   HOUST1F: 1 / 1000,
+  ICSA: 1 / 1000,         // count → thousands
   T10Y2Y: 100,            // % → bps
   BAMLH0A0HYM2: 100,      // % → bps
   BOPGSTB: 1 / 1000,      // $m → $b
@@ -82,16 +83,18 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
     //  • level series  → true y/y %  (e.g. auto sales)
     //  • yoy/rate series (already a %/index) → change in percentage points vs prior obs
     const tr = spec.series[0].transform ?? "level";
+    // % / index / diffusion series → change in percentage points; $ & count levels → true y/y %;
+    // flow series (mom, e.g. payroll additions) → no labeled change (the value IS the change).
+    const ppLike = /%|index|month/i.test(spec.unit);
     let change: number | undefined, changeUnit: "% y/y" | "pp" | undefined;
-    const isIndexLike = /index|month/i.test(spec.unit);
-    if (last && primary.length > 1) {
-      if (tr === "level" && !isIndexLike) {
+    if (last && primary.length > 1 && tr !== "mom") {
+      if (ppLike) {
+        change = last.value - primary[primary.length - 2].value;
+        changeUnit = "pp";
+      } else {
         const lag = spec.freq === "q" ? 4 : spec.freq === "m" ? 12 : spec.freq === "w" ? 52 : 252;
         const py = primary[primary.length - 1 - lag]?.value;
         if (py) { change = ((last.value / py) - 1) * 100; changeUnit = "% y/y"; }
-      } else {
-        const prev = primary[primary.length - 2].value;
-        change = last.value - prev; changeUnit = "pp";
       }
     }
     const vals = primary.map((p) => p.value);
