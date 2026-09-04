@@ -24,8 +24,19 @@ async function fredFetch(url: string): Promise<Response> {
     const t = setTimeout(() => ctrl.abort(), 9000);
     return fetch(url, { cache: "no-store", signal: ctrl.signal }).finally(() => clearTimeout(t));
   };
-  try { return await attempt(); } catch { return attempt(); }
+  // up to 3 tries with small backoff
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = await attempt();
+      if (r.ok || i === 2) return r;
+    } catch { if (i === 2) throw new Error("fred fetch failed"); }
+    await new Promise((res) => setTimeout(res, 250 * (i + 1)));
+  }
+  return attempt();
 }
+
+// Per-build de-dupe: fetch each series id at most once.
+const _seriesCache = new Map<string, Promise<Point[]>>();
 
 async function fetchFred(seriesId: string, startYear?: number): Promise<Point[]> {
   if (!KEY) return [];
@@ -60,10 +71,17 @@ async function fetchYahoo(symbol: string): Promise<Point[]> {
 }
 
 async function rawSeries(seriesId: string, source: string, startYear?: number): Promise<Point[]> {
-  if (source === "fred") return fetchFred(seriesId, startYear);
-  if (source === "yahoo") return fetchYahoo(seriesId);
-  if (source === "curated") return curatedSeries(seriesId);
-  return [];
+  const key = `${source}:${seriesId}:${startYear ?? ""}`;
+  const cached = _seriesCache.get(key);
+  if (cached) return cached;
+  const p = (async () => {
+    if (source === "fred") return fetchFred(seriesId, startYear);
+    if (source === "yahoo") return fetchYahoo(seriesId);
+    if (source === "curated") return curatedSeries(seriesId);
+    return [];
+  })();
+  _seriesCache.set(key, p);
+  return p;
 }
 
 async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
@@ -127,13 +145,17 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
   }
 }
 
-export async function buildReport(): Promise<ReportData> {
+// Warm-instance report cache (30-min TTL) — makes repeat loads near-instant.
+let _reportCache: { at: number; data: ReportData } | null = null;
+const REPORT_TTL = 30 * 60 * 1000;
+
+export async function buildReport(force = false): Promise<ReportData> {
+  if (!force && _reportCache && Date.now() - _reportCache.at < REPORT_TTL) return _reportCache.data;
+  _seriesCache.clear();
   const results = await Promise.all(CHARTS.map(buildChart));
   const charts: Record<string, RenderedChart> = {};
   for (const c of results) charts[c.id] = c;
-  return {
-    generatedAt: new Date().toISOString(),
-    charts,
-    fredConnected: !!KEY,
-  };
+  const data: ReportData = { generatedAt: new Date().toISOString(), charts, fredConnected: !!KEY };
+  _reportCache = { at: Date.now(), data };
+  return data;
 }

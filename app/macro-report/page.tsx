@@ -52,9 +52,9 @@ export default function MacroReportPage() {
   const [progress, setProgress] = useState(0);
   const [movers, setMovers] = useState<{ id: string; title: string; unit: string; pct: number; to: number }[]>([]);
 
-  const loadData = useCallback(async () => {
+  const loadData = useCallback(async (force = false) => {
     setLoading(true);
-    const r = await fetch("/api/macro-report/data").then((x) => x.json()).catch(() => null);
+    const r = await fetch(`/api/macro-report/data${force ? "?force=1" : ""}`).then((x) => x.json()).catch(() => null);
     setReport(r);
     setLoading(false);
     return r as ReportData | null;
@@ -78,7 +78,11 @@ export default function MacroReportPage() {
             method: "POST", headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ section: s.id, title: s.title, facts }),
           }).then((x) => x.json());
-          setNarratives((prev) => ({ ...prev, [s.id]: res.bullets ?? [] }));
+          setNarratives((prev) => {
+            const next = { ...prev, [s.id]: res.bullets ?? [] };
+            try { sessionStorage.setItem(`macro_narr_${data.generatedAt.slice(0, 10)}`, JSON.stringify(next)); } catch {}
+            return next;
+          });
         } catch { /* skip */ }
       }),
     );
@@ -99,7 +103,9 @@ export default function MacroReportPage() {
       const res = await fetch("/api/macro-report/summary", {
         method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ facts }),
       }).then((x) => x.json());
-      setSummary({ headline: res.headline, macro: res.macro ?? [], markets: res.markets ?? [] });
+      const sum = { headline: res.headline, macro: res.macro ?? [], markets: res.markets ?? [] };
+      setSummary(sum);
+      try { sessionStorage.setItem(`macro_summ_${data.generatedAt.slice(0, 10)}`, JSON.stringify(sum)); } catch {}
     } catch { /* skip */ }
   }, []);
 
@@ -124,10 +130,16 @@ export default function MacroReportPage() {
     } catch { /* ignore */ }
   }, []);
 
-  const generate = useCallback(async () => {
+  const generate = useCallback(async (force = false) => {
     setSummary(null); setNarratives({}); setMovers([]);
-    const data = await loadData();
-    if (data) { diffSnapshot(data); summarize(data); narrate(data); }
+    const data = await loadData(force);
+    if (!data) return;
+    diffSnapshot(data);
+    const key = data.generatedAt.slice(0, 10);
+    const cachedS = !force ? sessionStorage.getItem(`macro_summ_${key}`) : null;
+    const cachedN = !force ? sessionStorage.getItem(`macro_narr_${key}`) : null;
+    if (cachedS) { try { setSummary(JSON.parse(cachedS)); } catch { summarize(data); } } else summarize(data);
+    if (cachedN) { try { setNarratives(JSON.parse(cachedN)); } catch { narrate(data); } } else narrate(data);
   }, [loadData, narrate, summarize, diffSnapshot]);
 
   useEffect(() => { generate(); /* one-click on load */ }, [generate]);
@@ -219,7 +231,7 @@ export default function MacroReportPage() {
             style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
             <Play size={13} /> Present <kbd className="text-[10px] px-1 py-0.5 rounded ml-0.5" style={{ background: "var(--ca-surface-2)" }}>P</kbd>
           </button>
-          <button onClick={generate} disabled={loading || narrating}
+          <button onClick={() => generate(true)} disabled={loading || narrating}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium text-white inst-card-hover"
             style={{ background: "var(--ca-accent)" }}>
             <RefreshCw size={13} className={loading || narrating ? "animate-spin" : ""} /> Regenerate
