@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp, Link2 } from "lucide-react";
+import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp, Link2, Check } from "lucide-react";
 import MacroChart from "@/components/macro/MacroChart";
+import LazyMount from "@/components/macro/LazyMount";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
 import FedSEPTable from "@/components/macro/FedSEPTable";
@@ -65,6 +66,8 @@ export default function MacroReportPage() {
   const [expanded, setExpanded] = useState<RenderedChart | null>(null);
   const [showTop, setShowTop] = useState(false);
   const [progress, setProgress] = useState(0);
+  const [copied, setCopied] = useState(false);
+  const [forceAllCharts, setForceAllCharts] = useState(false);
   const [movers, setMovers] = useState<{ id: string; title: string; unit: string; pct: number; to: number }[]>([]);
 
   const loadData = useCallback(async (force = false) => {
@@ -202,6 +205,16 @@ export default function MacroReportPage() {
 
   // document title + deep-link scroll on first load
   useEffect(() => { document.title = "U.S. Macro Report · CrossAsset"; }, []);
+
+  // Cmd/Ctrl+P (native print) must also have every exhibit mounted for the PDF.
+  useEffect(() => {
+    const onBefore = () => setForceAllCharts(true);
+    window.addEventListener("beforeprint", onBefore);
+    return () => window.removeEventListener("beforeprint", onBefore);
+  }, []);
+
+  // The slideshow needs all charts available too.
+  useEffect(() => { if (presenting) setForceAllCharts(true); }, [presenting]);
   useEffect(() => {
     if (!report) return;
     const h = (initialHashRef.current ?? "") as SectionId;
@@ -231,8 +244,32 @@ export default function MacroReportPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, []);
 
-  function copyLink() {
-    navigator.clipboard?.writeText(window.location.href).catch(() => {});
+  async function copyLink() {
+    const url = window.location.href;
+    let ok = false;
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(url);
+        ok = true;
+      } else {
+        // Fallback for non-secure / older contexts where the async clipboard API is unavailable.
+        const ta = document.createElement("textarea");
+        ta.value = url;
+        ta.style.position = "fixed";
+        ta.style.opacity = "0";
+        document.body.appendChild(ta);
+        ta.focus();
+        ta.select();
+        ok = document.execCommand("copy");
+        document.body.removeChild(ta);
+      }
+    } catch {
+      ok = false;
+    }
+    if (ok) {
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1800);
+    }
   }
 
   function scrollTo(id: SectionId) {
@@ -300,10 +337,10 @@ export default function MacroReportPage() {
         <div className="flex items-center gap-2 macro-no-print">
           <button onClick={copyLink} disabled={!report}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
-            style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
-            <Link2 size={13} /> Share
+            style={{ background: copied ? "#f0fdf4" : "var(--ca-surface)", border: `1px solid ${copied ? "#86efac" : "var(--ca-border)"}`, color: copied ? "#147a4f" : "var(--ca-text-2)" }}>
+            {copied ? <><Check size={13} /> Link copied</> : <><Link2 size={13} /> Share</>}
           </button>
-          <button onClick={() => window.print()} disabled={!report}
+          <button onClick={() => { setForceAllCharts(true); window.setTimeout(() => window.print(), 350); }} disabled={!report}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
             style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
             <Download size={13} /> PDF
@@ -464,10 +501,12 @@ export default function MacroReportPage() {
                 {s.id === "monetary-policy" && <FedSEPTable />}
                 {s.id === "monetary-policy" && <YieldCurveChart />}
 
-                {/* chart grid */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
-                  {charts.map((c) => <MacroChart key={c.id} chart={c} onExpand={() => setExpanded(c)} />)}
-                </div>
+                {/* chart grid — deferred until near-viewport so the ~123-chart page stays fast */}
+                <LazyMount force={forceAllCharts || idx < 1} minHeight={Math.ceil(charts.length / 3) * 300}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
+                    {charts.map((c) => <MacroChart key={c.id} chart={c} onExpand={() => setExpanded(c)} />)}
+                  </div>
+                </LazyMount>
               </section>
             );
           })}
