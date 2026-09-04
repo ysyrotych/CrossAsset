@@ -162,6 +162,14 @@ export const CHARTS: ChartSpec[] = [
   { id: "cfnai", section: "gdp", title: "Chicago Fed National Activity Index", unit: "index", source: "fred", freq: "m", chartType: "area", series: [{ id: "CFNAI", transform: "level", color: NAVY }], startYear: 2000, recession: true, refLine: 0, precision: 2, note: "0 = trend growth; below −0.7 signals recession" },
   { id: "wei", section: "gdp", title: "Weekly Economic Index", unit: "%", source: "fred", freq: "w", chartType: "area", series: [{ id: "WEI", transform: "level", color: TEAL }], startYear: 2019, recession: true, precision: 1, note: "real-time activity, scaled to GDP growth" },
   { id: "fin-stress", section: "financial-conditions", title: "St. Louis Fed Financial Stress Index", unit: "index", source: "fred", freq: "w", chartType: "area", series: [{ id: "STLFSI4", transform: "level", color: CRIMSON }], startYear: 2000, recession: true, refLine: 0, precision: 2, note: "0 = normal financial conditions" },
+
+  // ── New-loop 6: CPI components — where inflation is coming from (live FRED) ──
+  { id: "cpi-shelter", section: "inflation", title: "CPI: Shelter", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CUSR0000SAH1", transform: "yoy", color: NAVY }], startYear: 2015, precision: 1, note: "~⅓ of core CPI" },
+  { id: "cpi-coreservices", section: "inflation", title: "CPI: Core Services", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CUSR0000SASLE", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1, note: "services less energy — the sticky part" },
+  { id: "cpi-coregoods", section: "inflation", title: "CPI: Core Goods", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CUSR0000SACL1E", transform: "yoy", color: TEAL }], startYear: 2015, precision: 1, note: "commodities less food & energy" },
+  { id: "cpi-energy", section: "inflation", title: "CPI: Energy", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CPIENGSL", transform: "yoy", color: AMBER }], startYear: 2015, precision: 1 },
+  { id: "cpi-food", section: "inflation", title: "CPI: Food", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CPIUFDSL", transform: "yoy", color: NAVY }], startYear: 2015, precision: 1 },
+  { id: "cpi-medical", section: "inflation", title: "CPI: Medical Care", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CPIMEDSL", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1 },
 ];
 
 export const SECTIONS: Section[] = [
@@ -169,7 +177,7 @@ export const SECTIONS: Section[] = [
   { id: "summary-markets",      title: "Financial Market Summary",   chartIds: ["hy-oas", "vix", "move"] },
   { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-5y", "yield-10y", "yield-30y", "yield-curve-2s10s", "yield-10y3m", "bank-reserves"] },
   { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
-  { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "ppi", "new-rental", "import-prices"] },
+  { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "cpi-shelter", "cpi-coreservices", "cpi-coregoods", "cpi-energy", "cpi-food", "cpi-medical", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
   { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "sahm-rule"] },
   { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
