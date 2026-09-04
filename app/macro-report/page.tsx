@@ -240,11 +240,24 @@ export default function MacroReportPage() {
     if (!el) return;
     suppressSpy.current = true;           // stop the spy from re-firing setActive mid-scroll
     setActive(id);
-    // native scrollIntoView respects the section's scroll-margin-top and avoids
-    // getBoundingClientRect math that overshot when layout was still settling.
     el.scrollIntoView({ behavior: "smooth", block: "start" });
-    window.clearTimeout(spyTimer.current);
-    spyTimer.current = window.setTimeout(() => { suppressSpy.current = false; }, 900);
+    // Self-correcting alignment: the ~120-chart layout keeps shifting for a few
+    // seconds, so nudge to the section's top until it's stable (~56px below the
+    // sticky nav). This converges precisely for far-down sections & deep-links.
+    let tries = 0;
+    const align = () => {
+      const e = scrollRefs.current[id];
+      if (!e) { suppressSpy.current = false; return; }
+      const top = e.getBoundingClientRect().top;
+      if (Math.abs(top - 56) > 10 && tries < 14) {
+        window.scrollBy({ top: top - 56 });
+        tries++;
+        window.setTimeout(align, 180);
+      } else {
+        suppressSpy.current = false;
+      }
+    };
+    window.setTimeout(align, 300);
   }
 
   const asDate = report ? new Date(report.generatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";
