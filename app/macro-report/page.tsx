@@ -108,9 +108,11 @@ export default function MacroReportPage() {
       if (prevRaw) {
         const prev = JSON.parse(prevRaw) as Record<string, number>;
         const m = Object.entries(snap)
-          .filter(([id]) => prev[id] != null && prev[id] !== 0)
+          .filter(([id]) => prev[id] != null && prev[id] !== 0 && Number.isFinite(prev[id]))
+          .filter(([id]) => !data.charts[id]?.stale) // exclude seeded series (synthetic jumps)
           .map(([id, to]) => ({ id, title: data.charts[id].title, unit: data.charts[id].unit, to, pct: ((to - prev[id]) / Math.abs(prev[id])) * 100 }))
-          .filter((x) => Math.abs(x.pct) > 0.05)
+          // 0.1% noise floor; drop >40% moves (macro series don't; those are unit/scale artifacts)
+          .filter((x) => Math.abs(x.pct) >= 0.1 && Math.abs(x.pct) <= 40)
           .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
           .slice(0, 10);
         setMovers(m);
@@ -234,10 +236,11 @@ export default function MacroReportPage() {
           <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: "var(--ca-text-3)" }}>Movers since your last visit</p>
           <div className="flex flex-wrap gap-2">
             {movers.map((m) => (
-              <span key={m.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px]" style={{ background: "var(--ca-surface-2)" }}>
+              <button key={m.id} onClick={() => { const c = report?.charts[m.id]; if (c) setExpanded(c); }}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px] inst-card-hover" style={{ background: "var(--ca-surface-2)" }}>
                 <span className="font-medium" style={{ color: "var(--ca-text)" }}>{m.title}</span>
                 <span className="tabular-nums font-semibold" style={{ color: m.pct >= 0 ? "#147a4f" : "#b42318" }}>{m.pct >= 0 ? "▲" : "▼"} {Math.abs(m.pct).toFixed(1)}%</span>
-              </span>
+              </button>
             ))}
           </div>
         </div>

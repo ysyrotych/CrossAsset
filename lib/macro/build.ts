@@ -97,10 +97,12 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
         if (py) { change = ((last.value / py) - 1) * 100; changeUnit = "% y/y"; }
       }
     }
-    const vals = primary.map((p) => p.value);
+    if (change != null && !Number.isFinite(change)) { change = undefined; changeUnit = undefined; }
+    const vals = primary.map((p) => p.value).filter((v) => Number.isFinite(v));
     const mn = vals.length ? Math.min(...vals) : 0;
     const mx = vals.length ? Math.max(...vals) : 0;
-    const pctile = last && mx > mn ? ((last.value - mn) / (mx - mn)) * 100 : 50;
+    const pctileRaw = last && mx > mn ? ((last.value - mn) / (mx - mn)) * 100 : 50;
+    const pctile = Number.isFinite(pctileRaw) ? Math.max(0, Math.min(100, pctileRaw)) : 50;
 
     return {
       id: spec.id, section: spec.section, title: spec.title, unit: spec.unit,
