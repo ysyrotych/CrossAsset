@@ -138,8 +138,12 @@ function ChartFrame({ chart, children, onExpand, bare = false }: { chart: Render
   const primary = chart.series[0]?.data ?? [];
   if (bare) return <div className="w-full">{children}</div>;
   return (
-    <div className={`rounded-xl p-4 inst-card-hover ${onExpand ? "cursor-pointer" : ""}`} onClick={onExpand}
-      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+    <div className={`rounded-xl p-4 inst-card-hover ${onExpand ? "cursor-pointer focus-visible:outline focus-visible:outline-2" : ""}`}
+      onClick={onExpand}
+      role={onExpand ? "button" : undefined} tabIndex={onExpand ? 0 : undefined}
+      aria-label={onExpand ? `${chart.title} — open detail` : undefined}
+      onKeyDown={onExpand ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onExpand(); } } : undefined}
+      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", outlineColor: "var(--ca-accent)" }}>
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="min-w-0">
           <p className="text-[12.5px] font-semibold leading-tight" style={{ color: "var(--ca-text)" }}>{chart.title}</p>

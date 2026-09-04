@@ -256,7 +256,7 @@ export default function MacroReportPage() {
             <div className="flex items-center gap-2 text-[13px] py-3" style={{ color: "rgba(255,255,255,0.8)" }}><RefreshCw size={14} className="animate-spin" /> Synthesizing the week…</div>
           )}
           {/* key tiles */}
-          <div className="grid grid-cols-8 gap-3 mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+          <div className="grid grid-cols-4 md:grid-cols-8 gap-3 mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
             {KEY_TILES.map(([id, label]) => {
               const c = report.charts[id];
               return (
@@ -336,7 +336,7 @@ export default function MacroReportPage() {
                 </div>
 
                 {/* chart grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
                   {charts.map((c) => <MacroChart key={c.id} chart={c} onExpand={() => setExpanded(c)} />)}
                 </div>
               </section>
