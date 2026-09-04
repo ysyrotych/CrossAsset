@@ -12,6 +12,7 @@ import MarketsPanel from "@/components/macro/MarketsPanel";
 import MacroAsk from "@/components/macro/MacroAsk";
 import RecessionScoreboard from "@/components/macro/RecessionScoreboard";
 import MacroHeatmap from "@/components/macro/MacroHeatmap";
+import WeeklyBrief from "@/components/macro/WeeklyBrief";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -351,6 +352,9 @@ export default function MacroReportPage() {
 
       {/* macro at a glance heatmap */}
       {report && <MacroHeatmap report={report} onOpen={setExpanded} />}
+
+      {/* this week's AI brief */}
+      {report && <WeeklyBrief />}
 
       {/* ask the economy */}
       {report && <MacroAsk />}
