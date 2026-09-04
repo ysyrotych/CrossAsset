@@ -103,7 +103,7 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
     const tr = spec.series[0].transform ?? "level";
     // % / index / diffusion series → change in percentage points; $ & count levels → true y/y %;
     // flow series (mom, e.g. payroll additions) → no labeled change (the value IS the change).
-    const ppLike = /%|index|month/i.test(spec.unit);
+    const ppLike = /%|index|month|bps|pp/i.test(spec.unit);
     let change: number | undefined, changeUnit: "% y/y" | "pp" | undefined;
     if (last && primary.length > 1 && tr !== "mom") {
       if (ppLike) {
