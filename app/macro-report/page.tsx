@@ -325,33 +325,36 @@ export default function MacroReportPage() {
         <div className="grid grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-64 rounded-xl inst-skeleton" />)}</div>
       ) : report ? (
         <div className="space-y-12 pb-20">
-          {SECTIONS.filter((s) => s.chartIds.length).map((s) => {
+          {SECTIONS.filter((s) => s.chartIds.length).map((s, idx) => {
             const charts = s.chartIds.map((id) => report.charts[id]).filter(Boolean);
             const bullets = narratives[s.id];
             return (
               <section key={s.id} ref={(el) => { scrollRefs.current[s.id] = el; }} className="scroll-mt-16 inst-fade-up macro-section">
-                <div className="flex items-baseline gap-3 mb-4 pb-2" style={{ borderBottom: "2px solid var(--ca-accent)" }}>
+                <div className="flex items-center gap-3 mb-4 pb-2" style={{ borderBottom: "2px solid var(--ca-accent)" }}>
+                  <span className="text-[11px] font-bold tabular-nums px-2 py-0.5 rounded" style={{ background: "var(--ca-accent)", color: "#fff" }}>{String(idx + 1).padStart(2, "0")}</span>
                   <h2 className="text-[20px] font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>{s.title}</h2>
+                  <span className="ml-auto text-[10px]" style={{ color: "var(--ca-text-3)" }}>{charts.length} exhibits</span>
                 </div>
 
                 {/* narrative */}
-                <div className="rounded-xl p-4 mb-4" style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)" }}>
-                  <div className="flex items-center gap-2 mb-2">
+                <div className="rounded-xl p-4 pl-5 mb-4" style={{ background: "var(--ca-surface-2)", borderLeft: "3px solid var(--ca-accent)", border: "1px solid var(--ca-border)", borderLeftWidth: "3px" }}>
+                  <div className="flex items-center gap-2 mb-2.5">
                     <Sparkles size={12} style={{ color: "var(--ca-accent)" }} />
                     <p className="text-[9.5px] font-bold uppercase tracking-[0.12em]" style={{ color: "var(--ca-text-3)" }}>Analysis</p>
+                    <span className="text-[8.5px] px-1.5 py-0.5 rounded-full" style={{ background: "var(--ca-surface)", color: "var(--ca-text-3)" }}>AI</span>
                   </div>
                   {bullets ? (
-                    <ul className="space-y-1.5">
+                    <ul className="space-y-2">
                       {bullets.map((b, i) => (
-                        <li key={i} className="flex gap-2 text-[13px] leading-relaxed" style={{ color: "var(--ca-text)" }}>
-                          <span className="mt-1.5 w-1 h-1 rounded-full shrink-0" style={{ background: "var(--ca-accent)" }} />{b}
+                        <li key={i} className="flex gap-2.5 text-[13.5px] leading-relaxed" style={{ color: "var(--ca-text)" }}>
+                          <span className="mt-1.5 w-1.5 h-1.5 rounded-full shrink-0" style={{ background: "var(--ca-accent)" }} />{b}
                         </li>
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-[12.5px] flex items-center gap-2" style={{ color: "var(--ca-text-3)" }}>
-                      <RefreshCw size={12} className="animate-spin" /> Writing analysis…
-                    </p>
+                    <div className="space-y-2">
+                      {[0, 1, 2].map((i) => <div key={i} className="h-3.5 rounded inst-skeleton" style={{ width: `${90 - i * 12}%` }} />)}
+                    </div>
                   )}
                 </div>
 
