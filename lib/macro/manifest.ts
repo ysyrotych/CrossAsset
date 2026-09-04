@@ -193,6 +193,10 @@ export const CHARTS: ChartSpec[] = [
   { id: "loan-standards", section: "financial-conditions", title: "Banks Tightening C&I Loan Standards", unit: "% net", source: "fred", freq: "q", chartType: "area", series: [{ id: "DRTSCILM", transform: "level", color: CRIMSON }], startYear: 2000, recession: true, refLine: 0, precision: 0, note: "SLOOS — net % tightening; leads the credit cycle" },
   { id: "ci-loans", section: "financial-conditions", title: "Commercial & Industrial Loans", unit: "% y/y", source: "fred", freq: "w", chartType: "line", series: [{ id: "BUSLOANS", transform: "yoy", color: NAVY }], startYear: 2005, recession: true, precision: 1, note: "bank lending growth" },
   { id: "consumer-credit", section: "consumer", title: "Total Consumer Credit", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "TOTALSL", transform: "yoy", color: NAVY }], startYear: 2005, recession: true, precision: 1 },
+
+  // ── New-loop 18: fiscal deep-dive (live FRED) ──
+  { id: "fed-interest", section: "budget", title: "Federal Interest Payments", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "A091RC1Q027SBEA", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1, note: "debt-servicing cost — now rivals defense" },
+  { id: "fed-receipts", section: "budget", title: "Federal Receipts vs Outlays", unit: "% y/y", source: "fred", freq: "q", chartType: "multiline", series: [{ id: "FGRECPT", label: "Receipts", transform: "yoy", color: NAVY }, { id: "FGEXPND", label: "Outlays", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1 },
 ];
 
 export const SECTIONS: Section[] = [
@@ -211,7 +215,7 @@ export const SECTIONS: Section[] = [
   { id: "ism-mfg",              title: "ISM Manufacturing PMI",      chartIds: ["ism-mfg", "ism-mfg-production", "ism-mfg-neworders", "ism-mfg-backlog", "ism-mfg-employment", "ism-mfg-prices", "ism-mfg-inventory", "ism-mfg-vendor", "ism-mfg-exports", "ism-mfg-imports"] },
   { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders", "empire-state", "philly-fed"] },
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
-  { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "debt-gdp"] },
+  { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "fed-interest", "fed-receipts", "debt-gdp"] },
   { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits", "cfnai", "wei"] },
   { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "fin-stress", "loan-standards", "ci-loans", "nfci", "nfci-sub"] },
 ];
