@@ -240,8 +240,9 @@ export default function MacroReportPage() {
     if (!el) return;
     suppressSpy.current = true;           // stop the spy from re-firing setActive mid-scroll
     setActive(id);
-    const y = el.getBoundingClientRect().top + window.scrollY - 60;
-    window.scrollTo({ top: y, behavior: "smooth" });
+    // native scrollIntoView respects the section's scroll-margin-top and avoids
+    // getBoundingClientRect math that overshot when layout was still settling.
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
     window.clearTimeout(spyTimer.current);
     spyTimer.current = window.setTimeout(() => { suppressSpy.current = false; }, 900);
   }
