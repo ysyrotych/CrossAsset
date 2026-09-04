@@ -130,6 +130,31 @@ Keep the institutional credibility, lose the clutter. Editorial magazine layout 
 
 ---
 
+## 6b. Post-launch expansion (46 improvement loops, all deployed & inspected)
+
+The engine shipped at ~90 exhibits replicating the deck, then went through two
+rounds of improvement loops (23 rapid + 23 rigorous deploy→inspect→research→
+plan→improve cycles). Final state:
+
+- **~123 live exhibits** across 18 sections (from ~90). Added live-FRED depth:
+  full CPI component breakdown, GDP components, wages (AHE, ECI), productivity &
+  unit labor costs, leading labor (temp help, weekly hours, continuing claims),
+  consumer spending composition, credit cycle (SLOOS, C&I loans, consumer
+  credit), fiscal (interest, receipts/outlays, debt/GDP), money (M2, Fed balance
+  sheet), rates depth (5y/30y, breakevens, 5y5y), commodities (WTI, nat gas),
+  regional-Fed manufacturing (Empire, Philly), inventories-to-sales.
+- **Signature features:** Recession Signal Scoreboard (8 live signals + composite
+  risk), "Macro at a Glance" percentile heatmap (36 signals / 6 groups), Treasury
+  yield-curve shape chart, Fed SEP table, cross-asset "Markets This Week" panel,
+  AI "Ask the economy" Q&A, copyable AI "Weekly Brief", recession indicators
+  (Sahm, NY Fed prob, 10y-3m, Chicago Fed activity, WEI, financial stress).
+- **6 real bugs fixed via post-deploy inspection:** unit scaling (WRESBAL/ICSA),
+  pp/bps change-labels ("+1000% y/y"), cross-deploy stale report cache,
+  nav-scroll conflict, deep-link hash-clobber, and far-section scroll precision
+  (self-correcting alignment).
+- Cadence: every loop was a separate Vercel deploy, inspected live via the Chrome
+  extension before the next loop's research & change.
+
 ## 7. Decisions — LOCKED
 1. **Output format** — ✅ Both: beautiful web report + one-click PDF (deck style) + presentation mode.
 2. **Non-FRED series** — ✅ Option 1: seed history once, refresh latest value monthly via curated JSON (Claude fills from the free monthly release). Affected cluster: ISM (Mfg+Services+components), NFIB, Conference Board, NAHB, Baltic Dry, MOVE, forward EPS consensus, Fed SEP table. All other ~75 charts pull live from FRED/Yahoo.
