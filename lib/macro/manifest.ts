@@ -143,13 +143,22 @@ export const CHARTS: ChartSpec[] = [
   { id: "saving-rate", section: "consumer", title: "Personal Saving Rate", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "PSAVERT", transform: "rate", color: NAVY }], startYear: 2015, avg: true, precision: 1 },
   { id: "debt-service", section: "consumer", title: "Household Debt Service Ratio", unit: "%", source: "fred", freq: "q", chartType: "line", series: [{ id: "TDSP", transform: "rate", color: CRIMSON }], startYear: 2000, recession: true, precision: 1 },
   { id: "cap-util", section: "other-mfg", title: "Capacity Utilization", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "TCU", transform: "rate", color: NAVY }], startYear: 2010, recession: true, avg: true, precision: 1 },
+
+  // ── Loop 17: section depth (all live FRED) ──
+  { id: "wti", section: "commodities", title: "WTI Crude Oil", unit: "$/bbl", source: "fred", freq: "d", chartType: "line", series: [{ id: "DCOILWTICO", transform: "level", color: NAVY }], startYear: 2006, recession: true, precision: 0 },
+  { id: "natgas", section: "commodities", title: "Henry Hub Natural Gas", unit: "$/MMBtu", source: "fred", freq: "d", chartType: "line", series: [{ id: "DHHNGSP", transform: "level", color: TEAL }], startYear: 2006, precision: 2 },
+  { id: "yield-5y", section: "monetary-policy", title: "U.S. 5-Year Treasury", unit: "%", source: "fred", freq: "d", chartType: "line", series: [{ id: "DGS5", transform: "rate" }], startYear: 2015, precision: 2 },
+  { id: "empire-state", section: "other-mfg", title: "Empire State Manufacturing", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "GACDISA066MSFRBNY", transform: "level", color: NAVY }], startYear: 2010, recession: true, precision: 1, note: "real regional Fed survey — ISM proxy" },
+  { id: "philly-fed", section: "other-mfg", title: "Philadelphia Fed Manufacturing", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "GACDFSA066MSFRBPHI", transform: "level", color: TEAL }], startYear: 2010, recession: true, precision: 1, note: "real regional Fed survey — ISM proxy" },
+  { id: "debt-gdp", section: "budget", title: "Federal Debt as % of GDP", unit: "%", source: "fred", freq: "q", chartType: "area", series: [{ id: "GFDEGDQ188S", transform: "rate", color: CRIMSON }], startYear: 2000, precision: 1 },
+  { id: "nfci-sub", section: "financial-conditions", title: "NFCI Subindexes", unit: "index", source: "fred", freq: "w", chartType: "multiline", series: [{ id: "NFCIRISK", label: "Risk", transform: "level", color: CRIMSON }, { id: "NFCICREDIT", label: "Credit", transform: "level", color: NAVY }, { id: "NFCILEVERAGE", label: "Leverage", transform: "level", color: TEAL }], startYear: 2005, precision: 2 },
 ];
 
 export const SECTIONS: Section[] = [
   { id: "summary-macro",        title: "Macro Summary",              chartIds: [] },
   { id: "summary-markets",      title: "Financial Market Summary",   chartIds: ["hy-oas", "vix", "move"] },
-  { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-10y", "yield-30y", "yield-curve-2s10s", "bank-reserves"] },
-  { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "gold", "baltic-dry"] },
+  { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-5y", "yield-10y", "yield-30y", "yield-curve-2s10s", "bank-reserves"] },
+  { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
   { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs"] },
@@ -159,11 +168,11 @@ export const SECTIONS: Section[] = [
   { id: "nfib",                 title: "NFIB Small Business",        chartIds: ["nfib-optimism", "nfib-uncertainty"] },
   { id: "ism-services",         title: "ISM Services PMI",           chartIds: ["ism-services", "ism-services-activity", "ism-services-neworders", "ism-services-backlog", "ism-services-employment", "ism-services-prices", "ism-services-inventory", "ism-services-supplier", "ism-services-exports", "ism-services-imports"] },
   { id: "ism-mfg",              title: "ISM Manufacturing PMI",      chartIds: ["ism-mfg", "ism-mfg-production", "ism-mfg-neworders", "ism-mfg-backlog", "ism-mfg-employment", "ism-mfg-prices", "ism-mfg-inventory", "ism-mfg-vendor", "ism-mfg-exports", "ism-mfg-imports"] },
-  { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders"] },
+  { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders", "empire-state", "philly-fed"] },
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
-  { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance"] },
+  { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "debt-gdp"] },
   { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits"] },
-  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["nfci"] },
+  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["nfci", "nfci-sub"] },
 ];
 
 export const CHART_BY_ID: Record<string, ChartSpec> = Object.fromEntries(CHARTS.map((c) => [c.id, c]));
