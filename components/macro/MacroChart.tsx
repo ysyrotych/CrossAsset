@@ -166,8 +166,11 @@ function ChartFrame({ chart, children, onExpand, bare = false }: { chart: Render
               </span>
             )}
           </div>
-          <p className="text-[9.5px] uppercase tracking-wide" style={{ color: "var(--ca-text-3)" }}>
-            {chart.unit}{chart.stale && chart.asOf ? ` · as of ${chart.asOf}` : ""}
+          <p className="text-[9.5px] uppercase tracking-wide flex items-center gap-1.5" style={{ color: "var(--ca-text-3)" }}>
+            {chart.unit}
+            {chart.stale
+              ? <span className="normal-case font-semibold px-1 rounded" style={{ background: "#fffbeb", color: "#b7791f" }}>seeded{chart.asOf ? ` · ${chart.asOf}` : ""}</span>
+              : <span className="normal-case font-semibold px-1 rounded" style={{ background: "#f0fdf4", color: "#147a4f" }}>live</span>}
           </p>
         </div>
         {latest && (

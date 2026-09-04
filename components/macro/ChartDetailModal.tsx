@@ -34,7 +34,9 @@ export default function ChartDetailModal({ chart, onClose }: { chart: RenderedCh
   // filter series by selected range
   const viewChart = useMemo<RenderedChart>(() => {
     if (range == null) return chart;
-    const cutoff = Date.now() - range * 365.25 * 864e5;
+    // filter relative to the series' own latest observation (pure — no wall clock)
+    const maxT = Math.max(...chart.series.flatMap((s) => s.data.map((d) => new Date(d.date).getTime())), 0);
+    const cutoff = maxT - range * 365.25 * 864e5;
     return { ...chart, series: chart.series.map((s) => ({ ...s, data: s.data.filter((d) => new Date(d.date).getTime() >= cutoff) })) };
   }, [chart, range]);
 

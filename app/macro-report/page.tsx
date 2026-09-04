@@ -421,10 +421,16 @@ export default function MacroReportPage() {
             );
           })}
 
-          <p className="text-[10.5px] pt-6" style={{ color: "var(--ca-text-3)", borderTop: "1px solid var(--ca-border)" }}>
-            <FileText size={11} className="inline mr-1" />
-            Live series from FRED & market data; proprietary series (ISM, NFIB, Conference Board, NAHB, MOVE, Baltic Dry) refreshed monthly from published releases. Research only, not investment advice.
-          </p>
+          <div className="pt-6 mt-4" style={{ borderTop: "1px solid var(--ca-border)" }}>
+            <div className="flex items-center gap-4 mb-2 flex-wrap">
+              <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--ca-text-3)" }}><span className="px-1 rounded font-semibold" style={{ background: "#f0fdf4", color: "#147a4f" }}>live</span> FRED &amp; market data, fetched on generation</span>
+              <span className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--ca-text-3)" }}><span className="px-1 rounded font-semibold" style={{ background: "#fffbeb", color: "#b7791f" }}>seeded</span> ISM, NFIB, Conf. Board, NAHB, MOVE, Baltic Dry — no free API; refreshed monthly from releases</span>
+            </div>
+            <p className="text-[10.5px]" style={{ color: "var(--ca-text-3)" }}>
+              <FileText size={11} className="inline mr-1" />
+              {report ? `Generated ${asDate}. ` : ""}Real regional-Fed surveys (Empire State, Philadelphia) provide live manufacturing proxies. Shortcuts: <kbd>/</kbd> ask · <kbd>P</kbd> present. Data via St. Louis Fed (FRED). Research only, not investment advice.
+            </p>
+          </div>
         </div>
       ) : (
         <p className="text-[13px]" style={{ color: "var(--ca-text-3)" }}>Could not generate the report. Check FRED_API_KEY.</p>
