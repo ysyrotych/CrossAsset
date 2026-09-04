@@ -225,7 +225,9 @@ export default function MacroReportPage() {
           <p className="text-[10px] font-semibold tracking-[0.14em] uppercase mb-2" style={{ color: "var(--ca-text-2)" }}>Weekly Economic Update</p>
           <h1 className="text-[34px] font-light tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>U.S. Macro Report</h1>
           <p className="text-[13px] mt-1" style={{ color: "var(--ca-text-3)" }}>
-            {report ? `Generated ${asDate} · ${Object.keys(report.charts).length} live exhibits across ${SECTIONS.length} sections` : "Generating full macro report…"}
+            {report
+              ? `Generated ${asDate} · ${Object.keys(report.charts).length} exhibits across ${SECTIONS.length} sections${narrating ? ` · writing analysis (${Object.keys(narratives).length}/${SECTIONS.filter((s) => s.chartIds.length).length})…` : ""}`
+              : "Generating full macro report…"}
           </p>
         </div>
         <div className="flex items-center gap-2 macro-no-print">
@@ -246,6 +248,15 @@ export default function MacroReportPage() {
           </button>
         </div>
       </div>
+
+      {/* FRED connectivity warning */}
+      {report && !report.fredConnected && (
+        <div className="rounded-xl px-4 py-3 mb-6 macro-no-print" style={{ background: "#fffbeb", border: "1px solid #fde68a" }}>
+          <p className="text-[12px]" style={{ color: "#854d0e" }}>
+            ⚠ Live FRED data is unavailable (missing <code>FRED_API_KEY</code>). Seeded survey charts and market data still render; FRED-sourced charts will populate once the key is configured.
+          </p>
+        </div>
+      )}
 
       {/* executive summary hero */}
       {report && (
@@ -322,7 +333,13 @@ export default function MacroReportPage() {
       </div>
 
       {loading && !report ? (
-        <div className="grid grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-64 rounded-xl inst-skeleton" />)}</div>
+        <div>
+          <div className="h-56 rounded-2xl inst-skeleton mb-6" />
+          <div className="flex items-center gap-2 mb-4 text-[12.5px]" style={{ color: "var(--ca-text-3)" }}>
+            <RefreshCw size={13} className="animate-spin" /> Pulling live FRED &amp; market data, computing transforms, writing AI analysis…
+          </div>
+          <div className="grid grid-cols-3 gap-4">{Array.from({ length: 6 }).map((_, i) => <div key={i} className="h-64 rounded-xl inst-skeleton" />)}</div>
+        </div>
       ) : report ? (
         <div className="space-y-12 pb-20">
           {SECTIONS.filter((s) => s.chartIds.length).map((s, idx) => {
