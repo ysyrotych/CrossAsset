@@ -191,7 +191,10 @@ export default function MacroReportPage() {
   useEffect(() => {
     if (!report) return;
     const h = window.location.hash.replace(/^#/, "") as SectionId;
-    if (h && scrollRefs.current[h]) setTimeout(() => scrollTo(h), 300);
+    if (!h || !scrollRefs.current[h]) return;
+    // charts render/expand after mount and shift layout — re-scroll as it settles
+    const timers = [350, 1000, 1900].map((ms) => setTimeout(() => scrollTo(h), ms));
+    return () => timers.forEach(clearTimeout);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report]);
 

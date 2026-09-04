@@ -152,6 +152,10 @@ export const CHARTS: ChartSpec[] = [
   { id: "philly-fed", section: "other-mfg", title: "Philadelphia Fed Manufacturing", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "GACDFSA066MSFRBPHI", transform: "level", color: TEAL }], startYear: 2010, recession: true, precision: 1, note: "real regional Fed survey — ISM proxy" },
   { id: "debt-gdp", section: "budget", title: "Federal Debt as % of GDP", unit: "%", source: "fred", freq: "q", chartType: "area", series: [{ id: "GFDEGDQ188S", transform: "rate", color: CRIMSON }], startYear: 2000, precision: 1 },
   { id: "nfci-sub", section: "financial-conditions", title: "NFCI Subindexes", unit: "index", source: "fred", freq: "w", chartType: "multiline", series: [{ id: "NFCIRISK", label: "Risk", transform: "level", color: CRIMSON }, { id: "NFCICREDIT", label: "Credit", transform: "level", color: NAVY }, { id: "NFCILEVERAGE", label: "Leverage", transform: "level", color: TEAL }], startYear: 2005, precision: 2 },
+
+  // ── New-loop 1: recession signals (research-driven, live FRED) ──
+  { id: "sahm-rule", section: "labor", title: "Sahm Rule Recession Indicator", unit: "pp", source: "fred", freq: "m", chartType: "area", series: [{ id: "SAHMREALTIME", transform: "level", color: CRIMSON }], startYear: 2005, recession: true, refLine: 0.5, precision: 2, note: "≥0.50 has historically signaled recession onset" },
+  { id: "recession-prob", section: "financial-conditions", title: "NY Fed 12-Month Recession Probability", unit: "%", source: "fred", freq: "m", chartType: "area", series: [{ id: "RECPROUSM156N", transform: "rate", color: CRIMSON }], startYear: 1990, recession: true, precision: 1, note: "from the 10y-3m Treasury spread" },
 ];
 
 export const SECTIONS: Section[] = [
@@ -161,7 +165,7 @@ export const SECTIONS: Section[] = [
   { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
-  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs"] },
+  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "sahm-rule"] },
   { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
   { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "housing-supply", "mortgage-rate", "affordability", "case-shiller", "nahb"] },
   { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
@@ -172,7 +176,7 @@ export const SECTIONS: Section[] = [
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
   { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "debt-gdp"] },
   { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits"] },
-  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["nfci", "nfci-sub"] },
+  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "nfci", "nfci-sub"] },
 ];
 
 export const CHART_BY_ID: Record<string, ChartSpec> = Object.fromEntries(CHARTS.map((c) => [c.id, c]));

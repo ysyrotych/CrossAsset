@@ -30,6 +30,7 @@ export type ChartSpec = {
   chartType: ChartType;
   series: SeriesSpec[];
   avg?: boolean;              // draw the historical-average reference line
+  refLine?: number;           // fixed reference line (e.g. 0.5 Sahm threshold)
   recession?: boolean;        // draw NBER recession bands
   startYear?: number;         // trim history to this year
   precision?: number;         // decimals for latest-value display

@@ -17,6 +17,14 @@ function fmtVal(v: number, unit: string, p = 1): string {
   return n;
 }
 
+// compact Y-axis labels so large values don't truncate (4500 -> "4.5k")
+function compactAxis(v: number): string {
+  const a = Math.abs(v);
+  if (a >= 1e6) return (v / 1e6).toFixed(1).replace(/\.0$/, "") + "M";
+  if (a >= 1e3) return (v / 1e3).toFixed(1).replace(/\.0$/, "") + "k";
+  return String(Math.round(v * 100) / 100);
+}
+
 export default function MacroChart({ chart, onExpand, height = 224, bare = false }: { chart: RenderedChart; onExpand?: () => void; height?: number; bare?: boolean }) {
   const { merged, keys, minT, maxT } = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
@@ -59,7 +67,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
             <BarChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={compactAxis} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
               <Bar dataKey={keys[0]} isAnimationActive={false}>
@@ -79,7 +87,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={compactAxis} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
@@ -90,7 +98,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={compactAxis} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
