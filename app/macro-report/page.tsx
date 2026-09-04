@@ -50,6 +50,8 @@ export default function MacroReportPage() {
   const [summary, setSummary] = useState<{ headline: string; macro: string[]; markets: string[] } | null>(null);
   const scrollRefs = useRef<Record<string, HTMLElement | null>>({});
   const navRefs = useRef<Record<string, HTMLButtonElement | null>>({});
+  const suppressSpy = useRef(false);
+  const spyTimer = useRef<number | undefined>(undefined);
   const [active, setActive] = useState<SectionId>("monetary-policy");
   const [presenting, setPresenting] = useState(false);
   const [expanded, setExpanded] = useState<RenderedChart | null>(null);
@@ -171,6 +173,7 @@ export default function MacroReportPage() {
       const doc = document.documentElement;
       setProgress((doc.scrollTop / (doc.scrollHeight - doc.clientHeight)) * 100);
       setShowTop(doc.scrollTop > 700);
+      if (suppressSpy.current) return; // don't fight a programmatic scroll
       let current: SectionId | null = null;
       for (const s of SECTIONS) {
         const el = scrollRefs.current[s.id];
@@ -218,12 +221,14 @@ export default function MacroReportPage() {
   }
 
   function scrollTo(id: SectionId) {
-    setActive(id);
     const el = scrollRefs.current[id];
-    if (el) {
-      const y = el.getBoundingClientRect().top + window.scrollY - 64;
-      window.scrollTo({ top: y, behavior: "smooth" });
-    }
+    if (!el) return;
+    suppressSpy.current = true;           // stop the spy from re-firing setActive mid-scroll
+    setActive(id);
+    const y = el.getBoundingClientRect().top + window.scrollY - 60;
+    window.scrollTo({ top: y, behavior: "smooth" });
+    window.clearTimeout(spyTimer.current);
+    spyTimer.current = window.setTimeout(() => { suppressSpy.current = false; }, 900);
   }
 
   const asDate = report ? new Date(report.generatedAt).toLocaleDateString(undefined, { month: "long", day: "numeric", year: "numeric" }) : "";
