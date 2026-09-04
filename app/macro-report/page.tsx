@@ -7,6 +7,7 @@ import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
 import FedSEPTable from "@/components/macro/FedSEPTable";
+import YieldCurveChart from "@/components/macro/YieldCurveChart";
 import MacroAsk from "@/components/macro/MacroAsk";
 import RecessionScoreboard from "@/components/macro/RecessionScoreboard";
 import { SECTIONS } from "@/lib/macro/manifest";
@@ -419,6 +420,7 @@ export default function MacroReportPage() {
 
                 {/* section-specific exhibits */}
                 {s.id === "monetary-policy" && <FedSEPTable />}
+                {s.id === "monetary-policy" && <YieldCurveChart />}
 
                 {/* chart grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
