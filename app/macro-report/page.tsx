@@ -7,6 +7,7 @@ import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
 import FedSEPTable from "@/components/macro/FedSEPTable";
+import MacroAsk from "@/components/macro/MacroAsk";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -301,6 +302,9 @@ export default function MacroReportPage() {
           </div>
         </div>
       )}
+
+      {/* ask the economy */}
+      {report && <MacroAsk />}
 
       {/* movers since last visit */}
       {movers.length > 0 && (
