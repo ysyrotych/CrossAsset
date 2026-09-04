@@ -41,18 +41,29 @@ export default function PresentationMode({
       if (e.key === "Escape") onClose();
       else if (e.key === "ArrowRight" || e.key === " ") { e.preventDefault(); setI((v) => clamp(v + 1)); }
       else if (e.key === "ArrowLeft") { e.preventDefault(); setI((v) => clamp(v - 1)); }
+      else if (e.key === "Home") { e.preventDefault(); setI(0); }
+      else if (e.key === "End") { e.preventDefault(); setI(slides.length - 1); }
     };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [slides.length]);
 
+  // enter real browser fullscreen for a true presentation
+  useEffect(() => {
+    const el = document.documentElement;
+    el.requestFullscreen?.().catch(() => {});
+    return () => { if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {}); };
+  }, []);
+
   const slide = slides[i];
+  const sectionName = slide.kind === "section" ? slide.title : slide.kind === "summary" ? "Executive Summary" : "Cover";
 
   return (
     <div className="fixed inset-0 z-[200] flex flex-col" style={{ background: "#0a1428" }}>
       {/* top bar */}
       <div className="flex items-center justify-between px-6 py-3">
         <span className="text-[12px] font-medium" style={{ color: "rgba(255,255,255,0.6)" }}>CrossAsset · U.S. Macro Report</span>
+        <span className="text-[12px] font-medium" style={{ color: "rgba(255,255,255,0.85)" }}>{sectionName}</span>
         <div className="flex items-center gap-4">
           <span className="text-[12px] tabular-nums" style={{ color: "rgba(255,255,255,0.5)" }}>{i + 1} / {slides.length}</span>
           <button onClick={onClose} className="text-white/70 hover:text-white"><X size={18} /></button>
@@ -61,7 +72,7 @@ export default function PresentationMode({
 
       {/* slide */}
       <div className="flex-1 flex items-center justify-center px-10 pb-16">
-        <div className="w-full max-w-[1400px] aspect-[16/9] rounded-2xl overflow-hidden relative flex flex-col" style={{ background: "#fff" }}>
+        <div key={i} className="w-full max-w-[1400px] aspect-[16/9] rounded-2xl overflow-hidden relative flex flex-col inst-fade-up" style={{ background: "#fff" }}>
           {slide.kind === "cover" ? (
             <div className="flex-1 flex flex-col justify-center px-16 inst-aurora" style={{ color: "#fff" }}>
               <p className="text-[13px] font-semibold tracking-[0.2em] uppercase mb-4" style={{ color: "rgba(255,255,255,0.6)" }}>Weekly Economic Update</p>
@@ -110,6 +121,11 @@ export default function PresentationMode({
         className="absolute left-4 top-1/2 -translate-y-1/2 p-2 rounded-full disabled:opacity-20" style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }}><ChevronLeft size={22} /></button>
       <button onClick={() => setI((v) => clamp(v + 1))} disabled={i === slides.length - 1}
         className="absolute right-4 top-1/2 -translate-y-1/2 p-2 rounded-full disabled:opacity-20" style={{ background: "rgba(255,255,255,0.1)", color: "#fff" }}><ChevronRight size={22} /></button>
+
+      {/* progress bar */}
+      <div className="absolute bottom-0 left-0 right-0 h-1" style={{ background: "rgba(255,255,255,0.08)" }}>
+        <div className="h-full transition-[width] duration-300" style={{ width: `${((i + 1) / slides.length) * 100}%`, background: "var(--ca-accent)" }} />
+      </div>
     </div>
   );
 }
