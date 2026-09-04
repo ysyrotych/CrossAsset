@@ -24,6 +24,31 @@ export default function SuperinvestorsView({
     <div className="inst-fade-up">
       <SmartMoneyBrief />
 
+      {/* clone-alpha leaderboard */}
+      {digest.cloneLeaderboard?.length > 0 && (
+        <div className="rounded-xl overflow-hidden mb-6" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+          <div className="px-4 py-3 flex items-center gap-2" style={{ borderBottom: "1px solid var(--ca-border)" }}>
+            <p className="text-[11px] font-bold uppercase tracking-[0.1em]" style={{ color: "var(--ca-text-2)" }}>Clone-Alpha Leaderboard</p>
+            <span className="text-[10px]" style={{ color: "var(--ca-text-3)" }}>new-buy return vs S&P since quarter-end</span>
+          </div>
+          <div className="grid grid-cols-2 gap-x-6">
+            {digest.cloneLeaderboard.slice(0, 10).map((c, i) => (
+              <button key={c.slug} onClick={() => onPickManager(c.slug)}
+                className="flex items-center gap-3 px-4 py-2.5 inst-row-hover hover:bg-[var(--ca-surface-2)] text-left border-t"
+                style={{ borderColor: "var(--ca-border)" }}>
+                <span className="text-[11px] font-bold w-5 tabular-nums" style={{ color: "var(--ca-text-3)" }}>{i + 1}</span>
+                <span className="text-[12.5px] font-medium flex-1 truncate" style={{ color: "var(--ca-text)" }}>{c.manager}</span>
+                <span className="text-[10.5px] tabular-nums" style={{ color: "var(--ca-text-3)" }}>{c.hitRate.toFixed(0)}% hit</span>
+                <span className="text-[13px] font-bold tabular-nums w-16 text-right"
+                  style={{ color: c.alpha >= 0 ? "#147a4f" : "#b42318" }}>
+                  {c.alpha >= 0 ? "+" : ""}{c.alpha.toFixed(1)}%
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {/* quarter digest */}
       <div className="grid grid-cols-2 gap-5 mb-8">
         <DigestPanel title="Biggest new bets" tone="green" icon={<ArrowUpRight size={13} />}

@@ -32,6 +32,15 @@ export type HoldingRow = {
   convictionScore: number;   // 0-100
   putCall: PutCall;
   priceChangeSincePeriodEnd?: number; // %
+  sharesHistory?: number[];  // last ~6 quarters, oldest → newest
+};
+
+export type CloneAlpha = {
+  newBuyReturn: number;   // avg % move of NEW+ADD positions since quarter-end
+  benchmark: number;      // SPY move over same window
+  alpha: number;          // newBuyReturn - benchmark
+  hitRate: number;        // % of tracked buys beating SPY
+  sampleSize: number;
 };
 
 export type ManagerView = {
@@ -45,6 +54,7 @@ export type ManagerView = {
   turnoverPct: number;
   holdings: HoldingRow[];
   newHighConviction: HoldingRow[];
+  cloneAlpha: CloneAlpha;
 };
 
 export type InsiderTxn = {
@@ -104,4 +114,34 @@ export type SuperinvestorDigest = {
   biggestNewBuys: ConsensusRow[];
   biggestExits: ConsensusRow[];
   managers: ManagerListItem[];
+  cloneLeaderboard: { slug: string; name: string; manager: string; alpha: number; hitRate: number }[];
+};
+
+// ── Portfolio × Smart Money ──────────────────────────────────────────────────
+export type PortfolioRow = {
+  ticker: string;
+  issuer: string;
+  held: boolean;
+  holderCount: number;
+  buyers: number;
+  sellers: number;
+  netManagerFlow: number;
+  topHolders: string[];
+  insiderSignal: "BUY" | "SELL" | "MIXED" | "NONE";
+  signalAlignment: SecurityView["signalAlignment"];
+};
+export type PortfolioView = { period: string; rows: PortfolioRow[] };
+
+// ── Fund comparison ──────────────────────────────────────────────────────────
+export type CompareHolding = {
+  ticker: string; issuer: string;
+  aValue: number; aPct: number; aAction: HoldingAction | null;
+  bValue: number; bPct: number; bAction: HoldingAction | null;
+};
+export type FundCompare = {
+  a: ManagerListItem; b: ManagerListItem;
+  shared: CompareHolding[];
+  onlyA: CompareHolding[];
+  onlyB: CompareHolding[];
+  overlapPct: number; // % of names shared
 };

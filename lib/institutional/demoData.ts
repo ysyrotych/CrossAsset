@@ -7,12 +7,40 @@
 import type {
   ManagerListItem, ManagerView, HoldingRow, HoldingAction, PutCall,
   SecurityView, HolderRow, ConsensusRow, SuperinvestorDigest, InsiderTxn,
+  CloneAlpha, PortfolioView, PortfolioRow, FundCompare, CompareHolding,
 } from "./types";
 import { CURATED_MANAGERS } from "./seed";
 
 export const DEMO_PERIOD = "2025-06-30";
 const FILED = "2025-08-14";
 const STALENESS_DAYS = 24;
+const SPY_SINCE_QEND = 5.8; // S&P 500 move since quarter-end — clone-alpha benchmark
+
+// deterministic hash → [0,1) for reproducible synthesized history
+function seed01(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); }
+  return ((h >>> 0) % 1000) / 1000;
+}
+
+// Synthesize ~6 quarters of share counts ending at the current holding.
+function sharesHistory(shares: number, action: HoldingAction, key: string): number[] {
+  const n = 6;
+  const noise = () => 0.9 + seed01(key + n) * 0.2;
+  if (action === "NEW") return [0, 0, 0, 0, Math.round(shares * 0.55), shares];
+  if (action === "EXIT") return [Math.round(shares * 1.6), Math.round(shares * 1.4), Math.round(shares * 1.2), Math.round(shares), Math.round(shares * 0.5), 0];
+  const out: number[] = [];
+  for (let i = 0; i < n; i++) {
+    const t = i / (n - 1); // 0..1
+    let factor = 1;
+    if (action === "ADD") factor = 0.45 + 0.55 * t;       // ramping up
+    else if (action === "TRIM") factor = 1.7 - 0.7 * t;    // trending down
+    else factor = 0.95 + 0.1 * seed01(key + i);            // HOLD ~ flat
+    out.push(Math.round(shares * factor * (i === n - 1 ? 1 : noise())));
+  }
+  out[n - 1] = shares;
+  return out;
+}
 
 type RawHolding = {
   ticker: string | null; issuer: string; value: number; shares: number;
@@ -287,8 +315,20 @@ function buildHoldings(book: RawBook): HoldingRow[] {
       convictionScore: conviction(pctOfBook, rank, h.action, dPctBook),
       putCall: h.putCall ?? "NONE",
       priceChangeSincePeriodEnd: h.ticker ? PRICE_MOVE[h.ticker] : undefined,
+      sharesHistory: sharesHistory(h.shares, h.action, `${book.slug}-${h.ticker}-${h.putCall ?? ""}`),
     };
   });
+}
+
+function cloneAlphaFor(holdings: HoldingRow[]): CloneAlpha {
+  const buys = holdings.filter((h) => (h.action === "NEW" || h.action === "ADD") && h.putCall === "NONE" && h.priceChangeSincePeriodEnd != null);
+  if (!buys.length) return { newBuyReturn: 0, benchmark: SPY_SINCE_QEND, alpha: -SPY_SINCE_QEND, hitRate: 0, sampleSize: 0 };
+  const avg = buys.reduce((s, h) => s + (h.priceChangeSincePeriodEnd ?? 0), 0) / buys.length;
+  const wins = buys.filter((h) => (h.priceChangeSincePeriodEnd ?? 0) > SPY_SINCE_QEND).length;
+  return {
+    newBuyReturn: avg, benchmark: SPY_SINCE_QEND, alpha: avg - SPY_SINCE_QEND,
+    hitRate: (wins / buys.length) * 100, sampleSize: buys.length,
+  };
 }
 
 export function demoManagers(): ManagerListItem[] {
@@ -309,6 +349,7 @@ export function demoManagerView(slug: string): ManagerView | null {
     turnoverPct: Math.min(100, (churn / (totalValue * 2)) * 100),
     holdings,
     newHighConviction: holdings.filter((h) => h.action === "NEW" && h.convictionScore >= 55),
+    cloneAlpha: cloneAlphaFor(holdings),
   };
 }
 
@@ -400,10 +441,71 @@ export function demoConsensus(): ConsensusRow[] {
 
 export function demoSuperinvestors(): SuperinvestorDigest {
   const consensus = demoConsensus();
+  const cloneLeaderboard = RAW_BOOKS.map((b) => {
+    const m = meta(b.slug);
+    const ca = cloneAlphaFor(buildHoldings(b));
+    return { slug: b.slug, name: m.name, manager: m.manager ?? m.name, alpha: ca.alpha, hitRate: ca.hitRate };
+  }).filter((x) => x.alpha !== -SPY_SINCE_QEND).sort((a, b) => b.alpha - a.alpha);
   return {
     period: DEMO_PERIOD,
     biggestNewBuys: [...consensus].filter((c) => c.buyers > 0).sort((a, b) => b.newMoney - a.newMoney || b.consensusScore - a.consensusScore).slice(0, 8),
     biggestExits: [...consensus].sort((a, b) => a.netValueFlow - b.netValueFlow).slice(0, 6),
     managers: demoManagers(),
+    cloneLeaderboard,
+  };
+}
+
+// ── Portfolio × Smart Money ──────────────────────────────────────────────────
+export function demoPortfolioView(tickers: string[]): PortfolioView {
+  const rows: PortfolioRow[] = tickers.map((t) => {
+    const sv = demoSecurityView(t);
+    if (!sv) {
+      return { ticker: t.toUpperCase(), issuer: t.toUpperCase(), held: false, holderCount: 0,
+        buyers: 0, sellers: 0, netManagerFlow: 0, topHolders: [], insiderSignal: "NONE", signalAlignment: "NEUTRAL" };
+    }
+    const insBuy = sv.insiderOverlay.filter((i) => i.isOpenMarket && i.code === "P").length;
+    const insSell = sv.insiderOverlay.filter((i) => i.isOpenMarket && i.code === "S").length;
+    const insiderSignal: PortfolioRow["insiderSignal"] =
+      insBuy && insSell ? "MIXED" : insBuy ? "BUY" : insSell ? "SELL" : "NONE";
+    return {
+      ticker: sv.ticker, issuer: sv.issuer, held: true, holderCount: sv.holderCount,
+      buyers: sv.accumulators.length, sellers: sv.distributors.length, netManagerFlow: sv.netManagerFlow,
+      topHolders: [...sv.accumulators, ...sv.distributors].sort((a, b) => b.value - a.value).slice(0, 3).map((h) => h.manager),
+      insiderSignal, signalAlignment: sv.signalAlignment,
+    };
+  });
+  // held names first, then by holder count
+  rows.sort((a, b) => Number(b.held) - Number(a.held) || b.holderCount - a.holderCount);
+  return { period: DEMO_PERIOD, rows };
+}
+
+// ── Fund comparison ──────────────────────────────────────────────────────────
+export function demoCompare(slugA: string, slugB: string): FundCompare | null {
+  const bookA = RAW_BOOKS.find((b) => b.slug === slugA);
+  const bookB = RAW_BOOKS.find((b) => b.slug === slugB);
+  if (!bookA || !bookB) return null;
+  const ha = buildHoldings(bookA).filter((h) => h.ticker && h.putCall === "NONE");
+  const hb = buildHoldings(bookB).filter((h) => h.ticker && h.putCall === "NONE");
+  const mapA = new Map(ha.map((h) => [h.ticker!, h]));
+  const mapB = new Map(hb.map((h) => [h.ticker!, h]));
+  const all = new Set([...mapA.keys(), ...mapB.keys()]);
+  const shared: CompareHolding[] = [], onlyA: CompareHolding[] = [], onlyB: CompareHolding[] = [];
+  for (const t of all) {
+    const a = mapA.get(t), b = mapB.get(t);
+    const row: CompareHolding = {
+      ticker: t, issuer: (a ?? b)!.issuer,
+      aValue: a?.value ?? 0, aPct: a?.pctOfBook ?? 0, aAction: a?.action ?? null,
+      bValue: b?.value ?? 0, bPct: b?.pctOfBook ?? 0, bAction: b?.action ?? null,
+    };
+    if (a && b) shared.push(row);
+    else if (a) onlyA.push(row);
+    else onlyB.push(row);
+  }
+  shared.sort((x, y) => (y.aValue + y.bValue) - (x.aValue + x.bValue));
+  onlyA.sort((x, y) => y.aValue - x.aValue);
+  onlyB.sort((x, y) => y.bValue - x.bValue);
+  return {
+    a: meta(slugA), b: meta(slugB), shared, onlyA, onlyB,
+    overlapPct: (shared.length / all.size) * 100,
   };
 }

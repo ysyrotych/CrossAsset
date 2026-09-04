@@ -123,3 +123,24 @@ export function quarterOf(iso: string): string {
 export function initials(name: string): string {
   return name.split(/\s+/).slice(0, 2).map((w) => w[0]).join("").toUpperCase();
 }
+
+// ── inline sparkline (position over time) ─────────────────────────────────────
+export function Sparkline({ data, w = 56, h = 18, color }: { data: number[]; w?: number; h?: number; color?: string }) {
+  if (!data || data.length < 2) return <span style={{ color: "var(--ca-text-3)" }}>—</span>;
+  const max = Math.max(...data), min = Math.min(...data);
+  const range = max - min || 1;
+  const pts = data.map((v, i) => {
+    const x = (i / (data.length - 1)) * (w - 2) + 1;
+    const y = h - 1 - ((v - min) / range) * (h - 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const up = data[data.length - 1] >= data[0];
+  const stroke = color ?? (up ? "#147a4f" : "#b42318");
+  const last = pts[pts.length - 1].split(",");
+  return (
+    <svg width={w} height={h} className="overflow-visible">
+      <polyline points={pts.join(" ")} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={last[0]} cy={last[1]} r={1.8} fill={stroke} />
+    </svg>
+  );
+}

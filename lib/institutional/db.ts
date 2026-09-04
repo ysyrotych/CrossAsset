@@ -5,9 +5,11 @@
 
 import type {
   ManagerListItem, ManagerView, SecurityView, ConsensusRow, SuperinvestorDigest,
+  PortfolioView, FundCompare,
 } from "./types";
 import {
   demoManagers, demoManagerView, demoSecurityView, demoConsensus, demoSuperinvestors,
+  demoPortfolioView, demoCompare,
 } from "./demoData";
 
 const URL = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -72,4 +74,14 @@ export async function getConsensus(): Promise<ConsensusRow[]> {
 // ── Superinvestor digest ─────────────────────────────────────────────────────
 export async function getSuperinvestors(): Promise<SuperinvestorDigest> {
   return demoSuperinvestors();
+}
+
+// ── Portfolio × Smart Money ──────────────────────────────────────────────────
+export async function getPortfolioView(tickers: string[]): Promise<PortfolioView> {
+  return demoPortfolioView(tickers);
+}
+
+// ── Fund comparison ──────────────────────────────────────────────────────────
+export async function getCompare(slugA: string, slugB: string): Promise<FundCompare | null> {
+  return demoCompare(slugA, slugB);
 }

@@ -8,15 +8,19 @@ import ManagersView from "@/components/institutional/ManagersView";
 import SecurityView from "@/components/institutional/SecurityView";
 import ConsensusView from "@/components/institutional/ConsensusView";
 import SuperinvestorsView from "@/components/institutional/SuperinvestorsView";
+import PortfolioView from "@/components/institutional/PortfolioView";
+import CompareView from "@/components/institutional/CompareView";
 import CommandPalette from "@/components/institutional/CommandPalette";
 import { ACTION_META, quarterOf } from "@/components/institutional/shared";
 
-type View = "managers" | "security" | "consensus" | "superinvestors";
+type View = "managers" | "security" | "consensus" | "superinvestors" | "portfolio" | "compare";
 const TABS: { id: View; label: string }[] = [
   { id: "managers", label: "Managers" },
   { id: "security", label: "Security" },
   { id: "consensus", label: "Consensus" },
   { id: "superinvestors", label: "Superinvestors" },
+  { id: "portfolio", label: "My Portfolio" },
+  { id: "compare", label: "Compare" },
 ];
 
 export default function InstitutionalPage() {
@@ -36,7 +40,7 @@ export default function InstitutionalPage() {
   useEffect(() => {
     const h = window.location.hash.replace(/^#/, "");
     const [v, arg] = h.split("/");
-    if (["managers", "security", "consensus", "superinvestors"].includes(v)) setView(v as View);
+    if (["managers", "security", "consensus", "superinvestors", "portfolio", "compare"].includes(v)) setView(v as View);
     if (v === "managers" && arg) setSelectedManager(arg);
     if (v === "security" && arg) setSelectedTicker(arg.toUpperCase());
   }, []);
@@ -107,6 +111,8 @@ export default function InstitutionalPage() {
       {view === "security" && <SecurityView ticker={selectedTicker} onPickManager={pickManager} />}
       {view === "consensus" && <ConsensusView onPickTicker={pickTicker} />}
       {view === "superinvestors" && <SuperinvestorsView onPickManager={pickManager} onPickTicker={pickTicker} />}
+      {view === "portfolio" && <PortfolioView onPickTicker={pickTicker} />}
+      {view === "compare" && <CompareView managers={managers} onPickTicker={pickTicker} />}
 
       {/* footnote */}
       <p className="text-[10.5px] mt-10 pt-5" style={{ color: "var(--ca-text-3)", borderTop: "1px solid var(--ca-border)" }}>

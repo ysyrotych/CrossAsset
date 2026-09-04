@@ -6,7 +6,7 @@ import { Search, ArrowUpRight, Sparkles } from "lucide-react";
 import type { ManagerListItem, ManagerView, HoldingRow, HoldingAction } from "@/lib/institutional/types";
 import {
   fmtMoney, fmtShares, fmtPct, ACTION_META, ActionBadge, ConvictionMeter,
-  StatCard, CountMoney, CountNum, StalenessChip, initials,
+  StatCard, CountMoney, CountNum, StalenessChip, initials, Sparkline,
 } from "./shared";
 
 export default function ManagersView({
@@ -135,6 +135,9 @@ function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker
       {/* quarter activity breakdown */}
       <ActivityBar holdings={view.holdings} top10Weight={view.top10Weight} />
 
+      {/* clone-alpha */}
+      {view.cloneAlpha.sampleSize > 0 && <CloneAlphaCard ca={view.cloneAlpha} manager={view.manager.manager ?? view.manager.name} />}
+
       {/* new high-conviction strip */}
       {view.newHighConviction.length > 0 && (
         <div className="rounded-xl px-4 py-3 mb-5 inst-scale-in" style={{ background: "linear-gradient(90deg, #eff6ff, #f0fdf4)", border: "1px solid #dbeafe" }}>
@@ -191,6 +194,7 @@ function ManagerDetail({ view, onPickTicker }: { view: ManagerView; onPickTicker
               <th className="text-center px-2 py-3">Change</th>
               <Th label="Δ Shares" k="dShares" cur={sortKey} asc={asc} onSort={toggleSort} align="right" />
               <Th label="Conviction" k="convictionScore" cur={sortKey} asc={asc} onSort={toggleSort} align="left" />
+              <th className="text-center px-2 py-3">6Q Trend</th>
               <Th label="Since Q-End" k="priceChangeSincePeriodEnd" cur={sortKey} asc={asc} onSort={toggleSort} align="right" pad="px-4" />
             </tr>
           </thead>
@@ -242,11 +246,47 @@ function HoldingRowEl({ h, i, onPick }: { h: HoldingRow; i: number; onPick: (t: 
         {h.dShares === 0 ? "—" : `${h.dShares > 0 ? "+" : ""}${fmtShares(h.dShares)}`}
       </td>
       <td className="px-2 py-2.5"><ConvictionMeter score={h.convictionScore} delay={i * 25} /></td>
+      <td className="px-2 py-2.5">
+        <div className="flex justify-center">
+          {h.sharesHistory ? <Sparkline data={h.sharesHistory} /> : <span style={{ color: "var(--ca-text-3)" }}>—</span>}
+        </div>
+      </td>
       <td className="px-4 py-2.5 text-right text-[11.5px] tabular-nums"
         style={{ color: move == null ? "var(--ca-text-3)" : move >= 0 ? "#147a4f" : "#b42318" }}>
         {move == null ? "—" : fmtPct(move)}
       </td>
     </tr>
+  );
+}
+
+// ── clone-alpha ──────────────────────────────────────────────────────────────
+function CloneAlphaCard({ ca, manager }: { ca: ManagerView["cloneAlpha"]; manager: string }) {
+  const good = ca.alpha >= 0;
+  return (
+    <div className="rounded-xl p-4 mb-5 flex items-center gap-6" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+      <div className="shrink-0">
+        <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] mb-1" style={{ color: "var(--ca-text-3)" }}>Clone-Alpha</p>
+        <p className="text-[10.5px] max-w-[190px]" style={{ color: "var(--ca-text-3)" }}>If you&apos;d mirrored {manager}&apos;s new/added buys since quarter-end</p>
+      </div>
+      <div className="flex items-center gap-5 flex-1">
+        <Metric label="Their buys" value={fmtPct(ca.newBuyReturn)} tone={ca.newBuyReturn >= 0 ? "green" : "red"} big />
+        <span className="text-[18px]" style={{ color: "var(--ca-text-3)" }}>vs</span>
+        <Metric label="S&P 500" value={fmtPct(ca.benchmark)} tone="neutral" big />
+        <div className="h-8 w-px" style={{ background: "var(--ca-border)" }} />
+        <Metric label="Alpha" value={fmtPct(ca.alpha)} tone={good ? "green" : "red"} big />
+        <Metric label="Hit rate" value={`${ca.hitRate.toFixed(0)}%`} tone="neutral" />
+        <Metric label="Sample" value={`${ca.sampleSize}`} tone="neutral" />
+      </div>
+    </div>
+  );
+}
+function Metric({ label, value, tone, big }: { label: string; value: string; tone: "green" | "red" | "neutral"; big?: boolean }) {
+  const c = tone === "green" ? "#147a4f" : tone === "red" ? "#b42318" : "var(--ca-text)";
+  return (
+    <div>
+      <p className="text-[9px] font-bold uppercase tracking-[0.1em] mb-0.5" style={{ color: "var(--ca-text-3)" }}>{label}</p>
+      <p className={`${big ? "text-[19px]" : "text-[15px]"} font-semibold tabular-nums leading-none`} style={{ color: c }}>{value}</p>
+    </div>
   );
 }
 

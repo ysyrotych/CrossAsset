@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { Flame, Snowflake } from "lucide-react";
 import type { ConsensusRow } from "@/lib/institutional/types";
 import { fmtMoney } from "./shared";
+import AskPanel from "./AskPanel";
 
 type Filter = "all" | "buy" | "sell";
 
@@ -33,6 +34,8 @@ export default function ConsensusView({ onPickTicker }: { onPickTicker: (t: stri
 
   return (
     <div className="inst-fade-up">
+      <AskPanel />
+
       {/* headline */}
       {topBuy && (
         <div className="rounded-xl px-6 py-5 mb-6 inst-aurora inst-scale-in" style={{ color: "#fff" }}>
