@@ -16,6 +16,8 @@ const SCALE: Record<string, number> = {
   BAMLH0A0HYM2: 100,      // % → bps
   BOPGSTB: 1 / 1000,      // $m → $b
   MTSDS133FMS: 1 / 1000,  // $m → $b
+  WALCL: 1 / 1_000_000,   // $m → $t (Fed balance sheet)
+  BAMLC0A0CM: 100,        // % → bps (IG credit spread)
 };
 
 async function fredFetch(url: string): Promise<Response> {
