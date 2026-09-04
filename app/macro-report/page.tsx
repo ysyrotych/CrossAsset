@@ -54,6 +54,12 @@ export default function MacroReportPage() {
   const navRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const suppressSpy = useRef(false);
   const spyTimer = useRef<number | undefined>(undefined);
+  // capture the incoming #hash during first render — before the active-sync
+  // effect overwrites window.location.hash with the default section.
+  const initialHashRef = useRef<string | null>(null);
+  if (initialHashRef.current === null) {
+    initialHashRef.current = typeof window !== "undefined" ? window.location.hash.replace(/^#/, "") : "";
+  }
   const [active, setActive] = useState<SectionId>("monetary-policy");
   const [presenting, setPresenting] = useState(false);
   const [expanded, setExpanded] = useState<RenderedChart | null>(null);
@@ -198,7 +204,7 @@ export default function MacroReportPage() {
   useEffect(() => { document.title = "U.S. Macro Report · CrossAsset"; }, []);
   useEffect(() => {
     if (!report) return;
-    const h = window.location.hash.replace(/^#/, "") as SectionId;
+    const h = (initialHashRef.current ?? "") as SectionId;
     if (!h || !SECTIONS.some((s) => s.id === h)) return;
     // Far-down sections keep shifting as async panels (yield curve, markets,
     // brief) load, so retry over a longer window — and stop if the user scrolls.
