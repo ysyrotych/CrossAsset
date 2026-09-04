@@ -32,6 +32,7 @@ export default function MacroReportPage() {
   const scrollRefs = useRef<Record<string, HTMLElement | null>>({});
   const [active, setActive] = useState<SectionId>("monetary-policy");
   const [presenting, setPresenting] = useState(false);
+  const [movers, setMovers] = useState<{ id: string; title: string; unit: string; pct: number; to: number }[]>([]);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -84,11 +85,30 @@ export default function MacroReportPage() {
     } catch { /* skip */ }
   }, []);
 
+  const diffSnapshot = useCallback((data: ReportData) => {
+    try {
+      const snap: Record<string, number> = {};
+      for (const [id, c] of Object.entries(data.charts)) if (c.latest) snap[id] = c.latest.value;
+      const prevRaw = localStorage.getItem("crossasset_macro_snapshot");
+      if (prevRaw) {
+        const prev = JSON.parse(prevRaw) as Record<string, number>;
+        const m = Object.entries(snap)
+          .filter(([id]) => prev[id] != null && prev[id] !== 0)
+          .map(([id, to]) => ({ id, title: data.charts[id].title, unit: data.charts[id].unit, to, pct: ((to - prev[id]) / Math.abs(prev[id])) * 100 }))
+          .filter((x) => Math.abs(x.pct) > 0.05)
+          .sort((a, b) => Math.abs(b.pct) - Math.abs(a.pct))
+          .slice(0, 10);
+        setMovers(m);
+      }
+      localStorage.setItem("crossasset_macro_snapshot", JSON.stringify(snap));
+    } catch { /* ignore */ }
+  }, []);
+
   const generate = useCallback(async () => {
-    setSummary(null); setNarratives({});
+    setSummary(null); setNarratives({}); setMovers([]);
     const data = await loadData();
-    if (data) { summarize(data); narrate(data); }
-  }, [loadData, narrate, summarize]);
+    if (data) { diffSnapshot(data); summarize(data); narrate(data); }
+  }, [loadData, narrate, summarize, diffSnapshot]);
 
   useEffect(() => { generate(); /* one-click on load */ }, [generate]);
 
@@ -170,6 +190,21 @@ export default function MacroReportPage() {
                 </div>
               );
             })}
+          </div>
+        </div>
+      )}
+
+      {/* movers since last visit */}
+      {movers.length > 0 && (
+        <div className="rounded-xl px-4 py-3 mb-6 macro-no-print inst-fade-up" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+          <p className="text-[9.5px] font-bold uppercase tracking-[0.12em] mb-2" style={{ color: "var(--ca-text-3)" }}>Movers since your last visit</p>
+          <div className="flex flex-wrap gap-2">
+            {movers.map((m) => (
+              <span key={m.id} className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[11.5px]" style={{ background: "var(--ca-surface-2)" }}>
+                <span className="font-medium" style={{ color: "var(--ca-text)" }}>{m.title}</span>
+                <span className="tabular-nums font-semibold" style={{ color: m.pct >= 0 ? "#147a4f" : "#b42318" }}>{m.pct >= 0 ? "▲" : "▼"} {Math.abs(m.pct).toFixed(1)}%</span>
+              </span>
+            ))}
           </div>
         </div>
       )}

@@ -82,6 +82,7 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
+              {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
               <Area type="monotone" dataKey={keys[0]} stroke={chart.series[0]?.color ?? NAVY} strokeWidth={1.6} fill={`url(#g-${chart.id})`} isAnimationActive dot={false} />
             </AreaChart>
           ) : (
@@ -92,6 +93,7 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
+              {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
               {keys.map((k, i) => (
                 <Line key={k} type="monotone" dataKey={k} stroke={chart.series[i]?.color ?? NAVY} strokeWidth={1.6} dot={false} isAnimationActive />
               ))}
@@ -113,12 +115,23 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
   );
 }
 
+function MiniSpark({ data }: { data: { value: number }[] }) {
+  const pts = data.slice(-14).map((d) => d.value);
+  if (pts.length < 2) return null;
+  const max = Math.max(...pts), min = Math.min(...pts), range = max - min || 1;
+  const w = 54, h = 16;
+  const poly = pts.map((v, i) => `${((i / (pts.length - 1)) * (w - 2) + 1).toFixed(1)},${(h - 1 - ((v - min) / range) * (h - 2)).toFixed(1)}`).join(" ");
+  const up = pts[pts.length - 1] >= pts[0];
+  return <svg width={w} height={h}><polyline points={poly} fill="none" stroke={up ? "#147a4f" : "#b42318"} strokeWidth={1.3} strokeLinejoin="round" /></svg>;
+}
+
 function ChartFrame({ chart, children }: { chart: RenderedChart; children: React.ReactNode }) {
   const latest = chart.latest;
   const p = chart.precision ?? 1;
+  const primary = chart.series[0]?.data ?? [];
   return (
     <div className="rounded-xl p-4 inst-card-hover" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
-      <div className="flex items-start justify-between mb-2">
+      <div className="flex items-start justify-between mb-2 gap-2">
         <div className="min-w-0">
           <p className="text-[12.5px] font-semibold leading-tight" style={{ color: "var(--ca-text)" }}>{chart.title}</p>
           <p className="text-[9.5px] uppercase tracking-wide" style={{ color: "var(--ca-text-3)" }}>
@@ -126,13 +139,16 @@ function ChartFrame({ chart, children }: { chart: RenderedChart; children: React
           </p>
         </div>
         {latest && (
-          <div className="text-right shrink-0 pl-2">
-            <p className="text-[15px] font-semibold tabular-nums leading-none" style={{ color: "var(--ca-text)" }}>{fmtVal(latest.value, chart.unit, p)}</p>
-            {latest.changeYoY != null && (
-              <p className="text-[10px] tabular-nums" style={{ color: latest.changeYoY >= 0 ? "#147a4f" : "#b42318" }}>
-                {latest.changeYoY >= 0 ? "+" : ""}{latest.changeYoY.toFixed(1)}% y/y
-              </p>
-            )}
+          <div className="flex items-center gap-2 shrink-0">
+            <div className="opacity-70"><MiniSpark data={primary} /></div>
+            <div className="text-right">
+              <p className="text-[15px] font-semibold tabular-nums leading-none" style={{ color: "var(--ca-text)" }}>{fmtVal(latest.value, chart.unit, p)}</p>
+              {latest.changeYoY != null && (
+                <p className="text-[10px] tabular-nums" style={{ color: latest.changeYoY >= 0 ? "#147a4f" : "#b42318" }}>
+                  {latest.changeYoY >= 0 ? "+" : ""}{latest.changeYoY.toFixed(1)}% y/y
+                </p>
+              )}
+            </div>
           </div>
         )}
       </div>

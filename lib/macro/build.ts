@@ -91,6 +91,7 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
       id: spec.id, section: spec.section, title: spec.title, unit: spec.unit,
       chartType: spec.chartType, series: rendered,
       avg: spec.avg ? average(primary) : undefined,
+      refLine: spec.section === "ism-services" || spec.section === "ism-mfg" ? 50 : undefined,
       recession: spec.recession,
       latest: last ? { value: last.value, date: last.date, changeYoY, changeMoM } : undefined,
       asOf: meta?.asOf,

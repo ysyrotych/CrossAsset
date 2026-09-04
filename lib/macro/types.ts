@@ -60,6 +60,7 @@ export type RenderedChart = {
   chartType: ChartType;
   series: RenderedSeries[];
   avg?: number | null;         // computed average across visible window
+  refLine?: number | null;     // fixed reference line (e.g. 50 for ISM diffusion)
   recession?: boolean;
   latest?: { value: number; date: string; changeYoY?: number; changeMoM?: number };
   asOf?: string;               // for curated series ("Feb 2026")
