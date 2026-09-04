@@ -12,6 +12,7 @@ const SCALE: Record<string, number> = {
   HOUST: 1 / 1000,        // thousands → millions
   HOUST1F: 1 / 1000,
   ICSA: 1 / 1000,         // count → thousands
+  CCSA: 1 / 1000,         // count → thousands (continuing claims)
   T10Y2Y: 100,            // % → bps
   BAMLH0A0HYM2: 100,      // % → bps
   BOPGSTB: 1 / 1000,      // $m → $b

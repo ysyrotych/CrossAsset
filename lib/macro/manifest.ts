@@ -197,6 +197,10 @@ export const CHARTS: ChartSpec[] = [
   // ── New-loop 18: fiscal deep-dive (live FRED) ──
   { id: "fed-interest", section: "budget", title: "Federal Interest Payments", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "A091RC1Q027SBEA", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1, note: "debt-servicing cost — now rivals defense" },
   { id: "fed-receipts", section: "budget", title: "Federal Receipts vs Outlays", unit: "% y/y", source: "fred", freq: "q", chartType: "multiline", series: [{ id: "FGRECPT", label: "Receipts", transform: "yoy", color: NAVY }, { id: "FGEXPND", label: "Outlays", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1 },
+
+  // ── New-loop 21: continuing claims & inventories-to-sales (cycle signals) ──
+  { id: "continuing-claims", section: "labor", title: "Continuing Jobless Claims", unit: "thousands", source: "fred", freq: "w", chartType: "line", series: [{ id: "CCSA", transform: "4wkavg", color: CRIMSON }], startYear: 2010, recession: true, precision: 0, note: "labor slack — how long people stay unemployed" },
+  { id: "inventory-sales", section: "other-mfg", title: "Inventories-to-Sales Ratio", unit: "ratio", source: "fred", freq: "m", chartType: "line", series: [{ id: "ISRATIO", transform: "level", color: NAVY }], startYear: 2010, recession: true, avg: true, precision: 2, note: "rising = demand slowing vs stock" },
 ];
 
 export const SECTIONS: Section[] = [
@@ -206,14 +210,14 @@ export const SECTIONS: Section[] = [
   { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "cpi-shelter", "cpi-coreservices", "cpi-coregoods", "cpi-energy", "cpi-food", "cpi-medical", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
-  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "productivity", "unit-labor-costs", "temp-help", "weekly-hours", "sahm-rule"] },
+  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "productivity", "unit-labor-costs", "temp-help", "weekly-hours", "continuing-claims", "sahm-rule"] },
   { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "pce-durables", "pce-nondurables", "pce-services", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service", "consumer-credit"] },
   { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "housing-supply", "mortgage-rate", "affordability", "case-shiller", "nahb"] },
   { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
   { id: "nfib",                 title: "NFIB Small Business",        chartIds: ["nfib-optimism", "nfib-uncertainty"] },
   { id: "ism-services",         title: "ISM Services PMI",           chartIds: ["ism-services", "ism-services-activity", "ism-services-neworders", "ism-services-backlog", "ism-services-employment", "ism-services-prices", "ism-services-inventory", "ism-services-supplier", "ism-services-exports", "ism-services-imports"] },
   { id: "ism-mfg",              title: "ISM Manufacturing PMI",      chartIds: ["ism-mfg", "ism-mfg-production", "ism-mfg-neworders", "ism-mfg-backlog", "ism-mfg-employment", "ism-mfg-prices", "ism-mfg-inventory", "ism-mfg-vendor", "ism-mfg-exports", "ism-mfg-imports"] },
-  { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders", "empire-state", "philly-fed"] },
+  { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders", "inventory-sales", "empire-state", "philly-fed"] },
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
   { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "fed-interest", "fed-receipts", "debt-gdp"] },
   { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits", "cfnai", "wei"] },
