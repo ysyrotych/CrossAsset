@@ -482,3 +482,25 @@
   @page { size: landscape; margin: 12mm; }
   body { background: #fff !important; }
 }
+
+/* ── Macro Report print v2: tighter, presentation-grade PDF ───────────────── */
+@media print {
+  /* two clean columns of charts per row, never split a chart across pages */
+  .macro-print-grid { display: grid !important; grid-template-columns: 1fr 1fr !important; gap: 10px !important; }
+  .macro-print-grid > * { break-inside: avoid; page-break-inside: avoid; }
+  /* keep a section heading with its content */
+  .macro-section h2 { break-after: avoid; page-break-after: avoid; }
+  /* hero prints with full color */
+  .inst-aurora, .macro-hero { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; }
+  /* trim card chrome for density */
+  .macro-section { margin-bottom: 10px !important; }
+  /* recharts svg must not overflow the page */
+  .recharts-responsive-container { max-width: 100% !important; }
+}
+
+/* Macro Report: print-only cover page */
+.macro-print-cover { display: none; }
+@media print {
+  .macro-print-cover { display: flex !important; break-after: page; page-break-after: always;
+    flex-direction: column; justify-content: center; height: 90vh; }
+}

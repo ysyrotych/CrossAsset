@@ -148,6 +148,14 @@ export default function MacroReportPage() {
 
   return (
     <AppShell>
+      {/* print-only cover page */}
+      <div className="macro-print-cover">
+        <p className="text-[12px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Weekly Economic Update</p>
+        <h1 className="text-[46px] font-light leading-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>U.S. Macroeconomic &amp;<br />Financial Market Report</h1>
+        <p className="text-[16px] mt-5" style={{ color: "var(--ca-text-2)" }}>{asDate}</p>
+        <p className="text-[12px] mt-10" style={{ color: "var(--ca-text-3)" }}>CrossAsset · Macro Intelligence — research only, not investment advice</p>
+      </div>
+
       {/* header */}
       <div className="flex items-end justify-between mb-4">
         <div>
@@ -178,7 +186,7 @@ export default function MacroReportPage() {
 
       {/* executive summary hero */}
       {report && (
-        <div className="rounded-2xl p-6 mb-6 inst-scale-in inst-aurora" style={{ color: "#fff" }}>
+        <div className="rounded-2xl p-6 mb-6 inst-scale-in inst-aurora macro-hero" style={{ color: "#fff" }}>
           <div className="flex items-center gap-3 mb-2">
             <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "rgba(255,255,255,0.6)" }}>Executive Summary</p>
             {(() => { const r = computeRegime(report.charts); return (
@@ -284,7 +292,7 @@ export default function MacroReportPage() {
                 </div>
 
                 {/* chart grid */}
-                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
+                <div className="grid grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
                   {charts.map((c) => <MacroChart key={c.id} chart={c} onExpand={() => setExpanded(c)} />)}
                 </div>
               </section>
