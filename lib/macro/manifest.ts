@@ -183,6 +183,11 @@ export const CHARTS: ChartSpec[] = [
   { id: "unit-labor-costs", section: "labor", title: "Unit Labor Costs", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "ULCNFB", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1, note: "key wage-inflation gauge" },
   { id: "temp-help", section: "labor", title: "Temporary Help Employment", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "TEMPHELPS", transform: "yoy", color: TEAL }], startYear: 2010, recession: true, precision: 1, note: "leads labor-market turns" },
   { id: "weekly-hours", section: "labor", title: "Average Weekly Hours", unit: "hours", source: "fred", freq: "m", chartType: "line", series: [{ id: "AWHAETP", transform: "level", color: NAVY }], startYear: 2010, recession: true, precision: 1, note: "hours cut before jobs" },
+
+  // ── New-loop 13: consumer spending composition (live FRED, real chained-$) ──
+  { id: "pce-durables", section: "consumer", title: "Real Spending: Durable Goods", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCEDGC96", transform: "yoy", color: NAVY }], startYear: 2015, recession: true, precision: 1, note: "big-ticket, rate-sensitive" },
+  { id: "pce-nondurables", section: "consumer", title: "Real Spending: Nondurable Goods", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCENDGC96", transform: "yoy", color: TEAL }], startYear: 2015, precision: 1 },
+  { id: "pce-services", section: "consumer", title: "Real Spending: Services", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCESVC96", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1, note: "the sticky ~⅔ of consumption" },
 ];
 
 export const SECTIONS: Section[] = [
@@ -193,7 +198,7 @@ export const SECTIONS: Section[] = [
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "cpi-shelter", "cpi-coreservices", "cpi-coregoods", "cpi-energy", "cpi-food", "cpi-medical", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
   { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "productivity", "unit-labor-costs", "temp-help", "weekly-hours", "sahm-rule"] },
-  { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
+  { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "pce-durables", "pce-nondurables", "pce-services", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
   { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "housing-supply", "mortgage-rate", "affordability", "case-shiller", "nahb"] },
   { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
   { id: "nfib",                 title: "NFIB Small Business",        chartIds: ["nfib-optimism", "nfib-uncertainty"] },
