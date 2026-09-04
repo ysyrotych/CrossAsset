@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { RefreshCw, Sparkles, FileText, Play, Download } from "lucide-react";
+import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp } from "lucide-react";
 import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
@@ -44,9 +44,12 @@ export default function MacroReportPage() {
   const [narrating, setNarrating] = useState(false);
   const [summary, setSummary] = useState<{ headline: string; macro: string[]; markets: string[] } | null>(null);
   const scrollRefs = useRef<Record<string, HTMLElement | null>>({});
+  const navRefs = useRef<Record<string, HTMLButtonElement | null>>({});
   const [active, setActive] = useState<SectionId>("monetary-policy");
   const [presenting, setPresenting] = useState(false);
   const [expanded, setExpanded] = useState<RenderedChart | null>(null);
+  const [showTop, setShowTop] = useState(false);
+  const [progress, setProgress] = useState(0);
   const [movers, setMovers] = useState<{ id: string; title: string; unit: string; pct: number; to: number }[]>([]);
 
   const loadData = useCallback(async () => {
@@ -137,6 +140,30 @@ export default function MacroReportPage() {
     return () => window.removeEventListener("keydown", onKey);
   }, [report, presenting]);
 
+  // scroll-spy: highlight the section in view + track scroll progress
+  useEffect(() => {
+    if (!report) return;
+    const onScroll = () => {
+      const doc = document.documentElement;
+      setProgress((doc.scrollTop / (doc.scrollHeight - doc.clientHeight)) * 100);
+      setShowTop(doc.scrollTop > 700);
+      let current: SectionId | null = null;
+      for (const s of SECTIONS) {
+        const el = scrollRefs.current[s.id];
+        if (el && el.getBoundingClientRect().top < 140) current = s.id;
+      }
+      if (current) setActive(current);
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    onScroll();
+    return () => window.removeEventListener("scroll", onScroll);
+  }, [report]);
+
+  // keep the active nav pill visible in the horizontal scroller
+  useEffect(() => {
+    navRefs.current[active]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [active]);
+
   function scrollTo(id: SectionId) {
     setActive(id);
     const el = scrollRefs.current[id];
@@ -150,6 +177,20 @@ export default function MacroReportPage() {
 
   return (
     <AppShell>
+      {/* scroll progress bar */}
+      <div className="fixed top-0 left-56 right-0 h-[3px] z-50 macro-no-print" style={{ background: "transparent" }}>
+        <div className="h-full transition-[width] duration-150" style={{ width: `${progress}%`, background: "var(--ca-accent)" }} />
+      </div>
+
+      {/* back to top */}
+      {showTop && (
+        <button onClick={() => window.scrollTo({ top: 0, behavior: "smooth" })}
+          className="fixed bottom-6 right-6 z-40 p-3 rounded-full shadow-lg inst-card-hover macro-no-print"
+          style={{ background: "var(--ca-accent)", color: "#fff" }} aria-label="Back to top">
+          <ArrowUp size={18} />
+        </button>
+      )}
+
       {/* print-only cover page */}
       <div className="macro-print-cover">
         <p className="text-[12px] font-semibold tracking-[0.2em] uppercase mb-3" style={{ color: "var(--ca-accent)" }}>Weekly Economic Update</p>
@@ -250,7 +291,7 @@ export default function MacroReportPage() {
       <div className="sticky top-0 z-20 -mx-10 px-10 py-2.5 mb-6 flex gap-1.5 overflow-x-auto macro-no-print"
         style={{ background: "var(--ca-bg)", borderBottom: "1px solid var(--ca-border)" }}>
         {SECTIONS.filter((s) => s.chartIds.length).map((s) => (
-          <button key={s.id} onClick={() => scrollTo(s.id)}
+          <button key={s.id} ref={(el) => { navRefs.current[s.id] = el; }} onClick={() => scrollTo(s.id)}
             className="whitespace-nowrap px-3 py-1.5 rounded-full text-[11.5px] font-medium transition-colors shrink-0"
             style={{ background: active === s.id ? "var(--ca-accent)" : "var(--ca-surface)",
               color: active === s.id ? "#fff" : "var(--ca-text-2)",
