@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect } from "react";
-import { X } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { X, Download } from "lucide-react";
 import MacroChart, { ChangeText } from "./MacroChart";
 import { SECTION_TITLE } from "@/lib/macro/manifest";
 import type { RenderedChart } from "@/lib/macro/types";
@@ -19,12 +19,38 @@ function fmt(v: number | undefined, unit: string, p = 1): string {
   return n;
 }
 
+const RANGES: { label: string; years: number | null }[] = [
+  { label: "1Y", years: 1 }, { label: "3Y", years: 3 }, { label: "5Y", years: 5 }, { label: "Max", years: null },
+];
+
 export default function ChartDetailModal({ chart, onClose }: { chart: RenderedChart; onClose: () => void }) {
+  const [range, setRange] = useState<number | null>(null);
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") onClose(); };
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [onClose]);
+
+  // filter series by selected range
+  const viewChart = useMemo<RenderedChart>(() => {
+    if (range == null) return chart;
+    const cutoff = Date.now() - range * 365.25 * 864e5;
+    return { ...chart, series: chart.series.map((s) => ({ ...s, data: s.data.filter((d) => new Date(d.date).getTime() >= cutoff) })) };
+  }, [chart, range]);
+
+  function downloadCSV() {
+    const dates = Array.from(new Set(chart.series.flatMap((s) => s.data.map((d) => d.date)))).sort();
+    const header = ["date", ...chart.series.map((s) => s.name)].join(",");
+    const rows = dates.map((dt) => {
+      const cells = chart.series.map((s) => s.data.find((d) => d.date === dt)?.value ?? "");
+      return [dt, ...cells].join(",");
+    });
+    const blob = new Blob([[header, ...rows].join("\n")], { type: "text/csv" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url; a.download = `${chart.id}.csv`; a.click();
+    URL.revokeObjectURL(url);
+  }
 
   const p = chart.precision ?? 1;
   const s = chart.stats;
@@ -45,15 +71,18 @@ export default function ChartDetailModal({ chart, onClose }: { chart: RenderedCh
             <p className="text-[9.5px] font-bold uppercase tracking-[0.14em] mb-1" style={{ color: "var(--ca-accent)" }}>{SECTION_TITLE[chart.section]}</p>
             <h2 className="text-[22px] font-light" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>{chart.title}</h2>
             <p className="text-[11px] mt-0.5" style={{ color: "var(--ca-text-3)" }}>
-              {chart.unit}{chart.stale && chart.asOf ? ` · as of ${chart.asOf}` : chart.latest ? ` · latest ${new Date(chart.latest.date).toLocaleDateString(undefined, { month: "short", year: "numeric" })}` : ""}
+              {chart.unit}{chart.stale && chart.asOf ? ` · seeded, as of ${chart.asOf}` : chart.latest ? ` · latest ${new Date(chart.latest.date).toLocaleDateString(undefined, { month: "short", year: "numeric" })} · live` : ""}
             </p>
           </div>
-          <button onClick={onClose} className="p-1.5 rounded-lg" style={{ color: "var(--ca-text-3)" }}><X size={18} /></button>
+          <div className="flex items-center gap-1.5">
+            <button onClick={downloadCSV} title="Download CSV" className="p-1.5 rounded-lg inst-card-hover" style={{ color: "var(--ca-text-3)", border: "1px solid var(--ca-border)" }}><Download size={15} /></button>
+            <button onClick={onClose} className="p-1.5 rounded-lg" style={{ color: "var(--ca-text-3)" }}><X size={18} /></button>
+          </div>
         </div>
 
         <div className="px-6 py-4">
           {/* stat row */}
-          <div className="grid grid-cols-6 gap-3 mb-4">
+          <div className="grid grid-cols-6 gap-3 mb-3">
             {stats.map((st) => (
               <div key={st.label} className="rounded-lg px-3 py-2" style={{ background: "var(--ca-surface-2)" }}>
                 <p className="text-[9px] font-bold uppercase tracking-wide mb-1" style={{ color: "var(--ca-text-3)" }}>{st.label}</p>
@@ -61,9 +90,21 @@ export default function ChartDetailModal({ chart, onClose }: { chart: RenderedCh
               </div>
             ))}
           </div>
-          {/* big chart — reuse MacroChart at large height, its own header hidden by wrapping */}
+
+          {/* range toggle */}
+          <div className="flex items-center justify-end gap-1 mb-2">
+            {RANGES.map((r) => (
+              <button key={r.label} onClick={() => setRange(r.years)}
+                className="px-2.5 py-1 rounded-md text-[10.5px] font-semibold transition-colors"
+                style={{ background: range === r.years ? "var(--ca-accent)" : "var(--ca-surface-2)", color: range === r.years ? "#fff" : "var(--ca-text-3)" }}>
+                {r.label}
+              </button>
+            ))}
+          </div>
+
+          {/* big chart */}
           <div className="rounded-xl overflow-hidden">
-            <MacroChart chart={chart} height={380} bare />
+            <MacroChart chart={viewChart} height={360} bare />
           </div>
           {chart.note && <p className="text-[11px] mt-3" style={{ color: "var(--ca-text-3)" }}>{chart.note}</p>}
         </div>
