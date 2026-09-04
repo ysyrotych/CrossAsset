@@ -62,7 +62,8 @@ export type RenderedChart = {
   avg?: number | null;         // computed average across visible window
   refLine?: number | null;     // fixed reference line (e.g. 50 for ISM diffusion)
   recession?: boolean;
-  latest?: { value: number; date: string; changeYoY?: number; changeMoM?: number };
+  latest?: { value: number; date: string; change?: number; changeUnit?: "% y/y" | "pp" };
+  stats?: { min: number; max: number; percentile: number }; // percentile of latest in visible window
   asOf?: string;               // for curated series ("Feb 2026")
   stale?: boolean;             // curated & possibly out of date
   precision?: number;

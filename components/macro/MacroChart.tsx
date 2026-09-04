@@ -17,7 +17,7 @@ function fmtVal(v: number, unit: string, p = 1): string {
   return n;
 }
 
-export default function MacroChart({ chart }: { chart: RenderedChart }) {
+export default function MacroChart({ chart, onExpand, height = 210, bare = false }: { chart: RenderedChart; onExpand?: () => void; height?: number; bare?: boolean }) {
   const { merged, keys, minT, maxT } = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     const keys = chart.series.map((s) => s.name);
@@ -43,17 +43,17 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
 
   if (chart.error && !merged.length) {
     return (
-      <ChartFrame chart={chart}>
-        <div className="h-[200px] flex items-center justify-center text-[12px]" style={{ color: "var(--ca-text-3)" }}>
-          {chart.error === "no data" ? "Data source unavailable" : chart.error}
+      <ChartFrame chart={chart} bare={bare} onExpand={onExpand}>
+        <div style={{ height }} className="flex items-center justify-center text-[12px]" >
+          <span style={{ color: "var(--ca-text-3)" }}>{chart.error === "no data" ? "Data source unavailable" : chart.error}</span>
         </div>
       </ChartFrame>
     );
   }
 
   return (
-    <ChartFrame chart={chart}>
-      <div style={{ width: "100%", height: 210 }}>
+    <ChartFrame chart={chart} bare={bare} onExpand={onExpand}>
+      <div style={{ width: "100%", height }}>
         <ResponsiveContainer>
           {chart.chartType === "bar" ? (
             <BarChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
@@ -62,7 +62,7 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
-              <Bar dataKey={keys[0]} isAnimationActive>
+              <Bar dataKey={keys[0]} isAnimationActive={false}>
                 {merged.map((row, i) => (
                   <Cell key={i} fill={(row[keys[0]] ?? 0) >= 0 ? "#147a4f" : "#b42318"} />
                 ))}
@@ -83,7 +83,7 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
               <Tooltip content={<TT unit={chart.unit} p={p} />} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
-              <Area type="monotone" dataKey={keys[0]} stroke={chart.series[0]?.color ?? NAVY} strokeWidth={1.6} fill={`url(#g-${chart.id})`} isAnimationActive dot={false} />
+              <Area type="monotone" dataKey={keys[0]} stroke={chart.series[0]?.color ?? NAVY} strokeWidth={1.6} fill={`url(#g-${chart.id})`} isAnimationActive={false} dot={false} />
             </AreaChart>
           ) : (
             <LineChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
@@ -95,7 +95,7 @@ export default function MacroChart({ chart }: { chart: RenderedChart }) {
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
               {keys.map((k, i) => (
-                <Line key={k} type="monotone" dataKey={k} stroke={chart.series[i]?.color ?? NAVY} strokeWidth={1.6} dot={false} isAnimationActive />
+                <Line key={k} type="monotone" dataKey={k} stroke={chart.series[i]?.color ?? NAVY} strokeWidth={1.6} dot={false} isAnimationActive={false} />
               ))}
             </LineChart>
           )}
@@ -125,12 +125,21 @@ function MiniSpark({ data }: { data: { value: number }[] }) {
   return <svg width={w} height={h}><polyline points={poly} fill="none" stroke={up ? "#147a4f" : "#b42318"} strokeWidth={1.3} strokeLinejoin="round" /></svg>;
 }
 
-function ChartFrame({ chart, children }: { chart: RenderedChart; children: React.ReactNode }) {
+export function ChangeText({ change, unit, precision = 1, cls = "text-[10px]" }: { change?: number; unit?: "% y/y" | "pp"; precision?: number; cls?: string }) {
+  if (change == null || !unit) return null;
+  const up = change >= 0;
+  const val = unit === "pp" ? `${up ? "+" : ""}${change.toFixed(precision)} pp` : `${up ? "+" : ""}${change.toFixed(1)}% y/y`;
+  return <p className={`${cls} tabular-nums`} style={{ color: up ? "#147a4f" : "#b42318" }}>{val}</p>;
+}
+
+function ChartFrame({ chart, children, onExpand, bare = false }: { chart: RenderedChart; children: React.ReactNode; onExpand?: () => void; bare?: boolean }) {
   const latest = chart.latest;
   const p = chart.precision ?? 1;
   const primary = chart.series[0]?.data ?? [];
+  if (bare) return <div className="w-full">{children}</div>;
   return (
-    <div className="rounded-xl p-4 inst-card-hover" style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
+    <div className={`rounded-xl p-4 inst-card-hover ${onExpand ? "cursor-pointer" : ""}`} onClick={onExpand}
+      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)" }}>
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="min-w-0">
           <p className="text-[12.5px] font-semibold leading-tight" style={{ color: "var(--ca-text)" }}>{chart.title}</p>
@@ -140,14 +149,10 @@ function ChartFrame({ chart, children }: { chart: RenderedChart; children: React
         </div>
         {latest && (
           <div className="flex items-center gap-2 shrink-0">
-            <div className="opacity-70"><MiniSpark data={primary} /></div>
+            <div className="opacity-70 macro-no-print"><MiniSpark data={primary} /></div>
             <div className="text-right">
               <p className="text-[15px] font-semibold tabular-nums leading-none" style={{ color: "var(--ca-text)" }}>{fmtVal(latest.value, chart.unit, p)}</p>
-              {latest.changeYoY != null && (
-                <p className="text-[10px] tabular-nums" style={{ color: latest.changeYoY >= 0 ? "#147a4f" : "#b42318" }}>
-                  {latest.changeYoY >= 0 ? "+" : ""}{latest.changeYoY.toFixed(1)}% y/y
-                </p>
-              )}
+              <ChangeText change={latest.change} unit={latest.changeUnit} precision={p} />
             </div>
           </div>
         )}

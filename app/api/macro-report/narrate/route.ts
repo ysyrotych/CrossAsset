@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type ChartFact = { title: string; unit: string; latest?: number; changeYoY?: number; changeMoM?: number; avg?: number | null; asOf?: string };
+type ChartFact = { title: string; unit: string; latest?: number; change?: number; changeUnit?: "% y/y" | "pp"; avg?: number | null; asOf?: string };
 
 // Generate the section's analytical commentary in the URETF research voice.
 export async function POST(req: NextRequest) {
@@ -12,8 +12,7 @@ export async function POST(req: NextRequest) {
 
   const factLines = (facts ?? []).map((f) => {
     const bits = [`${f.title}: ${fmt(f.latest, f.unit)}`];
-    if (f.changeYoY != null) bits.push(`${f.changeYoY >= 0 ? "+" : ""}${f.changeYoY.toFixed(1)}% y/y`);
-    if (f.changeMoM != null) bits.push(`${f.changeMoM >= 0 ? "+" : ""}${f.changeMoM.toFixed(1)} m/m`);
+    if (f.change != null) bits.push(f.changeUnit === "pp" ? `${f.change >= 0 ? "+" : ""}${f.change.toFixed(2)} pp` : `${f.change >= 0 ? "+" : ""}${f.change.toFixed(1)}% y/y`);
     if (f.avg != null) bits.push(`vs avg ${f.avg.toFixed(1)}`);
     if (f.asOf) bits.push(`(as of ${f.asOf})`);
     return "• " + bits.join(", ");
@@ -43,9 +42,10 @@ ${factLines}`;
 
   // deterministic fallback — describe each metric
   const bullets = (facts ?? []).slice(0, 5).map((f) => {
-    const dir = f.changeYoY != null ? (f.changeYoY >= 0 ? "rose" : "fell") : "printed";
-    const vsAvg = f.avg != null && f.latest != null ? (f.latest >= f.avg ? "above" : "below") + " its long-run average" : "";
-    return `${f.title} ${dir} to ${fmt(f.latest, f.unit)}${f.changeYoY != null ? ` (${f.changeYoY >= 0 ? "+" : ""}${f.changeYoY.toFixed(1)}% y/y)` : ""}${vsAvg ? `, ${vsAvg}` : ""}.`;
+    const dir = f.change != null ? (f.change >= 0 ? "rose" : "fell") : "printed";
+    const chg = f.change != null ? ` (${f.change >= 0 ? "+" : ""}${f.changeUnit === "pp" ? `${f.change.toFixed(2)} pp` : `${f.change.toFixed(1)}% y/y`})` : "";
+    const vsAvg = f.avg != null && f.latest != null ? ", " + (f.latest >= f.avg ? "above" : "below") + " its long-run average" : "";
+    return `${f.title} ${dir} to ${fmt(f.latest, f.unit)}${chg}${vsAvg}.`;
   });
   return NextResponse.json({ section, bullets: bullets.length ? bullets : ["Data pending."], source: "computed" });
 }

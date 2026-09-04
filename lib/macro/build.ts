@@ -78,14 +78,26 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
     const last = latest(primary);
     const meta = spec.source === "curated" ? CURATED_META[spec.series[0].id] : null;
 
-    // y/y & m/m for the latest tile (from primary series, if enough data)
-    let changeYoY: number | undefined, changeMoM: number | undefined;
-    if (last && primary.length > 13 && (spec.freq === "m")) {
-      const prevY = primary[primary.length - 13]?.value;
-      if (prevY) changeYoY = ((last.value / prevY) - 1) * 100;
-      const prevM = primary[primary.length - 2]?.value;
-      if (prevM) changeMoM = last.value - prevM;
+    // Correct change for the latest tile, depending on the series transform:
+    //  • level series  → true y/y %  (e.g. auto sales)
+    //  • yoy/rate series (already a %/index) → change in percentage points vs prior obs
+    const tr = spec.series[0].transform ?? "level";
+    let change: number | undefined, changeUnit: "% y/y" | "pp" | undefined;
+    const isIndexLike = /index|month/i.test(spec.unit);
+    if (last && primary.length > 1) {
+      if (tr === "level" && !isIndexLike) {
+        const lag = spec.freq === "q" ? 4 : spec.freq === "m" ? 12 : spec.freq === "w" ? 52 : 252;
+        const py = primary[primary.length - 1 - lag]?.value;
+        if (py) { change = ((last.value / py) - 1) * 100; changeUnit = "% y/y"; }
+      } else {
+        const prev = primary[primary.length - 2].value;
+        change = last.value - prev; changeUnit = "pp";
+      }
     }
+    const vals = primary.map((p) => p.value);
+    const mn = vals.length ? Math.min(...vals) : 0;
+    const mx = vals.length ? Math.max(...vals) : 0;
+    const pctile = last && mx > mn ? ((last.value - mn) / (mx - mn)) * 100 : 50;
 
     return {
       id: spec.id, section: spec.section, title: spec.title, unit: spec.unit,
@@ -93,7 +105,8 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
       avg: spec.avg ? average(primary) : undefined,
       refLine: spec.section === "ism-services" || spec.section === "ism-mfg" ? 50 : undefined,
       recession: spec.recession,
-      latest: last ? { value: last.value, date: last.date, changeYoY, changeMoM } : undefined,
+      latest: last ? { value: last.value, date: last.date, change, changeUnit } : undefined,
+      stats: last ? { min: mn, max: mx, percentile: pctile } : undefined,
       asOf: meta?.asOf,
       stale: spec.source === "curated",
       precision: spec.precision ?? 1,

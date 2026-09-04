@@ -5,6 +5,7 @@ import AppShell from "@/components/layout/AppShell";
 import { RefreshCw, Sparkles, FileText, Play, Download } from "lucide-react";
 import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
+import ChartDetailModal from "@/components/macro/ChartDetailModal";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -32,6 +33,7 @@ export default function MacroReportPage() {
   const scrollRefs = useRef<Record<string, HTMLElement | null>>({});
   const [active, setActive] = useState<SectionId>("monetary-policy");
   const [presenting, setPresenting] = useState(false);
+  const [expanded, setExpanded] = useState<RenderedChart | null>(null);
   const [movers, setMovers] = useState<{ id: string; title: string; unit: string; pct: number; to: number }[]>([]);
 
   const loadData = useCallback(async () => {
@@ -51,7 +53,7 @@ export default function MacroReportPage() {
           .filter(Boolean)
           .map((c: RenderedChart) => ({
             title: c.title, unit: c.unit, latest: c.latest?.value,
-            changeYoY: c.latest?.changeYoY, changeMoM: c.latest?.changeMoM,
+            change: c.latest?.change, changeUnit: c.latest?.changeUnit,
             avg: c.avg, asOf: c.asOf,
           }));
         if (!facts.length) return;
@@ -186,7 +188,7 @@ export default function MacroReportPage() {
                 <div key={id}>
                   <p className="text-[9px] uppercase tracking-wide mb-1" style={{ color: "rgba(255,255,255,0.5)" }}>{label}</p>
                   <p className="text-[19px] font-semibold tabular-nums leading-none">{c ? fmtLatest(c) : "—"}</p>
-                  {c?.latest?.changeYoY != null && <p className="text-[10px] tabular-nums mt-0.5" style={{ color: c.latest.changeYoY >= 0 ? "#7ee2a8" : "#f7a8a8" }}>{c.latest.changeYoY >= 0 ? "+" : ""}{c.latest.changeYoY.toFixed(1)}% y/y</p>}
+                  {c?.latest?.change != null && <p className="text-[10px] tabular-nums mt-0.5" style={{ color: c.latest.change >= 0 ? "#7ee2a8" : "#f7a8a8" }}>{c.latest.change >= 0 ? "+" : ""}{c.latest.changeUnit === "pp" ? `${c.latest.change.toFixed(2)} pp` : `${c.latest.change.toFixed(1)}% y/y`}</p>}
                 </div>
               );
             })}
@@ -259,7 +261,7 @@ export default function MacroReportPage() {
 
                 {/* chart grid */}
                 <div className="grid grid-cols-2 lg:grid-cols-3 gap-4">
-                  {charts.map((c) => <MacroChart key={c.id} chart={c} />)}
+                  {charts.map((c) => <MacroChart key={c.id} chart={c} onExpand={() => setExpanded(c)} />)}
                 </div>
               </section>
             );
@@ -277,6 +279,7 @@ export default function MacroReportPage() {
       {presenting && report && (
         <PresentationMode report={report} narratives={narratives} summary={summary} date={asDate} onClose={() => setPresenting(false)} />
       )}
+      {expanded && <ChartDetailModal chart={expanded} onClose={() => setExpanded(null)} />}
     </AppShell>
   );
 }

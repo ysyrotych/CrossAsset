@@ -24,7 +24,7 @@ export const CHARTS: ChartSpec[] = [
 
   // ── Commodities ──
   { id: "oil-brent", section: "commodities", title: "Oil Prices (Brent)", unit: "$/bbl", source: "fred", freq: "d", chartType: "line", series: [{ id: "DCOILBRENTEU", transform: "level", color: NAVY }], startYear: 2006, recession: true, precision: 0 },
-  { id: "gold", section: "commodities", title: "Gold Prices", unit: "$/oz", source: "yahoo", freq: "d", chartType: "line", series: [{ id: "GC=F", transform: "level", color: AMBER }], startYear: 2006, precision: 0 },
+  { id: "gold", section: "commodities", title: "Gold Prices", unit: "$/oz", source: "yahoo", freq: "m", chartType: "line", series: [{ id: "GC=F", transform: "level", color: AMBER }], startYear: 2006, precision: 0 },
   { id: "baltic-dry", section: "commodities", title: "Baltic Dry Index", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "baltic_dry", transform: "level", color: TEAL }], precision: 0 },
 
   // ── Inflation ──
