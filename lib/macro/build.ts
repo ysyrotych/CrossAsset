@@ -87,6 +87,24 @@ async function rawSeries(seriesId: string, source: string, startYear?: number): 
   return p;
 }
 
+// Bounded-concurrency map. Firing all ~123 FRED requests at once tripped FRED's
+// rate limit (~120 req/min) → 429s → retry-backoff storms that made the build
+// slow AND dropped series intermittently (n/a tiles). A small pool keeps us well
+// under the limit while still being highly parallel.
+async function mapPool<T, R>(items: T[], concurrency: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const out = new Array<R>(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(concurrency, items.length) }, async () => {
+    while (true) {
+      const i = next++;
+      if (i >= items.length) return;
+      out[i] = await fn(items[i]);
+    }
+  });
+  await Promise.all(workers);
+  return out;
+}
+
 async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
   try {
     const rendered: RenderedSeries[] = [];
@@ -162,7 +180,7 @@ export async function buildReport(force = false): Promise<ReportData> {
     return _reportCache.data;
   }
   _seriesCache.clear();
-  const results = await Promise.all(CHARTS.map(buildChart));
+  const results = await mapPool(CHARTS, 8, buildChart);
   const charts: Record<string, RenderedChart> = {};
   for (const c of results) charts[c.id] = c;
   const data: ReportData = { generatedAt: new Date().toISOString(), charts, fredConnected: !!KEY };
