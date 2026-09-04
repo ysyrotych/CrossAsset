@@ -69,6 +69,8 @@ export type RenderedChart = {
   precision?: number;
   note?: string;
   error?: string;
+  sourceId?: string;   // e.g. "FRED: DGS10" — provenance for the modal
+  isDiffusion?: boolean; // ISM-style 50 = expansion line
 };
 
 export type ReportData = {

@@ -146,7 +146,21 @@ function ChartFrame({ chart, children, onExpand, bare = false }: { chart: Render
       style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", outlineColor: "var(--ca-accent)" }}>
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="min-w-0">
-          <p className="text-[12.5px] font-semibold leading-tight" style={{ color: "var(--ca-text)" }}>{chart.title}</p>
+          <div className="flex items-center gap-1.5">
+            <p className="text-[12.5px] font-semibold leading-tight" style={{ color: "var(--ca-text)" }}>{chart.title}</p>
+            {chart.isDiffusion && latest && (
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                style={{ background: latest.value >= 50 ? "#f0fdf4" : "#fef2f2", color: latest.value >= 50 ? "#147a4f" : "#b42318" }}>
+                {latest.value >= 50 ? "EXPANDING" : "CONTRACTING"}
+              </span>
+            )}
+            {!chart.isDiffusion && chart.stats && (chart.stats.percentile >= 90 || chart.stats.percentile <= 10) && (
+              <span className="text-[8px] font-bold px-1.5 py-0.5 rounded shrink-0"
+                style={{ background: "var(--ca-surface-2)", color: "var(--ca-accent)" }}>
+                {chart.stats.percentile >= 90 ? "NEAR HIGH" : "NEAR LOW"}
+              </span>
+            )}
+          </div>
           <p className="text-[9.5px] uppercase tracking-wide" style={{ color: "var(--ca-text-3)" }}>
             {chart.unit}{chart.stale && chart.asOf ? ` · as of ${chart.asOf}` : ""}
           </p>

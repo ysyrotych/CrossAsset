@@ -134,6 +134,8 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
       stale: spec.source === "curated",
       precision: spec.precision ?? 1,
       note: spec.note,
+      sourceId: spec.source === "curated" ? "Seeded (monthly release)" : `${spec.source.toUpperCase()}: ${spec.series.map((s) => s.id).join(", ")}`,
+      isDiffusion: spec.section === "ism-services" || spec.section === "ism-mfg",
       error: primary.length === 0 ? "no data" : undefined,
     };
   } catch (e) {

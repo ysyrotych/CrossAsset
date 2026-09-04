@@ -106,7 +106,10 @@ export default function ChartDetailModal({ chart, onClose }: { chart: RenderedCh
           <div className="rounded-xl overflow-hidden">
             <MacroChart chart={viewChart} height={360} bare />
           </div>
-          {chart.note && <p className="text-[11px] mt-3" style={{ color: "var(--ca-text-3)" }}>{chart.note}</p>}
+          <div className="flex items-center justify-between mt-3">
+            {chart.note ? <p className="text-[11px]" style={{ color: "var(--ca-text-3)" }}>{chart.note}</p> : <span />}
+            {chart.sourceId && <p className="text-[10px] tabular-nums" style={{ color: "var(--ca-text-3)" }}>Source: {chart.sourceId}</p>}
+          </div>
         </div>
       </div>
     </div>
