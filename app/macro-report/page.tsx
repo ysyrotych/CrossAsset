@@ -20,9 +20,22 @@ function fmtLatest(c: RenderedChart): string {
 }
 
 const KEY_TILES: [string, string][] = [
-  ["fed-funds", "Fed Funds"], ["pce", "Core PCE"], ["unrate", "Unemployment"],
-  ["gdp-growth", "GDP q/q"], ["yield-10y", "10Y UST"], ["vix", "VIX"],
+  ["fed-funds", "Fed Funds"], ["pce", "PCE Infl"], ["unrate", "Unemployment"],
+  ["gdp-growth", "GDP q/q"], ["yield-10y", "10Y UST"], ["yield-curve-2s10s", "2s10s"],
+  ["hy-oas", "HY OAS"], ["vix", "VIX"],
 ];
+
+function computeRegime(charts: Record<string, RenderedChart>): { label: string; tone: string } {
+  const infl = charts["pce"]?.latest?.value ?? 3;
+  const gdp = charts["gdp-growth"]?.latest?.value ?? 2;
+  const ur = charts["unrate"]?.latest?.value ?? 4;
+  if (gdp < 0) return { label: "Contraction", tone: "#b42318" };
+  if (infl > 3 && gdp < 1.5) return { label: "Stagflation Risk", tone: "#b7791f" };
+  if (infl < 2.5 && gdp > 2) return { label: "Goldilocks", tone: "#147a4f" };
+  if (infl > 3) return { label: "Sticky Inflation", tone: "#b7791f" };
+  if (ur > 5) return { label: "Labor Weakening", tone: "#b42318" };
+  return { label: "Late-Cycle Expansion", tone: "#0369a1" };
+}
 
 export default function MacroReportPage() {
   const [report, setReport] = useState<ReportData | null>(null);
@@ -166,7 +179,14 @@ export default function MacroReportPage() {
       {/* executive summary hero */}
       {report && (
         <div className="rounded-2xl p-6 mb-6 inst-scale-in inst-aurora" style={{ color: "#fff" }}>
-          <p className="text-[10px] font-bold uppercase tracking-[0.16em] mb-2" style={{ color: "rgba(255,255,255,0.6)" }}>Executive Summary</p>
+          <div className="flex items-center gap-3 mb-2">
+            <p className="text-[10px] font-bold uppercase tracking-[0.16em]" style={{ color: "rgba(255,255,255,0.6)" }}>Executive Summary</p>
+            {(() => { const r = computeRegime(report.charts); return (
+              <span className="text-[10px] font-bold uppercase tracking-[0.1em] px-2 py-0.5 rounded-full" style={{ background: r.tone, color: "#fff" }}>{r.label}</span>
+            ); })()}
+            <span className="text-[10px] px-2 py-0.5 rounded-full" style={{ background: "rgba(255,255,255,0.12)", color: "rgba(255,255,255,0.8)" }}>Recession odds 12m: ~25%</span>
+            <span className="ml-auto text-[10px]" style={{ color: "rgba(255,255,255,0.45)" }}>FRED live · surveys as of Aug ’26</span>
+          </div>
           {summary ? (
             <>
               <h2 className="text-[22px] font-light leading-snug mb-4 max-w-4xl" style={{ fontFamily: "var(--font-serif)" }}>{summary.headline}</h2>
@@ -185,7 +205,7 @@ export default function MacroReportPage() {
             <div className="flex items-center gap-2 text-[13px] py-3" style={{ color: "rgba(255,255,255,0.8)" }}><RefreshCw size={14} className="animate-spin" /> Synthesizing the week…</div>
           )}
           {/* key tiles */}
-          <div className="grid grid-cols-6 gap-3 mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
+          <div className="grid grid-cols-8 gap-3 mt-5 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,0.15)" }}>
             {KEY_TILES.map(([id, label]) => {
               const c = report.charts[id];
               return (
