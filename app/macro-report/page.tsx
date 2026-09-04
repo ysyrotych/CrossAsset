@@ -62,30 +62,37 @@ export default function MacroReportPage() {
 
   const narrate = useCallback(async (data: ReportData) => {
     setNarrating(true);
-    await Promise.all(
-      SECTIONS.filter((s) => s.chartIds.length).map(async (s) => {
-        const facts = s.chartIds
-          .map((id) => data.charts[id])
-          .filter(Boolean)
-          .map((c: RenderedChart) => ({
-            title: c.title, unit: c.unit, latest: c.latest?.value,
-            change: c.latest?.change, changeUnit: c.latest?.changeUnit,
-            avg: c.avg, asOf: c.asOf,
-          }));
-        if (!facts.length) return;
-        try {
-          const res = await fetch("/api/macro-report/narrate", {
-            method: "POST", headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ section: s.id, title: s.title, facts }),
-          }).then((x) => x.json());
-          setNarratives((prev) => {
-            const next = { ...prev, [s.id]: res.bullets ?? [] };
-            try { sessionStorage.setItem(`macro_narr_${data.generatedAt.slice(0, 10)}`, JSON.stringify(next)); } catch {}
-            return next;
-          });
-        } catch { /* skip */ }
-      }),
-    );
+    const sections = SECTIONS.filter((s) => s.chartIds.length);
+    const runOne = async (s: (typeof sections)[number]) => {
+      const facts = s.chartIds
+        .map((id) => data.charts[id])
+        .filter(Boolean)
+        .map((c: RenderedChart) => ({
+          title: c.title, unit: c.unit, latest: c.latest?.value,
+          change: c.latest?.change, changeUnit: c.latest?.changeUnit,
+          avg: c.avg, asOf: c.asOf, percentile: c.stats?.percentile,
+        }));
+      if (!facts.length) return;
+      try {
+        const res = await fetch("/api/macro-report/narrate", {
+          method: "POST", headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ section: s.id, title: s.title, facts }),
+        }).then((x) => x.json());
+        setNarratives((prev) => {
+          const next = { ...prev, [s.id]: res.bullets?.length ? res.bullets : ["Analysis unavailable for this section."] };
+          try { sessionStorage.setItem(`macro_narr_${data.generatedAt.slice(0, 10)}`, JSON.stringify(next)); } catch {}
+          return next;
+        });
+      } catch {
+        setNarratives((prev) => ({ ...prev, [s.id]: ["Analysis temporarily unavailable — data shown below."] }));
+      }
+    };
+    // concurrency pool of 4 to avoid rate limits on ~18 sections
+    const queue = [...sections];
+    const workers = Array.from({ length: 4 }, async () => {
+      while (queue.length) { const s = queue.shift(); if (s) await runOne(s); }
+    });
+    await Promise.all(workers);
     setNarrating(false);
   }, []);
 

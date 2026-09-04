@@ -3,7 +3,7 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
 
-type ChartFact = { title: string; unit: string; latest?: number; change?: number; changeUnit?: "% y/y" | "pp"; avg?: number | null; asOf?: string };
+type ChartFact = { title: string; unit: string; latest?: number; change?: number; changeUnit?: "% y/y" | "pp"; avg?: number | null; asOf?: string; percentile?: number };
 
 // Generate the section's analytical commentary in the URETF research voice.
 export async function POST(req: NextRequest) {
@@ -14,6 +14,7 @@ export async function POST(req: NextRequest) {
     const bits = [`${f.title}: ${fmt(f.latest, f.unit)}`];
     if (f.change != null) bits.push(f.changeUnit === "pp" ? `${f.change >= 0 ? "+" : ""}${f.change.toFixed(2)} pp` : `${f.change >= 0 ? "+" : ""}${f.change.toFixed(1)}% y/y`);
     if (f.avg != null) bits.push(`vs avg ${f.avg.toFixed(1)}`);
+    if (f.percentile != null) bits.push(`${Math.round(f.percentile)}th %ile of history`);
     if (f.asOf) bits.push(`(as of ${f.asOf})`);
     return "• " + bits.join(", ");
   }).join("\n");
