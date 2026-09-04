@@ -5,11 +5,12 @@ import { LayoutGrid, ChevronDown } from "lucide-react";
 import type { ReportData, RenderedChart } from "@/lib/macro/types";
 
 const GROUPS: { title: string; ids: string[] }[] = [
-  { title: "Growth", ids: ["gdp-growth", "cfnai", "wei", "ind-production", "cap-util", "retail-sales"] },
-  { title: "Inflation", ids: ["pce", "cpi", "ppi", "cpi-shelter", "cpi-coreservices", "avg-hourly-earnings"] },
-  { title: "Labor", ids: ["unrate", "claims", "jolts-openings", "participation", "sahm-rule"] },
-  { title: "Rates & Credit", ids: ["yield-10y", "yield-curve-2s10s", "hy-oas", "vix", "fin-stress"] },
-  { title: "Housing", ids: ["starts", "case-shiller", "mortgage-rate", "affordability"] },
+  { title: "Growth", ids: ["gdp-growth", "cfnai", "wei", "ind-production", "cap-util", "inventory-sales"] },
+  { title: "Inflation & Wages", ids: ["pce", "cpi", "ppi", "cpi-shelter", "avg-hourly-earnings", "unit-labor-costs"] },
+  { title: "Labor", ids: ["unrate", "claims", "continuing-claims", "jolts-openings", "sahm-rule", "temp-help"] },
+  { title: "Consumer", ids: ["real-income", "retail-sales", "pce-services", "saving-rate", "cc-delinquency", "consumer-credit"] },
+  { title: "Rates, Credit & Fiscal", ids: ["yield-10y", "yield-curve-2s10s", "hy-oas", "vix", "loan-standards", "fed-interest"] },
+  { title: "Housing", ids: ["starts", "case-shiller", "mortgage-rate", "affordability", "new-sales", "existing-sales"] },
 ];
 
 // blue (low in range) -> gray (mid) -> crimson (high in range)
