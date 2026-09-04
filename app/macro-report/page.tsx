@@ -2,7 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp } from "lucide-react";
+import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp, Link2 } from "lucide-react";
 import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
@@ -180,10 +180,36 @@ export default function MacroReportPage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, [report]);
 
-  // keep the active nav pill visible in the horizontal scroller
+  // keep the active nav pill visible + reflect section in the URL hash
   useEffect(() => {
     navRefs.current[active]?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (window.location.hash !== `#${active}`) history.replaceState(null, "", `#${active}`);
   }, [active]);
+
+  // document title + deep-link scroll on first load
+  useEffect(() => { document.title = "U.S. Macro Report · CrossAsset"; }, []);
+  useEffect(() => {
+    if (!report) return;
+    const h = window.location.hash.replace(/^#/, "") as SectionId;
+    if (h && scrollRefs.current[h]) setTimeout(() => scrollTo(h), 300);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [report]);
+
+  // '/' focuses the Ask box
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "/" && (e.target as HTMLElement)?.tagName !== "INPUT") {
+        const el = document.getElementById("macro-ask-input");
+        if (el) { e.preventDefault(); el.focus(); }
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
+  function copyLink() {
+    navigator.clipboard?.writeText(window.location.href).catch(() => {});
+  }
 
   function scrollTo(id: SectionId) {
     setActive(id);
@@ -232,6 +258,11 @@ export default function MacroReportPage() {
           </p>
         </div>
         <div className="flex items-center gap-2 macro-no-print">
+          <button onClick={copyLink} disabled={!report}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
+            style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
+            <Link2 size={13} /> Share
+          </button>
           <button onClick={() => window.print()} disabled={!report}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
             style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>

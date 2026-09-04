@@ -30,7 +30,7 @@ export default function MacroAsk() {
         <span className="text-[9px] px-1.5 py-0.5 rounded-full" style={{ background: "var(--ca-surface-2)", color: "var(--ca-text-3)" }}>grounded in live data</span>
       </div>
       <form onSubmit={(e) => { e.preventDefault(); ask(q); }} className="relative">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask anything about the current U.S. macro picture…"
+        <input id="macro-ask-input" value={q} onChange={(e) => setQ(e.target.value)} placeholder="Ask anything about the current U.S. macro picture… (press /)"
           className="w-full pl-4 pr-11 py-2.5 rounded-lg text-[13px] focus:outline-none"
           style={{ background: "var(--ca-surface-2)", border: "1px solid var(--ca-border)", color: "var(--ca-text)" }} />
         <button type="submit" disabled={loading} className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-md" style={{ background: "var(--ca-accent)", color: "#fff" }}>
