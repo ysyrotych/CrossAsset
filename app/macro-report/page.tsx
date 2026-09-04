@@ -11,6 +11,7 @@ import YieldCurveChart from "@/components/macro/YieldCurveChart";
 import MarketsPanel from "@/components/macro/MarketsPanel";
 import MacroAsk from "@/components/macro/MacroAsk";
 import RecessionScoreboard from "@/components/macro/RecessionScoreboard";
+import MacroHeatmap from "@/components/macro/MacroHeatmap";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -347,6 +348,9 @@ export default function MacroReportPage() {
 
       {/* recession signal scoreboard */}
       {report && <RecessionScoreboard report={report} onOpen={setExpanded} />}
+
+      {/* macro at a glance heatmap */}
+      {report && <MacroHeatmap report={report} onOpen={setExpanded} />}
 
       {/* ask the economy */}
       {report && <MacroAsk />}
