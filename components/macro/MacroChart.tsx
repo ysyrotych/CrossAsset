@@ -17,7 +17,7 @@ function fmtVal(v: number, unit: string, p = 1): string {
   return n;
 }
 
-export default function MacroChart({ chart, onExpand, height = 210, bare = false }: { chart: RenderedChart; onExpand?: () => void; height?: number; bare?: boolean }) {
+export default function MacroChart({ chart, onExpand, height = 224, bare = false }: { chart: RenderedChart; onExpand?: () => void; height?: number; bare?: boolean }) {
   const { merged, keys, minT, maxT } = useMemo(() => {
     const map = new Map<number, Record<string, number>>();
     const keys = chart.series.map((s) => s.name);
@@ -59,8 +59,8 @@ export default function MacroChart({ chart, onExpand, height = 210, bare = false
             <BarChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
-              <Tooltip content={<TT unit={chart.unit} p={p} />} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
               <Bar dataKey={keys[0]} isAnimationActive={false}>
                 {merged.map((row, i) => (
@@ -77,25 +77,25 @@ export default function MacroChart({ chart, onExpand, height = 210, bare = false
                 </linearGradient>
               </defs>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
-              {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#c7d2e4" fillOpacity={0.35} />)}
+              {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
-              <Tooltip content={<TT unit={chart.unit} p={p} />} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
-              <Area type="monotone" dataKey={keys[0]} stroke={chart.series[0]?.color ?? NAVY} strokeWidth={1.6} fill={`url(#g-${chart.id})`} isAnimationActive={false} dot={false} />
+              <Area type="monotone" dataKey={keys[0]} stroke={chart.series[0]?.color ?? NAVY} strokeWidth={2.2} fill={`url(#g-${chart.id})`} isAnimationActive={false} dot={false} activeDot={{ r: 3, strokeWidth: 0 }} />
             </AreaChart>
           ) : (
             <LineChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
-              {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#c7d2e4" fillOpacity={0.35} />)}
+              {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
               <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
-              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} />
-              <Tooltip content={<TT unit={chart.unit} p={p} />} />
+              <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
+              <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
               {chart.refLine != null && <ReferenceLine y={chart.refLine} stroke="#94a3b8" strokeDasharray="2 2" label={{ value: `${chart.refLine}`, position: "insideBottomRight", fontSize: 9, fill: "#94a3b8" }} />}
               {keys.map((k, i) => (
-                <Line key={k} type="monotone" dataKey={k} stroke={chart.series[i]?.color ?? NAVY} strokeWidth={1.6} dot={false} isAnimationActive={false} />
+                <Line key={k} type="monotone" dataKey={k} stroke={chart.series[i]?.color ?? NAVY} strokeWidth={2.2} dot={false} isAnimationActive={false} activeDot={{ r: 3, strokeWidth: 0 }} />
               ))}
             </LineChart>
           )}
