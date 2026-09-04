@@ -156,12 +156,18 @@ export const CHARTS: ChartSpec[] = [
   // ── New-loop 1: recession signals (research-driven, live FRED) ──
   { id: "sahm-rule", section: "labor", title: "Sahm Rule Recession Indicator", unit: "pp", source: "fred", freq: "m", chartType: "area", series: [{ id: "SAHMREALTIME", transform: "level", color: CRIMSON }], startYear: 2005, recession: true, refLine: 0.5, precision: 2, note: "≥0.50 has historically signaled recession onset" },
   { id: "recession-prob", section: "financial-conditions", title: "NY Fed 12-Month Recession Probability", unit: "%", source: "fred", freq: "m", chartType: "area", series: [{ id: "RECPROUSM156N", transform: "rate", color: CRIMSON }], startYear: 1990, recession: true, precision: 1, note: "from the 10y-3m Treasury spread" },
+
+  // ── New-loop 2: broad activity & financial-stress composites (live FRED) ──
+  { id: "yield-10y3m", section: "monetary-policy", title: "10y-3m Treasury Spread", unit: "pp", source: "fred", freq: "d", chartType: "area", series: [{ id: "T10Y3M", transform: "level", color: NAVY }], startYear: 1990, recession: true, refLine: 0, precision: 2, note: "NY Fed's preferred recession spread" },
+  { id: "cfnai", section: "gdp", title: "Chicago Fed National Activity Index", unit: "index", source: "fred", freq: "m", chartType: "area", series: [{ id: "CFNAI", transform: "level", color: NAVY }], startYear: 2000, recession: true, refLine: 0, precision: 2, note: "0 = trend growth; below −0.7 signals recession" },
+  { id: "wei", section: "gdp", title: "Weekly Economic Index", unit: "%", source: "fred", freq: "w", chartType: "area", series: [{ id: "WEI", transform: "level", color: TEAL }], startYear: 2019, recession: true, precision: 1, note: "real-time activity, scaled to GDP growth" },
+  { id: "fin-stress", section: "financial-conditions", title: "St. Louis Fed Financial Stress Index", unit: "index", source: "fred", freq: "w", chartType: "area", series: [{ id: "STLFSI4", transform: "level", color: CRIMSON }], startYear: 2000, recession: true, refLine: 0, precision: 2, note: "0 = normal financial conditions" },
 ];
 
 export const SECTIONS: Section[] = [
   { id: "summary-macro",        title: "Macro Summary",              chartIds: [] },
   { id: "summary-markets",      title: "Financial Market Summary",   chartIds: ["hy-oas", "vix", "move"] },
-  { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-5y", "yield-10y", "yield-30y", "yield-curve-2s10s", "bank-reserves"] },
+  { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-5y", "yield-10y", "yield-30y", "yield-curve-2s10s", "yield-10y3m", "bank-reserves"] },
   { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
@@ -175,8 +181,8 @@ export const SECTIONS: Section[] = [
   { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "cap-util", "capex-orders", "empire-state", "philly-fed"] },
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
   { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "debt-gdp"] },
-  { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits"] },
-  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "nfci", "nfci-sub"] },
+  { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits", "cfnai", "wei"] },
+  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "fin-stress", "nfci", "nfci-sub"] },
 ];
 
 export const CHART_BY_ID: Record<string, ChartSpec> = Object.fromEntries(CHARTS.map((c) => [c.id, c]));
