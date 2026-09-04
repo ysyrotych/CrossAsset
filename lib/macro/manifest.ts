@@ -188,6 +188,11 @@ export const CHARTS: ChartSpec[] = [
   { id: "pce-durables", section: "consumer", title: "Real Spending: Durable Goods", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCEDGC96", transform: "yoy", color: NAVY }], startYear: 2015, recession: true, precision: 1, note: "big-ticket, rate-sensitive" },
   { id: "pce-nondurables", section: "consumer", title: "Real Spending: Nondurable Goods", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCENDGC96", transform: "yoy", color: TEAL }], startYear: 2015, precision: 1 },
   { id: "pce-services", section: "consumer", title: "Real Spending: Services", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCESVC96", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1, note: "the sticky ~⅔ of consumption" },
+
+  // ── New-loop 15: credit-cycle & bank lending (live FRED) ──
+  { id: "loan-standards", section: "financial-conditions", title: "Banks Tightening C&I Loan Standards", unit: "% net", source: "fred", freq: "q", chartType: "area", series: [{ id: "DRTSCILM", transform: "level", color: CRIMSON }], startYear: 2000, recession: true, refLine: 0, precision: 0, note: "SLOOS — net % tightening; leads the credit cycle" },
+  { id: "ci-loans", section: "financial-conditions", title: "Commercial & Industrial Loans", unit: "% y/y", source: "fred", freq: "w", chartType: "line", series: [{ id: "BUSLOANS", transform: "yoy", color: NAVY }], startYear: 2005, recession: true, precision: 1, note: "bank lending growth" },
+  { id: "consumer-credit", section: "consumer", title: "Total Consumer Credit", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "TOTALSL", transform: "yoy", color: NAVY }], startYear: 2005, recession: true, precision: 1 },
 ];
 
 export const SECTIONS: Section[] = [
@@ -198,7 +203,7 @@ export const SECTIONS: Section[] = [
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "cpi-shelter", "cpi-coreservices", "cpi-coregoods", "cpi-energy", "cpi-food", "cpi-medical", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
   { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "productivity", "unit-labor-costs", "temp-help", "weekly-hours", "sahm-rule"] },
-  { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "pce-durables", "pce-nondurables", "pce-services", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
+  { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "pce-durables", "pce-nondurables", "pce-services", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service", "consumer-credit"] },
   { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "housing-supply", "mortgage-rate", "affordability", "case-shiller", "nahb"] },
   { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
   { id: "nfib",                 title: "NFIB Small Business",        chartIds: ["nfib-optimism", "nfib-uncertainty"] },
@@ -208,7 +213,7 @@ export const SECTIONS: Section[] = [
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
   { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance", "debt-gdp"] },
   { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits", "cfnai", "wei"] },
-  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "fin-stress", "nfci", "nfci-sub"] },
+  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["recession-prob", "fin-stress", "loan-standards", "ci-loans", "nfci", "nfci-sub"] },
 ];
 
 export const CHART_BY_ID: Record<string, ChartSpec> = Object.fromEntries(CHARTS.map((c) => [c.id, c]));
