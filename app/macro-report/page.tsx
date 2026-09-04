@@ -199,10 +199,17 @@ export default function MacroReportPage() {
   useEffect(() => {
     if (!report) return;
     const h = window.location.hash.replace(/^#/, "") as SectionId;
-    if (!h || !scrollRefs.current[h]) return;
-    // charts render/expand after mount and shift layout — re-scroll as it settles
-    const timers = [350, 1000, 1900].map((ms) => setTimeout(() => scrollTo(h), ms));
-    return () => timers.forEach(clearTimeout);
+    if (!h || !SECTIONS.some((s) => s.id === h)) return;
+    // Far-down sections keep shifting as async panels (yield curve, markets,
+    // brief) load, so retry over a longer window — and stop if the user scrolls.
+    let cancelled = false;
+    const stop = () => { cancelled = true; };
+    const timers = [400, 900, 1500, 2300, 3300, 4500].map((ms) =>
+      setTimeout(() => { if (!cancelled && scrollRefs.current[h]) scrollTo(h); }, ms),
+    );
+    window.addEventListener("wheel", stop, { once: true, passive: true });
+    window.addEventListener("touchmove", stop, { once: true, passive: true });
+    return () => { timers.forEach(clearTimeout); window.removeEventListener("wheel", stop); window.removeEventListener("touchmove", stop); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [report]);
 
