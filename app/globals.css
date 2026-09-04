@@ -471,3 +471,14 @@
   .inst-fade-up, .inst-scale-in, .inst-meter-fill, .inst-aurora,
   .inst-marquee-track, .inst-skeleton, .inst-pulse { animation: none !important; }
 }
+
+/* ── Macro Report — print / PDF (one-click via window.print) ──────────────── */
+@media print {
+  aside { display: none !important; }
+  main { margin-left: 0 !important; }
+  .macro-no-print { display: none !important; }
+  .macro-section { break-inside: avoid; page-break-inside: avoid; }
+  .inst-aurora { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  @page { size: landscape; margin: 12mm; }
+  body { background: #fff !important; }
+}

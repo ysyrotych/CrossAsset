@@ -2,8 +2,9 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import AppShell from "@/components/layout/AppShell";
-import { RefreshCw, Sparkles, FileText } from "lucide-react";
+import { RefreshCw, Sparkles, FileText, Play, Download } from "lucide-react";
 import MacroChart from "@/components/macro/MacroChart";
+import PresentationMode from "@/components/macro/PresentationMode";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -30,6 +31,7 @@ export default function MacroReportPage() {
   const [summary, setSummary] = useState<{ headline: string; macro: string[]; markets: string[] } | null>(null);
   const scrollRefs = useRef<Record<string, HTMLElement | null>>({});
   const [active, setActive] = useState<SectionId>("monetary-policy");
+  const [presenting, setPresenting] = useState(false);
 
   const loadData = useCallback(async () => {
     setLoading(true);
@@ -90,6 +92,14 @@ export default function MacroReportPage() {
 
   useEffect(() => { generate(); /* one-click on load */ }, [generate]);
 
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() === "p" && report && !presenting && (e.target as HTMLElement)?.tagName !== "INPUT") setPresenting(true);
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [report, presenting]);
+
   function scrollTo(id: SectionId) {
     setActive(id);
     scrollRefs.current[id]?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -108,7 +118,17 @@ export default function MacroReportPage() {
             {report ? `Generated ${asDate} · ${Object.keys(report.charts).length} live exhibits across ${SECTIONS.length} sections` : "Generating full macro report…"}
           </p>
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 macro-no-print">
+          <button onClick={() => window.print()} disabled={!report}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
+            style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
+            <Download size={13} /> PDF
+          </button>
+          <button onClick={() => setPresenting(true)} disabled={!report}
+            className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium inst-card-hover"
+            style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", color: "var(--ca-text-2)" }}>
+            <Play size={13} /> Present <kbd className="text-[10px] px-1 py-0.5 rounded ml-0.5" style={{ background: "var(--ca-surface-2)" }}>P</kbd>
+          </button>
           <button onClick={generate} disabled={loading || narrating}
             className="flex items-center gap-2 px-3.5 py-2 rounded-lg text-[12px] font-medium text-white inst-card-hover"
             style={{ background: "var(--ca-accent)" }}>
@@ -155,7 +175,7 @@ export default function MacroReportPage() {
       )}
 
       {/* sticky section nav */}
-      <div className="sticky top-0 z-20 -mx-10 px-10 py-2.5 mb-6 flex gap-1.5 overflow-x-auto"
+      <div className="sticky top-0 z-20 -mx-10 px-10 py-2.5 mb-6 flex gap-1.5 overflow-x-auto macro-no-print"
         style={{ background: "var(--ca-bg)", borderBottom: "1px solid var(--ca-border)" }}>
         {SECTIONS.filter((s) => s.chartIds.length).map((s) => (
           <button key={s.id} onClick={() => scrollTo(s.id)}
@@ -176,7 +196,7 @@ export default function MacroReportPage() {
             const charts = s.chartIds.map((id) => report.charts[id]).filter(Boolean);
             const bullets = narratives[s.id];
             return (
-              <section key={s.id} ref={(el) => { scrollRefs.current[s.id] = el; }} className="scroll-mt-16 inst-fade-up">
+              <section key={s.id} ref={(el) => { scrollRefs.current[s.id] = el; }} className="scroll-mt-16 inst-fade-up macro-section">
                 <div className="flex items-baseline gap-3 mb-4 pb-2" style={{ borderBottom: "2px solid var(--ca-accent)" }}>
                   <h2 className="text-[20px] font-semibold tracking-tight" style={{ fontFamily: "var(--font-serif)", color: "var(--ca-text)" }}>{s.title}</h2>
                 </div>
@@ -217,6 +237,10 @@ export default function MacroReportPage() {
         </div>
       ) : (
         <p className="text-[13px]" style={{ color: "var(--ca-text-3)" }}>Could not generate the report. Check FRED_API_KEY.</p>
+      )}
+
+      {presenting && report && (
+        <PresentationMode report={report} narratives={narratives} summary={summary} date={asDate} onClose={() => setPresenting(false)} />
       )}
     </AppShell>
   );
