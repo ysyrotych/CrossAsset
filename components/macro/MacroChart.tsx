@@ -58,7 +58,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
           {chart.chartType === "bar" ? (
             <BarChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
-              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
+              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               <ReferenceLine y={0} stroke="#cbd5e1" />
@@ -78,7 +78,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
               </defs>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
-              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
+              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
@@ -89,7 +89,7 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
             <LineChart data={merged} margin={{ top: 6, right: 8, bottom: 0, left: -14 }}>
               <CartesianGrid stroke="#eef1f5" vertical={false} />
               {bands.map((b, i) => <ReferenceArea key={i} x1={b.x1} x2={b.x2} fill="#8ba0c4" fillOpacity={0.16} />)}
-              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={28} />
+              <XAxis dataKey="t" type="number" domain={["dataMin", "dataMax"]} scale="time" tickFormatter={yearFmt} tick={{ fontSize: 10, fill: "#9ca3af" }} minTickGap={34} />
               <YAxis tick={{ fontSize: 10, fill: "#9ca3af" }} width={40} tickFormatter={(v) => (Math.abs(v) >= 1000 ? v.toLocaleString() : String(v))} />
               <Tooltip content={<TT unit={chart.unit} p={p} />} cursor={{ stroke: "#cbd5e1", strokeDasharray: "3 3" }} />
               {chart.avg != null && <ReferenceLine y={chart.avg} stroke="#2563eb" strokeDasharray="4 3" label={{ value: `Ave ${chart.avg.toFixed(p)}`, position: "insideTopRight", fontSize: 9, fill: "#2563eb" }} />}
@@ -102,12 +102,17 @@ export default function MacroChart({ chart, onExpand, height = 224, bare = false
         </ResponsiveContainer>
       </div>
       {keys.length > 1 && (
-        <div className="flex items-center gap-4 mt-1 px-1">
-          {keys.map((k, i) => (
-            <span key={k} className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--ca-text-2)" }}>
-              <span className="w-3 h-[2px] rounded" style={{ background: chart.series[i]?.color ?? NAVY }} />{k}
-            </span>
-          ))}
+        <div className="flex items-center gap-4 mt-1 px-1 flex-wrap">
+          {keys.map((k, i) => {
+            const d = chart.series[i]?.data ?? [];
+            const lv = d[d.length - 1]?.value;
+            return (
+              <span key={k} className="flex items-center gap-1.5 text-[10px]" style={{ color: "var(--ca-text-2)" }}>
+                <span className="w-3 h-[2px] rounded" style={{ background: chart.series[i]?.color ?? NAVY }} />{k}
+                {lv != null && <b className="tabular-nums" style={{ color: "var(--ca-text)" }}>{fmtVal(lv, chart.unit, p)}</b>}
+              </span>
+            );
+          })}
         </div>
       )}
       {chart.note && <p className="text-[9.5px] mt-1 px-1" style={{ color: "var(--ca-text-3)" }}>{chart.note}</p>}
@@ -143,7 +148,7 @@ function ChartFrame({ chart, children, onExpand, bare = false }: { chart: Render
       role={onExpand ? "button" : undefined} tabIndex={onExpand ? 0 : undefined}
       aria-label={onExpand ? `${chart.title} — open detail` : undefined}
       onKeyDown={onExpand ? (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onExpand(); } } : undefined}
-      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", outlineColor: "var(--ca-accent)" }}>
+      style={{ background: "var(--ca-surface)", border: "1px solid var(--ca-border)", outlineColor: "var(--ca-accent)", boxShadow: "0 1px 3px rgba(12,27,56,0.05)" }}>
       <div className="flex items-start justify-between mb-2 gap-2">
         <div className="min-w-0">
           <div className="flex items-center gap-1.5">
