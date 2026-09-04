@@ -177,6 +177,12 @@ export const CHARTS: ChartSpec[] = [
   { id: "m2", section: "monetary-policy", title: "M2 Money Supply", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "M2SL", transform: "yoy", color: NAVY }], startYear: 2000, recession: true, precision: 1 },
   { id: "fed-assets", section: "monetary-policy", title: "Fed Total Assets", unit: "$t", source: "fred", freq: "w", chartType: "area", series: [{ id: "WALCL", transform: "level", color: NAVY }], startYear: 2008, precision: 2, note: "balance sheet — QE/QT" },
   { id: "ig-spread", section: "summary-markets", title: "Investment-Grade Credit Spread", unit: "bps", source: "fred", freq: "d", chartType: "line", series: [{ id: "BAMLC0A0CM", transform: "level", color: NAVY }], startYear: 2018, precision: 0 },
+
+  // ── New-loop 12: productivity, unit labor costs & leading labor (live FRED) ──
+  { id: "productivity", section: "labor", title: "Nonfarm Productivity", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "OPHNFB", transform: "yoy", color: NAVY }], startYear: 2000, precision: 1, note: "output per hour" },
+  { id: "unit-labor-costs", section: "labor", title: "Unit Labor Costs", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "ULCNFB", transform: "yoy", color: CRIMSON }], startYear: 2000, precision: 1, note: "key wage-inflation gauge" },
+  { id: "temp-help", section: "labor", title: "Temporary Help Employment", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "TEMPHELPS", transform: "yoy", color: TEAL }], startYear: 2010, recession: true, precision: 1, note: "leads labor-market turns" },
+  { id: "weekly-hours", section: "labor", title: "Average Weekly Hours", unit: "hours", source: "fred", freq: "m", chartType: "line", series: [{ id: "AWHAETP", transform: "level", color: NAVY }], startYear: 2010, recession: true, precision: 1, note: "hours cut before jobs" },
 ];
 
 export const SECTIONS: Section[] = [
@@ -186,7 +192,7 @@ export const SECTIONS: Section[] = [
   { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "wti", "gold", "natgas", "baltic-dry"] },
   { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "cpi-shelter", "cpi-coreservices", "cpi-coregoods", "cpi-energy", "cpi-food", "cpi-medical", "ppi", "new-rental", "import-prices"] },
   { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y", "breakeven-10y", "fwd-5y5y"] },
-  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "sahm-rule"] },
+  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-hires", "jolts-quits", "jolts-layoffs", "avg-hourly-earnings", "eci", "productivity", "unit-labor-costs", "temp-help", "weekly-hours", "sahm-rule"] },
   { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "retail-ex-auto", "auto-sales", "saving-rate", "cc-delinquency", "mortgage-delinquency", "debt-service"] },
   { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "housing-supply", "mortgage-rate", "affordability", "case-shiller", "nahb"] },
   { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
