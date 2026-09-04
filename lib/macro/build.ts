@@ -147,17 +147,22 @@ async function buildChart(spec: ChartSpec): Promise<RenderedChart> {
   }
 }
 
-// Warm-instance report cache (30-min TTL) — makes repeat loads near-instant.
-let _reportCache: { at: number; data: ReportData } | null = null;
-const REPORT_TTL = 30 * 60 * 1000;
+// Warm-instance report cache (15-min TTL) — makes repeat loads near-instant.
+// Keyed on the deploy SHA so a new deploy ALWAYS rebuilds (otherwise a warm
+// Lambda would serve pre-deploy data until the TTL expired).
+const DEPLOY_VER = process.env.VERCEL_GIT_COMMIT_SHA ?? "dev";
+let _reportCache: { at: number; ver: string; data: ReportData } | null = null;
+const REPORT_TTL = 15 * 60 * 1000;
 
 export async function buildReport(force = false): Promise<ReportData> {
-  if (!force && _reportCache && Date.now() - _reportCache.at < REPORT_TTL) return _reportCache.data;
+  if (!force && _reportCache && _reportCache.ver === DEPLOY_VER && Date.now() - _reportCache.at < REPORT_TTL) {
+    return _reportCache.data;
+  }
   _seriesCache.clear();
   const results = await Promise.all(CHARTS.map(buildChart));
   const charts: Record<string, RenderedChart> = {};
   for (const c of results) charts[c.id] = c;
   const data: ReportData = { generatedAt: new Date().toISOString(), charts, fredConnected: !!KEY };
-  _reportCache = { at: Date.now(), data };
+  _reportCache = { at: Date.now(), ver: DEPLOY_VER, data };
   return data;
 }
