@@ -6,6 +6,7 @@ import { RefreshCw, Sparkles, FileText, Play, Download, ArrowUp } from "lucide-r
 import MacroChart from "@/components/macro/MacroChart";
 import PresentationMode from "@/components/macro/PresentationMode";
 import ChartDetailModal from "@/components/macro/ChartDetailModal";
+import FedSEPTable from "@/components/macro/FedSEPTable";
 import { SECTIONS } from "@/lib/macro/manifest";
 import type { ReportData, RenderedChart, SectionId } from "@/lib/macro/types";
 
@@ -353,6 +354,9 @@ export default function MacroReportPage() {
                     </p>
                   )}
                 </div>
+
+                {/* section-specific exhibits */}
+                {s.id === "monetary-policy" && <FedSEPTable />}
 
                 {/* chart grid */}
                 <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 macro-print-grid">
