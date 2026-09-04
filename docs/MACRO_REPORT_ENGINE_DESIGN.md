@@ -130,8 +130,9 @@ Keep the institutional credibility, lose the clutter. Editorial magazine layout 
 
 ---
 
-## 7. Decisions needed before building
-1. **Output format** — web report, literal slide deck, or both (web + PDF export). *Rec: both.*
-2. **Non-FRED series** — curated-JSON (fast, you/AI update ~monthly) vs sourcing paid APIs. *Rec: curated-JSON for v1.*
-3. **Scope of v1** — all 18 sections, or the 3 flagship sections first to validate the engine, then expand. *Rec: 3 flagship first (Phase 1), then full.*
-4. **AI voice** — mimic the URETF analytical tone, or CrossAsset house voice.
+## 7. Decisions — LOCKED
+1. **Output format** — ✅ Both: beautiful web report + one-click PDF (deck style) + presentation mode.
+2. **Non-FRED series** — ✅ Option 1: seed history once, refresh latest value monthly via curated JSON (Claude fills from the free monthly release). Affected cluster: ISM (Mfg+Services+components), NFIB, Conference Board, NAHB, Baltic Dry, MOVE, forward EPS consensus, Fed SEP table. All other ~75 charts pull live from FRED/Yahoo.
+   - **Corrected from v1 draft (these ARE free, wired live):** Gold (Yahoo `GC=F`), VIX (`VIXCLS`), HY/IG spreads (`BAMLH0A0HYM2`), U-Mich overall (`UMCSENT`), foreign UST holdings (Treasury TIC).
+3. **Scope of v1** — (pending)
+4. **AI voice** — (pending)

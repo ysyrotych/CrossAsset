@@ -7,6 +7,7 @@ import CrossAssetLogo from "./CrossAssetLogo";
 
 const NAV: { label: string; href: string; dev?: boolean }[] = [
   { label: "Dashboard",        href: "/" },
+  { label: "Macro Report",     href: "/macro-report" },
   { label: "Institutional",    href: "/institutional" },
   { label: "Reaction Tracker", href: "/reaction-tracker" },
   { label: "Watchlist",        href: "/watchlist" },

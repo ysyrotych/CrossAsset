@@ -1,0 +1,128 @@
+import type { ChartSpec, Section, SectionId } from "./types";
+
+// NBER recession bands (recent) — drawn behind long-history charts
+export const RECESSIONS: { start: string; end: string }[] = [
+  { start: "1990-07-01", end: "1991-03-01" },
+  { start: "2001-03-01", end: "2001-11-01" },
+  { start: "2007-12-01", end: "2009-06-01" },
+  { start: "2020-02-01", end: "2020-04-01" },
+];
+
+const NAVY = "#0c1b38";
+const CRIMSON = "#8a1f2b";
+const TEAL = "#0e7c86";
+const AMBER = "#b7791f";
+
+// ── Chart manifest — every exhibit, mapped to its data series ─────────────────
+// source "fred" = live · "yahoo" = live market · "curated" = seeded JSON refreshed monthly
+export const CHARTS: ChartSpec[] = [
+  // ── Monetary Policy ──
+  { id: "fed-funds", section: "monetary-policy", title: "Fed Funds Rate", unit: "%", source: "fred", freq: "d", chartType: "line", series: [{ id: "DFF", transform: "rate" }], startYear: 2000, recession: true, precision: 2 },
+  { id: "bank-reserves", section: "monetary-policy", title: "Bank Reserves", unit: "$t", source: "fred", freq: "w", chartType: "area", series: [{ id: "WRESBAL", transform: "level", color: NAVY }], startYear: 2008, precision: 2, note: "Fed flooded banks with trillions of reserves during GFC & COVID" },
+  { id: "yield-10y", section: "monetary-policy", title: "U.S. 10-Year Treasury", unit: "%", source: "fred", freq: "d", chartType: "line", series: [{ id: "DGS10", transform: "rate" }], startYear: 2023, precision: 2 },
+  { id: "yield-curve-2s10s", section: "monetary-policy", title: "2s10s Treasury Spread", unit: "bps", source: "fred", freq: "d", chartType: "area", series: [{ id: "T10Y2Y", transform: "level" }], startYear: 1990, recession: true, avg: true, precision: 0, note: "value in percentage points" },
+
+  // ── Commodities ──
+  { id: "oil-brent", section: "commodities", title: "Oil Prices (Brent)", unit: "$/bbl", source: "fred", freq: "d", chartType: "line", series: [{ id: "DCOILBRENTEU", transform: "level", color: NAVY }], startYear: 2006, recession: true, precision: 0 },
+  { id: "gold", section: "commodities", title: "Gold Prices", unit: "$/oz", source: "yahoo", freq: "d", chartType: "line", series: [{ id: "GC=F", transform: "level", color: AMBER }], startYear: 2006, precision: 0 },
+  { id: "baltic-dry", section: "commodities", title: "Baltic Dry Index", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "baltic_dry", transform: "level", color: TEAL }], precision: 0 },
+
+  // ── Inflation ──
+  { id: "pce", section: "inflation", title: "PCE Inflation", unit: "% y/y", source: "fred", freq: "m", chartType: "multiline", series: [{ id: "PCEPI", label: "Overall", transform: "yoy", color: NAVY }, { id: "PCEPILFE", label: "Core", transform: "yoy", color: CRIMSON }], startYear: 2022, precision: 1 },
+  { id: "cpi", section: "inflation", title: "CPI Inflation", unit: "% y/y", source: "fred", freq: "m", chartType: "multiline", series: [{ id: "CPIAUCSL", label: "Overall", transform: "yoy", color: NAVY }, { id: "CPILFESL", label: "Core", transform: "yoy", color: CRIMSON }], startYear: 2022, precision: 1 },
+  { id: "ppi", section: "inflation", title: "PPI Final Demand Inflation", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PPIFIS", transform: "yoy", color: NAVY }], startYear: 2015, precision: 1 },
+  { id: "import-prices", section: "inflation", title: "Import Prices", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "IR", transform: "level", color: NAVY }], startYear: 2015, precision: 1 },
+
+  // ── Inflation Expectations ──
+  { id: "umich-inflexp", section: "inflation-expectations", title: "U-Mich 1-Year Inflation Expectations", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "MICH", transform: "level", color: NAVY }], startYear: 2015, precision: 1 },
+  { id: "tips-10y", section: "inflation-expectations", title: "U.S. 10-Year TIPS", unit: "%", source: "fred", freq: "d", chartType: "line", series: [{ id: "DFII10", transform: "rate" }], startYear: 2015, precision: 2 },
+  { id: "nyfed-inflexp", section: "inflation-expectations", title: "NY Fed 1-Year Inflation Expectations", unit: "% y/y", source: "curated", freq: "m", chartType: "line", series: [{ id: "nyfed_1y", transform: "level", color: NAVY }], precision: 1 },
+
+  // ── Labor Market ──
+  { id: "claims", section: "labor", title: "Initial Unemployment Claims", unit: "thousands", source: "fred", freq: "w", chartType: "line", series: [{ id: "ICSA", transform: "4wkavg", color: NAVY }], startYear: 2010, recession: true, precision: 0, note: "4-week average" },
+  { id: "payrolls", section: "labor", title: "Additions to Payrolls", unit: "thousands", source: "fred", freq: "m", chartType: "bar", series: [{ id: "PAYEMS", transform: "mom", color: NAVY }], startYear: 2018, precision: 0, note: "monthly change" },
+  { id: "unrate", section: "labor", title: "Unemployment Rate", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "UNRATE", transform: "rate", color: NAVY }], startYear: 2000, recession: true, precision: 1 },
+  { id: "participation", section: "labor", title: "Labor Force Participation Rate", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "CIVPART", transform: "rate", color: NAVY }], startYear: 2000, recession: true, precision: 1 },
+  { id: "jolts-openings", section: "labor", title: "Job Openings Rate", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "JTSJOR", transform: "rate", color: NAVY }], startYear: 2001, avg: true, precision: 1 },
+  { id: "jolts-quits", section: "labor", title: "Quit Rate", unit: "%", source: "fred", freq: "m", chartType: "line", series: [{ id: "JTSQUR", transform: "rate", color: NAVY }], startYear: 2001, avg: true, precision: 1 },
+
+  // ── Consumer Income & Spending ──
+  { id: "real-income", section: "consumer", title: "Real Disposable Income", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "DSPIC96", transform: "yoy", color: NAVY }], startYear: 2018, precision: 1 },
+  { id: "real-pce", section: "consumer", title: "Real Personal Consumption", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "PCEC96", transform: "yoy", color: NAVY }], startYear: 2018, precision: 1 },
+  { id: "retail-sales", section: "consumer", title: "Retail Sales", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "RSAFS", transform: "yoy", color: NAVY }], startYear: 2018, precision: 1 },
+  { id: "auto-sales", section: "consumer", title: "Auto Sales", unit: "million units, SAAR", source: "fred", freq: "m", chartType: "line", series: [{ id: "TOTALSA", transform: "level", color: NAVY }], startYear: 2018, precision: 1 },
+  { id: "cc-delinquency", section: "consumer", title: "Credit Card Delinquency Rate", unit: "%", source: "fred", freq: "q", chartType: "line", series: [{ id: "DRCCLACBS", transform: "rate", color: CRIMSON }], startYear: 1991, precision: 2 },
+
+  // ── Housing ──
+  { id: "starts", section: "housing", title: "Housing Starts", unit: "millions, SAAR", source: "fred", freq: "m", chartType: "multiline", series: [{ id: "HOUST", label: "Total", transform: "level", color: NAVY }, { id: "HOUST1F", label: "Single-Family", transform: "level", color: CRIMSON }], startYear: 2017, precision: 2, note: "thousands ÷ 1000" },
+  { id: "existing-sales", section: "housing", title: "Existing Home Sales", unit: "million, SAAR", source: "fred", freq: "m", chartType: "line", series: [{ id: "EXHOSLUSM495S", transform: "level", color: NAVY }], startYear: 2015, precision: 2 },
+  { id: "new-sales", section: "housing", title: "New Single-Family Home Sales", unit: "'000, SAAR", source: "fred", freq: "m", chartType: "line", series: [{ id: "HSN1F", transform: "level", color: NAVY }], startYear: 2015, precision: 0 },
+  { id: "mortgage-rate", section: "housing", title: "30-Year Mortgage Rate", unit: "%", source: "fred", freq: "w", chartType: "line", series: [{ id: "MORTGAGE30US", transform: "rate", color: NAVY }], startYear: 2010, precision: 2 },
+  { id: "case-shiller", section: "housing", title: "S&P Case-Shiller Home Prices", unit: "% y/y", source: "fred", freq: "m", chartType: "line", series: [{ id: "CSUSHPINSA", transform: "yoy", color: NAVY }], startYear: 2010, precision: 1 },
+  { id: "nahb", section: "housing", title: "NAHB Housing Market Index", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "nahb", transform: "level", color: NAVY }], avg: true, precision: 0 },
+
+  // ── Consumer Confidence ──
+  { id: "umich-sentiment", section: "confidence", title: "U-Mich Consumer Sentiment", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "UMCSENT", transform: "level", color: NAVY }], startYear: 2015, recession: true, precision: 1 },
+  { id: "conf-board", section: "confidence", title: "Conference Board Consumer Confidence", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "conf_board", transform: "level", color: NAVY }], precision: 1 },
+
+  // ── NFIB (curated) ──
+  { id: "nfib-optimism", section: "nfib", title: "Small Business Optimism", unit: "index, SA", source: "curated", freq: "m", chartType: "line", series: [{ id: "nfib_optimism", transform: "level", color: NAVY }], avg: true, precision: 1 },
+  { id: "nfib-uncertainty", section: "nfib", title: "Small Business Uncertainty", unit: "index, SA", source: "curated", freq: "m", chartType: "line", series: [{ id: "nfib_uncertainty", transform: "level", color: CRIMSON }], avg: true, precision: 0 },
+
+  // ── ISM Services (curated) ──
+  { id: "ism-services", section: "ism-services", title: "ISM Services — Overall", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_services", transform: "level", color: NAVY }], avg: true, precision: 1, note: "50 = expansion/contraction line" },
+  { id: "ism-services-neworders", section: "ism-services", title: "ISM Services — New Orders", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_services_neworders", transform: "level", color: TEAL }], precision: 1 },
+  { id: "ism-services-prices", section: "ism-services", title: "ISM Services — Prices", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_services_prices", transform: "level", color: AMBER }], precision: 1 },
+
+  // ── ISM Manufacturing (curated) ──
+  { id: "ism-mfg", section: "ism-mfg", title: "ISM Manufacturing — Overall", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_mfg", transform: "level", color: NAVY }], avg: true, precision: 1, note: "50 = expansion/contraction line" },
+  { id: "ism-mfg-neworders", section: "ism-mfg", title: "ISM Manufacturing — New Orders", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_mfg_neworders", transform: "level", color: TEAL }], precision: 1 },
+  { id: "ism-mfg-prices", section: "ism-mfg", title: "ISM Manufacturing — Prices Paid", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "ism_mfg_prices", transform: "level", color: AMBER }], precision: 1 },
+
+  // ── Other Manufacturing ──
+  { id: "ind-production", section: "other-mfg", title: "Industrial Production", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "INDPRO", transform: "level", color: NAVY }], startYear: 2010, recession: true, precision: 1 },
+  { id: "capex-orders", section: "other-mfg", title: "Core Capital Goods Orders", unit: "$b", source: "fred", freq: "m", chartType: "line", series: [{ id: "NEWORDER", transform: "level", color: NAVY }], startYear: 2009, precision: 1 },
+
+  // ── Trade ──
+  { id: "trade-balance", section: "trade", title: "U.S. Trade Deficit", unit: "$b", source: "fred", freq: "m", chartType: "area", series: [{ id: "BOPGSTB", transform: "level", color: CRIMSON }], startYear: 2016, precision: 1 },
+  { id: "dollar", section: "trade", title: "Trade-Weighted U.S. Dollar", unit: "index", source: "fred", freq: "d", chartType: "line", series: [{ id: "DTWEXBGS", transform: "level", color: NAVY }], startYear: 2015, precision: 1 },
+
+  // ── Budget ──
+  { id: "budget-balance", section: "budget", title: "U.S. Treasury Budget Balance", unit: "$b", source: "fred", freq: "m", chartType: "area", series: [{ id: "MTSDS133FMS", transform: "level", color: CRIMSON }], startYear: 2016, precision: 0, note: "monthly, NSA" },
+
+  // ── GDP ──
+  { id: "gdp-growth", section: "gdp", title: "U.S. GDP Growth", unit: "% q/q SAAR", source: "fred", freq: "q", chartType: "bar", series: [{ id: "A191RL1Q225SBEA", transform: "level", color: NAVY }], startYear: 2015, recession: true, precision: 1 },
+  { id: "corp-profits", section: "gdp", title: "Corporate Profits", unit: "$b", source: "fred", freq: "q", chartType: "line", series: [{ id: "CPATAX", transform: "level", color: NAVY }], startYear: 2000, precision: 0 },
+
+  // ── Financial Conditions ──
+  { id: "nfci", section: "financial-conditions", title: "Chicago Fed National Financial Conditions Index", unit: "index", source: "fred", freq: "w", chartType: "area", series: [{ id: "NFCI", transform: "level", color: NAVY }], startYear: 2000, recession: true, precision: 2, note: "negative = loose, positive = tight" },
+
+  // ── Financial Market Summary ──
+  { id: "hy-oas", section: "summary-markets", title: "High-Yield Credit Spread (ICE BofA OAS)", unit: "bps", source: "fred", freq: "d", chartType: "line", series: [{ id: "BAMLH0A0HYM2", transform: "level", color: CRIMSON }], startYear: 2018, precision: 0, note: "value in percentage points ×100" },
+  { id: "vix", section: "summary-markets", title: "VIX Volatility Index", unit: "index", source: "fred", freq: "d", chartType: "line", series: [{ id: "VIXCLS", transform: "level", color: NAVY }], startYear: 2018, avg: true, precision: 1 },
+  { id: "move", section: "summary-markets", title: "MOVE Bond Volatility Index", unit: "index", source: "curated", freq: "m", chartType: "line", series: [{ id: "move", transform: "level", color: CRIMSON }], avg: true, precision: 1 },
+];
+
+export const SECTIONS: Section[] = [
+  { id: "summary-macro",        title: "Macro Summary",              chartIds: [] },
+  { id: "summary-markets",      title: "Financial Market Summary",   chartIds: ["hy-oas", "vix", "move"] },
+  { id: "monetary-policy",      title: "Monetary Policy",            chartIds: ["fed-funds", "yield-10y", "yield-curve-2s10s", "bank-reserves"] },
+  { id: "commodities",          title: "Commodities",                chartIds: ["oil-brent", "gold", "baltic-dry"] },
+  { id: "inflation",            title: "Inflation",                  chartIds: ["pce", "cpi", "ppi", "import-prices"] },
+  { id: "inflation-expectations", title: "Inflation Expectations",   chartIds: ["umich-inflexp", "nyfed-inflexp", "tips-10y"] },
+  { id: "labor",                title: "Labor Market",               chartIds: ["claims", "payrolls", "unrate", "participation", "jolts-openings", "jolts-quits"] },
+  { id: "consumer",             title: "Consumer Income & Spending", chartIds: ["real-income", "real-pce", "retail-sales", "auto-sales", "cc-delinquency"] },
+  { id: "housing",              title: "Housing",                    chartIds: ["starts", "existing-sales", "new-sales", "mortgage-rate", "case-shiller", "nahb"] },
+  { id: "confidence",           title: "Consumer Confidence",        chartIds: ["umich-sentiment", "conf-board"] },
+  { id: "nfib",                 title: "NFIB Small Business",        chartIds: ["nfib-optimism", "nfib-uncertainty"] },
+  { id: "ism-services",         title: "ISM Services PMI",           chartIds: ["ism-services", "ism-services-neworders", "ism-services-prices"] },
+  { id: "ism-mfg",              title: "ISM Manufacturing PMI",      chartIds: ["ism-mfg", "ism-mfg-neworders", "ism-mfg-prices"] },
+  { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "capex-orders"] },
+  { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
+  { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance"] },
+  { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "corp-profits"] },
+  { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["nfci"] },
+];
+
+export const CHART_BY_ID: Record<string, ChartSpec> = Object.fromEntries(CHARTS.map((c) => [c.id, c]));
+export const SECTION_TITLE: Record<SectionId, string> = Object.fromEntries(SECTIONS.map((s) => [s.id, s.title])) as Record<SectionId, string>;
