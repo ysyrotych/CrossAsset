@@ -127,6 +127,14 @@ export const CHARTS: ChartSpec[] = [
   { id: "housing-supply", section: "housing", title: "Months' Supply of New Homes", unit: "months", source: "fred", freq: "m", chartType: "line", series: [{ id: "MSACSR", transform: "level", color: NAVY }], startYear: 2000, avg: true, precision: 1 },
   { id: "affordability", section: "housing", title: "Housing Affordability Index", unit: "index", source: "fred", freq: "m", chartType: "line", series: [{ id: "FIXHAI", transform: "level", color: NAVY }], startYear: 2010, precision: 0 },
   { id: "new-rental", section: "inflation", title: "New Rental Prices vs PCE Housing", unit: "% y/y", source: "curated", freq: "q", chartType: "line", series: [{ id: "new_rental", transform: "level", color: TEAL }], precision: 1, note: "leads PCE housing inflation ~4 quarters" },
+
+  // ── Loop 3: GDP component deep-dive (live FRED, real chained-$ series) ──
+  { id: "gdp-consumption", section: "gdp", title: "Real Consumption", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "PCECC96", transform: "yoy", color: NAVY }], startYear: 2015, recession: true, precision: 1 },
+  { id: "gdp-investment", section: "gdp", title: "Real Private Investment", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "GPDIC1", transform: "yoy", color: NAVY }], startYear: 2015, recession: true, precision: 1 },
+  { id: "gdp-residential", section: "gdp", title: "Real Residential Investment", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "PRFIC1", transform: "yoy", color: TEAL }], startYear: 2015, precision: 1 },
+  { id: "gdp-nonres", section: "gdp", title: "Real Nonresidential Investment", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "PNFIC1", transform: "yoy", color: TEAL }], startYear: 2015, precision: 1 },
+  { id: "gdp-government", section: "gdp", title: "Real Government Spending", unit: "% y/y", source: "fred", freq: "q", chartType: "line", series: [{ id: "GCEC1", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1 },
+  { id: "gdp-exports", section: "gdp", title: "Real Exports vs Imports", unit: "% y/y", source: "fred", freq: "q", chartType: "multiline", series: [{ id: "EXPGSC1", label: "Exports", transform: "yoy", color: NAVY }, { id: "IMPGSC1", label: "Imports", transform: "yoy", color: CRIMSON }], startYear: 2015, precision: 1 },
 ];
 
 export const SECTIONS: Section[] = [
@@ -146,7 +154,7 @@ export const SECTIONS: Section[] = [
   { id: "other-mfg",            title: "Other Manufacturing",        chartIds: ["ind-production", "capex-orders"] },
   { id: "trade",                title: "Trade",                      chartIds: ["trade-balance", "dollar"] },
   { id: "budget",               title: "Treasury Budget",            chartIds: ["budget-balance"] },
-  { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "corp-profits"] },
+  { id: "gdp",                  title: "GDP",                        chartIds: ["gdp-growth", "gdp-consumption", "gdp-investment", "gdp-residential", "gdp-nonres", "gdp-government", "gdp-exports", "corp-profits"] },
   { id: "financial-conditions", title: "Financial Conditions",       chartIds: ["nfci"] },
 ];
 
