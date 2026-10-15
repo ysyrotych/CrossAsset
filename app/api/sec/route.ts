@@ -109,6 +109,81 @@ function truncateSection(text: string, max: number): string {
   return text.length > max ? text.slice(0, max) + "\n[... truncated]" : text;
 }
 
+// ── EDGAR direct-fetch fallback ───────────────────────────────────────────────
+// When edgartools can't extract sections, fetch the filing HTML from EDGAR
+// archives and split it into sections by scanning for ITEM headers.
+
+const EDGAR_HEADERS = {
+  "User-Agent": "CrossAsset Research crossasset@research.com",
+  "Accept-Encoding": "gzip",
+};
+
+const ANNUAL_SECTION_MAP: Record<string, { title: string; pattern: RegExp; next: RegExp }> = {
+  business:       { title: "Item 1 — Business",          pattern: /ITEM\s+1[\.\s](?!A|B|C)/i,  next: /ITEM\s+1A[\.\s]/i },
+  risks:          { title: "Item 1A — Risk Factors",     pattern: /ITEM\s+1A[\.\s]/i,           next: /ITEM\s+1B[\.\s]|ITEM\s+1C[\.\s]|ITEM\s+2[\.\s]/i },
+  cybersecurity:  { title: "Item 1C — Cybersecurity",    pattern: /ITEM\s+1C[\.\s]/i,           next: /ITEM\s+2[\.\s]/i },
+  mda:            { title: "Item 7 — MD&A",              pattern: /ITEM\s+7[\.\s](?!A)/i,       next: /ITEM\s+7A[\.\s]|ITEM\s+8[\.\s]/i },
+  quantitative:   { title: "Item 7A — Market Risk",      pattern: /ITEM\s+7A[\.\s]/i,           next: /ITEM\s+8[\.\s]/i },
+  controls:       { title: "Item 9A — Controls",         pattern: /ITEM\s+9A[\.\s]/i,           next: /ITEM\s+9B[\.\s]|ITEM\s+10[\.\s]/i },
+};
+
+async function fetchEdgarSectionsFallback(
+  cik: string,
+  accession: string,
+  formType: "10-K" | "10-Q"
+): Promise<FilingSection[]> {
+  try {
+    const cikNum = cik.replace(/^0+/, "");
+    const accClean = accession.replace(/-/g, "");
+
+    // 1. Get the filing index to find the primary document
+    const idxUrl = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${accClean}/${accession}-index.json`;
+    const idxRes = await fetch(idxUrl, { headers: EDGAR_HEADERS, cache: "no-store" });
+    if (!idxRes.ok) {
+      console.log(`[edgar-fallback] index fetch failed: ${idxRes.status} for ${idxUrl}`);
+      return [];
+    }
+    const idxJson = await idxRes.json() as { documents?: { type: string; document: string }[] };
+    let primaryDoc = idxJson.documents?.find(d => d.type === formType && d.document.endsWith(".htm"))?.document
+      ?? idxJson.documents?.find(d => d.document.endsWith(".htm"))?.document;
+    if (!primaryDoc) {
+      console.log(`[edgar-fallback] no .htm document found in index`);
+      return [];
+    }
+
+    // 2. Fetch the filing HTML
+    const docUrl = `https://www.sec.gov/Archives/edgar/data/${cikNum}/${accClean}/${primaryDoc}`;
+    console.log(`[edgar-fallback] fetching ${docUrl}`);
+    const docRes = await fetch(docUrl, { headers: EDGAR_HEADERS, cache: "no-store" });
+    if (!docRes.ok) return [];
+
+    // 3. Strip HTML tags
+    let text = await docRes.text();
+    text = text.replace(/<[^>]+>/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&nbsp;/g, " ").replace(/&#\d+;/g, " ");
+    text = text.replace(/[ \t]{3,}/g, " ").replace(/\n{4,}/g, "\n\n\n");
+
+    // 4. Extract sections by finding ITEM headers
+    const map = ANNUAL_SECTION_MAP;
+    const sections: FilingSection[] = [];
+    for (const [key, cfg] of Object.entries(map)) {
+      const startM = cfg.pattern.exec(text);
+      if (!startM) continue;
+      const start = startM.index;
+      const nextM = cfg.next.exec(text.slice(start + 10));
+      const end = nextM ? start + 10 + nextM.index : start + 80000;
+      const chunk = text.slice(start, end).trim();
+      if (chunk.length < 200) continue;
+      sections.push({ item: key, title: cfg.title, text: chunk.slice(0, 120000), char_count: chunk.length });
+      console.log(`[edgar-fallback] extracted '${key}': ${chunk.length} chars`);
+    }
+    console.log(`[edgar-fallback] total sections extracted: ${sections.length}`);
+    return sections;
+  } catch (e) {
+    console.log(`[edgar-fallback] error: ${e}`);
+    return [];
+  }
+}
+
 // ── GET: fetch filing data only (no AI analysis) ─────────────────────────────
 
 export async function GET(req: NextRequest) {
@@ -117,6 +192,20 @@ export async function GET(req: NextRequest) {
 
   try {
     const payload = await fetchFromSidecar(ticker.toUpperCase());
+
+    // If edgartools returned no annual sections, fall back to direct EDGAR fetch
+    if (payload.annual && (!payload.annual.sections || payload.annual.sections.length === 0)) {
+      const cik = payload.company.cik;
+      const accession = payload.annual.accession;
+      if (cik && accession) {
+        console.log(`[sec-route] annual sections empty for ${ticker} — trying EDGAR fallback`);
+        const fallbackSections = await fetchEdgarSectionsFallback(cik, accession, "10-K");
+        if (fallbackSections.length > 0) {
+          payload.annual = { ...payload.annual, sections: fallbackSections };
+        }
+      }
+    }
+
     return NextResponse.json(payload);
   } catch (e) {
     return NextResponse.json({ error: e instanceof Error ? e.message : String(e) }, { status: 502 });
