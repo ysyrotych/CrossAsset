@@ -207,13 +207,19 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Last resort: hardcoded static sections for known tickers
-    if (payload.annual && (!payload.annual.sections || payload.annual.sections.length === 0)) {
-      const t = ticker.toUpperCase();
-      if (t === "META") {
-        console.log(`[sec-route] using hardcoded FY2024 10-K sections for META`);
-        payload.annual = { ...payload.annual, sections: META_SECTIONS_FY2024 };
-      }
+    // Last resort: inject hardcoded sections for known tickers (handles annual=null or empty)
+    const annualSectionsEmpty = !payload.annual || !payload.annual.sections || payload.annual.sections.length === 0;
+    if (annualSectionsEmpty && ticker.toUpperCase() === "META") {
+      console.log(`[sec-route] injecting hardcoded FY2024 10-K sections for META`);
+      payload.annual = {
+        form_type: "10-K",
+        accession: "0001326801-25-000017",
+        filed_date: "2025-01-29",
+        period_of_report: "2024-12-31",
+        raw_financials: {},
+        ...(payload.annual ?? {}),
+        sections: META_SECTIONS_FY2024,
+      };
     }
 
     return NextResponse.json(payload);
