@@ -2394,6 +2394,113 @@ async def get_company_analysis(ticker: str, sections: str = "business,risks,cybe
 def _get_company(ticker: str):
     return Company(ticker)
 
+
+# ── EDGAR direct-fetch fallback ───────────────────────────────────────────────
+
+def _edgar_direct_sections(cik: str, accession: str, form_type: str, want: set) -> list:
+    """
+    Fallback: fetch the primary 10-K document from EDGAR archives and split
+    it into sections by scanning for ITEM headers. Returns a list of
+    FilingSection-compatible dicts when edgartools obj() extraction fails.
+    """
+    try:
+        cik_pad = cik.lstrip("0").zfill(10)
+        acc_clean = accession.replace("-", "")
+        index_url = f"https://www.sec.gov/cgi-bin/browse-edgar?action=getcompany&CIK={cik_pad}&type={form_type}&dateb=&owner=include&count=1&search_text=&output=atom"
+        # Prefer the submissions JSON to get the primary document filename
+        submissions_url = f"https://data.sec.gov/submissions/CIK{cik_pad}.json"
+        headers = {"User-Agent": "CrossAsset Research crossasset@research.com", "Accept-Encoding": "gzip"}
+
+        # Get the filing index to find the primary document
+        idx_url = f"https://www.sec.gov/Archives/edgar/data/{cik.lstrip('0')}/{acc_clean}/{accession}-index.json"
+        idx_r = httpx.get(idx_url, headers=headers, timeout=20, follow_redirects=True)
+        primary_doc = None
+        if idx_r.status_code == 200:
+            idx_j = idx_r.json()
+            for doc in idx_j.get("documents", []):
+                if doc.get("type", "") in (form_type, "10-K", "10-Q") and doc.get("document", "").endswith(".htm"):
+                    primary_doc = doc["document"]
+                    break
+            if not primary_doc:
+                for doc in idx_j.get("documents", []):
+                    if doc.get("document", "").endswith(".htm"):
+                        primary_doc = doc["document"]
+                        break
+
+        if not primary_doc:
+            print(f"[edgar-fallback] could not find primary document for {accession}")
+            return []
+
+        doc_url = f"https://www.sec.gov/Archives/edgar/data/{cik.lstrip('0')}/{acc_clean}/{primary_doc}"
+        print(f"[edgar-fallback] fetching {doc_url}")
+        doc_r = httpx.get(doc_url, headers=headers, timeout=40, follow_redirects=True)
+        if doc_r.status_code != 200:
+            print(f"[edgar-fallback] HTTP {doc_r.status_code} for {doc_url}")
+            return []
+
+        raw_html = doc_r.text
+        # Strip HTML tags
+        clean = re.sub(r'<[^>]+>', ' ', raw_html)
+        clean = html_module.unescape(clean)
+        clean = re.sub(r'\s{3,}', '\n\n', clean)
+        clean = re.sub(r'[ \t]{2,}', ' ', clean)
+
+        # Split on ITEM headers — look for patterns like:
+        # "ITEM 1." / "ITEM 1A." / "Item 1." / "ITEM 7." etc.
+        ITEM_PATTERNS = {
+            "business":   (r'(?i)\bITEM\s+1[\.\s](?!A|B|C)', "Item 1 — Business"),
+            "risks":      (r'(?i)\bITEM\s+1A[\.\s]',          "Item 1A — Risk Factors"),
+            "cybersecurity": (r'(?i)\bITEM\s+1C[\.\s]',       "Item 1C — Cybersecurity"),
+            "properties": (r'(?i)\bITEM\s+2[\.\s]',            "Item 2 — Properties"),
+            "legal":      (r'(?i)\bITEM\s+3[\.\s]',            "Item 3 — Legal Proceedings"),
+            "mda":        (r'(?i)\bITEM\s+7[\.\s](?!A)',       "Item 7 — MD&A"),
+            "quantitative": (r'(?i)\bITEM\s+7A[\.\s]',         "Item 7A — Market Risk"),
+            "controls":   (r'(?i)\bITEM\s+9A[\.\s]',           "Item 9A — Controls"),
+        }
+        # For 10-Q
+        if form_type == "10-Q":
+            ITEM_PATTERNS = {
+                "mda":    (r'(?i)\bITEM\s+2[\.\s]', "Item 2 — MD&A (Quarterly)"),
+                "q_quantitative": (r'(?i)\bITEM\s+3[\.\s]', "Item 3 — Market Risk (Q)"),
+                "q_controls":     (r'(?i)\bITEM\s+4[\.\s]', "Item 4 — Controls (Q)"),
+                "q_legal":        (r'(?i)\bITEM\s+1[\.\s](?!A)', "Item 1 — Legal (Q)"),
+            }
+
+        # Find positions of each item header in the clean text
+        positions = {}
+        for key, (pat, _) in ITEM_PATTERNS.items():
+            if key not in want:
+                continue
+            m = re.search(pat, clean)
+            if m:
+                positions[key] = m.start()
+
+        if not positions:
+            print(f"[edgar-fallback] no item headers found in document")
+            return []
+
+        sorted_keys = sorted(positions.keys(), key=lambda k: positions[k])
+        result = []
+        for i, key in enumerate(sorted_keys):
+            start = positions[key]
+            end = positions[sorted_keys[i + 1]] if i + 1 < len(sorted_keys) else start + 120000
+            text = clean[start:end].strip()
+            if len(text) < 100:
+                continue
+            title = ITEM_PATTERNS[key][1]
+            result.append(FilingSection(
+                item=key, title=title,
+                text=truncate(text, 200000),
+                char_count=len(text),
+            ))
+            print(f"[edgar-fallback] extracted '{key}': {len(text)} chars")
+
+        return result
+    except Exception as e:
+        print(f"[edgar-fallback] error: {e}")
+        return []
+
+
 def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
     try:
         filings = company.get_filings(form=form_type)
@@ -2543,6 +2650,14 @@ def _get_filing(company, form_type: str, want: set) -> Optional[FilingData]:
                 ))
             except Exception:
                 pass
+
+        # If edgartools yielded no sections, fall back to direct EDGAR HTML fetch
+        if not sections:
+            cik = str(getattr(company, 'cik', '') or '')
+            print(f"[{form_type}] edgartools returned 0 sections — trying EDGAR direct fallback (cik={cik}, accession={accession})")
+            if cik and accession:
+                sections = _edgar_direct_sections(cik, accession, form_type, want)
+                print(f"[{form_type}] EDGAR fallback yielded {len(sections)} sections")
 
         return FilingData(
             form_type=form_type,
